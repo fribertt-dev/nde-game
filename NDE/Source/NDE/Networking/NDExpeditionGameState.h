@@ -34,6 +34,12 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedicion")
 	FGuid GetRunGuid() const { return RunGuid; }
 
+	/** Contrato votado en La Madriguera (NAME_None si se abrió el mapa directamente). */
+	UFUNCTION(BlueprintPure, Category = "NDE|Expedicion")
+	FName GetContractId() const { return ContractId; }
+
+	void SetContractId(FName InContractId) { if (HasAuthority()) { ContractId = InContractId; } }
+
 	/** Solo servidor. */
 	void SetSessionPhase(ENDExpeditionSessionPhase NewPhase);
 	void SetRunGuid(const FGuid& InRunGuid);
@@ -57,6 +63,9 @@ private:
 
 	UPROPERTY(Replicated)
 	FGuid RunGuid;
+
+	UPROPERTY(Replicated)
+	FName ContractId;
 
 	int32 LastNotifiedSequence = 0;
 };

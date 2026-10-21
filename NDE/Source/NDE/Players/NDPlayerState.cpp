@@ -8,6 +8,7 @@ void ANDPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(ANDPlayerState, bIsReady);
+	DOREPLIFETIME(ANDPlayerState, VotedContractIndex);
 }
 
 void ANDPlayerState::CopyProperties(APlayerState* PlayerState)
@@ -17,6 +18,7 @@ void ANDPlayerState::CopyProperties(APlayerState* PlayerState)
 	if (ANDPlayerState* NewState = Cast<ANDPlayerState>(PlayerState))
 	{
 		NewState->bIsReady = false;
+		NewState->VotedContractIndex = INDEX_NONE;
 	}
 }
 

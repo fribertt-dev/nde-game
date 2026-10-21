@@ -57,6 +57,13 @@ public:
 	UFUNCTION(Exec)
 	void NDRejoin();
 
+	/**
+	 * Desarrollo: simula una red peor en este PC (GDD 26.1).
+	 * Presets: off, buena (~30 ms), media (~150 ms, 2% pérdida), mala (~220 ms, 5% pérdida).
+	 */
+	UFUNCTION(Exec)
+	void NDNetSim(const FString& Preset);
+
 	/** true si salimos de una expedición en marcha y aún estamos a tiempo de volver. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Red")
 	bool CanRejoinExpedition() const;

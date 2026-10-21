@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
 	int32 GetNumPlayers() const { return LastTotal; }
 
+	/** Voto del jugador local; INDEX_NONE si no votó. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	int32 GetLocalVote() const;
+
 protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
@@ -47,6 +51,10 @@ protected:
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Sala")
 	void OnTraveling();
 
+	/** Cambió algún voto. Leer GetContractOptions/GetVoteCount del GameState. */
+	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Sala")
+	void OnVotesChanged();
+
 	/** "Listos 1/2" y la lista de jugadores. */
 	UPROPERTY(BlueprintReadOnly, Category = "NDE|Sala", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> ReadyText;
@@ -54,6 +62,14 @@ protected:
 	/** "Saliendo en 3", "Viajando..." o la pista de la zona. */
 	UPROPERTY(BlueprintReadOnly, Category = "NDE|Sala", meta = (BindWidgetOptional))
 	TObjectPtr<UTextBlock> CountdownText;
+
+	/** Contratos con sus votos. */
+	UPROPERTY(BlueprintReadOnly, Category = "NDE|Sala", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ContractText;
+
+	/** Monedas, reputación y si estás hablando. */
+	UPROPERTY(BlueprintReadOnly, Category = "NDE|Sala", meta = (BindWidgetOptional))
+	TObjectPtr<UTextBlock> ProfileText;
 
 private:
 	const ANDLobbyGameState* GetLobbyState() const;
@@ -63,4 +79,5 @@ private:
 	int32 LastReady = -1;
 	int32 LastTotal = -1;
 	ENDLobbyPhase LastPhase = ENDLobbyPhase::Waiting;
+	uint32 LastVotesHash = 0;
 };

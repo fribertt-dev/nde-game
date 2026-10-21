@@ -9,7 +9,10 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "Networking/NDLobbyGameState.h"
+#include "Networking/NDVoiceComponent.h"
+#include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
+#include "Progression/NDProfileSubsystem.h"
 
 void UNDLobbyStatusWidget::NativeOnInitialized()
 {
@@ -69,7 +72,26 @@ void UNDLobbyStatusWidget::NativeTick(const FGeometry& MyGeometry, float InDelta
 		LastPhase = Phase;
 	}
 
+	uint32 VotesHash = 0;
+	for (int32 Index = 0; Index < LobbyState->GetContractOptions().Num(); ++Index)
+	{
+		VotesHash = HashCombine(VotesHash, GetTypeHash(LobbyState->GetVoteCount(Index)));
+	}
+	VotesHash = HashCombine(VotesHash, GetTypeHash(GetLocalVote()));
+	if (VotesHash != LastVotesHash)
+	{
+		LastVotesHash = VotesHash;
+		OnVotesChanged();
+	}
+
 	UpdateTexts(*LobbyState);
+}
+
+int32 UNDLobbyStatusWidget::GetLocalVote() const
+{
+	const APlayerController* PC = GetOwningPlayer();
+	const ANDPlayerState* PS = PC ? PC->GetPlayerState<ANDPlayerState>() : nullptr;
+	return PS ? PS->GetVotedContractIndex() : INDEX_NONE;
 }
 
 void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
@@ -102,6 +124,28 @@ void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
 		}
 		CountdownText->SetText(FText::FromString(Message));
 	}
+
+	if (ContractText)
+	{
+		const TArray<FNDContractOption>& Options = LobbyState.GetContractOptions();
+		FString Lines = TEXT("Contrato (pulsa 1, 2 o 3 para votar):");
+		for (int32 Index = 0; Index < Options.Num(); ++Index)
+		{
+			Lines += FString::Printf(TEXT("\n  [%d] %s - %d votos%s"), Index + 1, *Options[Index].DisplayName.ToString(),
+				LobbyState.GetVoteCount(Index), GetLocalVote() == Index ? TEXT("  <- tu voto") : TEXT(""));
+		}
+		ContractText->SetText(FText::FromString(Lines));
+	}
+
+	if (ProfileText)
+	{
+		const UNDProfileSubsystem* Profile = GetGameInstance() ? GetGameInstance()->GetSubsystem<UNDProfileSubsystem>() : nullptr;
+		const ANDPlayerController* PC = Cast<ANDPlayerController>(GetOwningPlayer());
+		const bool bTalking = PC && PC->GetVoiceComponent() && PC->GetVoiceComponent()->IsTransmitting();
+		ProfileText->SetText(FText::FromString(FString::Printf(TEXT("Monedas %lld   Reputacion %d   Expediciones %d\nManten V para hablar%s"),
+			Profile ? Profile->GetCoins() : 0, Profile ? Profile->GetReputation() : 0, Profile ? Profile->GetExpeditionsCompleted() : 0,
+			bTalking ? TEXT("   (HABLANDO)") : TEXT(""))));
+	}
 }
 
 const ANDLobbyGameState* UNDLobbyStatusWidget::GetLobbyState() const
@@ -123,4 +167,10 @@ void UNDLobbyStatusWidget::BuildFallbackLayout()
 	Font.Size = 32;
 	CountdownText->SetFont(Font);
 	Box->AddChildToVerticalBox(CountdownText)->SetPadding(FMargin(30.f, 10.f));
+
+	ContractText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ContractText"));
+	Box->AddChildToVerticalBox(ContractText)->SetPadding(FMargin(30.f, 10.f));
+
+	ProfileText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ProfileText"));
+	Box->AddChildToVerticalBox(ProfileText)->SetPadding(FMargin(30.f, 10.f));
 }

@@ -9,8 +9,8 @@
 class ANDPlayerController;
 
 /**
- * Reglas de La Madriguera (GDD 22.2): quién entra, "listo" y salida a la
- * expedición. La votación de contrato llega en la fase 2.
+ * Reglas de La Madriguera (GDD 22.2): quién entra, "listo", votación de
+ * contrato y salida a la expedición.
  */
 UCLASS()
 class NDE_API ANDLobbyGameMode : public AGameModeBase
@@ -29,6 +29,8 @@ public:
 	/** Si el mapa tiene zonas de salida, solo cuenta "listo" dentro de una de ellas. */
 	void HandleReadyRequest(ANDPlayerController* Requester, bool bReady);
 
+	void HandleVoteRequest(ANDPlayerController* Requester, int32 ContractIndex);
+
 protected:
 	bool IsInsideReadyZone(const ANDPlayerController* Requester) const;
 	void SpawnReadyZoneIfMissing();
@@ -37,6 +39,9 @@ protected:
 	void StartTravelCountdown();
 	void CancelTravelCountdown();
 	void TravelToExpedition();
+
+	/** Más votado; empate o sin votos, al azar entre los empatados (o entre todos). */
+	int32 PickWinningContract() const;
 
 	FTimerHandle TravelTimer;
 };

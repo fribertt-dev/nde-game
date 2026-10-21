@@ -28,6 +28,20 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
 	int32 GetNumReadyPlayers() const;
 
+	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	const TArray<FNDContractOption>& GetContractOptions() const { return ContractOptions; }
+
+	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	int32 GetVoteCount(int32 ContractIndex) const;
+
+	/** Contrato elegido al salir de expedición; INDEX_NONE hasta entonces. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	int32 GetSelectedContractIndex() const { return SelectedContractIndex; }
+
+	/** Solo servidor. */
+	void SetContractOptions(const TArray<FNDContractOption>& InOptions) { ContractOptions = InOptions; }
+	void SetSelectedContractIndex(int32 Index) { SelectedContractIndex = Index; }
+
 	/** Solo servidor. */
 	void SetPhase(ENDLobbyPhase NewPhase, double InTravelServerTime = 0.0);
 
@@ -47,4 +61,10 @@ private:
 
 	UPROPERTY(Replicated)
 	double TravelServerTime = 0.0;
+
+	UPROPERTY(Replicated)
+	TArray<FNDContractOption> ContractOptions;
+
+	UPROPERTY(Replicated)
+	int32 SelectedContractIndex = INDEX_NONE;
 };
