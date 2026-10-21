@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "Networking/NDExpeditionGameState.h"
 #include "Networking/NDNetworkSettings.h"
+#include "Players/NDCharacter.h"
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
@@ -23,7 +24,14 @@ ANDExpeditionGameMode::ANDExpeditionGameMode()
 	GameStateClass = ANDExpeditionGameState::StaticClass();
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
+	DefaultPawnClass = ANDCharacter::StaticClass();
 	bUseSeamlessTravel = true;
+}
+
+void ANDExpeditionGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+	DefaultPawnClass = ANDCharacter::GetDesveladoClass();
 }
 
 void ANDExpeditionGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)

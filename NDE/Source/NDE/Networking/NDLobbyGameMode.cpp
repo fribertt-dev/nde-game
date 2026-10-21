@@ -12,6 +12,7 @@
 #include "Networking/NDNetworkSettings.h"
 #include "Networking/NDReadyZone.h"
 #include "Networking/NDSessionSubsystem.h"
+#include "Players/NDCharacter.h"
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
@@ -21,7 +22,14 @@ ANDLobbyGameMode::ANDLobbyGameMode()
 	GameStateClass = ANDLobbyGameState::StaticClass();
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
+	DefaultPawnClass = ANDCharacter::StaticClass();
 	bUseSeamlessTravel = true;
+}
+
+void ANDLobbyGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+	DefaultPawnClass = ANDCharacter::GetDesveladoClass();
 }
 
 void ANDLobbyGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
