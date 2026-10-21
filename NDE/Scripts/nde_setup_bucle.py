@@ -12,6 +12,7 @@ LOOT_DIR = DATA_ROOT + "/Loot"
 CONTRACT_DIR = DATA_ROOT + "/Contracts"
 TOOL_DIR = DATA_ROOT + "/Tools"
 LEVEL_PATH = "/Game/_NDE_/Levels/L_Expedicion_Prueba"
+LOBBY_PATH = "/Game/_NDE_/Levels/L_Madriguera_Prueba"
 
 asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
 eal = unreal.EditorAssetLibrary
@@ -218,7 +219,47 @@ else:
         loot.set_editor_property("definition", loot_assets[loot_id])
 
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
-    world.get_world_settings().set_editor_property("default_game_mode", unreal.NDPrototypeGameMode.static_class())
+    world.get_world_settings().set_editor_property("default_game_mode", unreal.NDExpeditionGameMode.static_class())
 
     level_subsystem.save_current_level()
     unreal.log("NDE: nivel creado en " + LEVEL_PATH)
+
+# ---------------------------------------------------------------------------
+# Madriguera mínima para probar el viaje completo con el frente de red.
+
+if not eal.does_asset_exist(LOBBY_PATH):
+    level_subsystem = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    actor_subsystem = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    level_subsystem.new_level(LOBBY_PATH)
+    floor = actor_subsystem.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0, 0, -10))
+    floor.set_actor_label("Suelo_Madriguera")
+    floor.static_mesh_component.set_static_mesh(shape("Cube"))
+    floor.set_actor_scale3d(unreal.Vector(20, 20, 0.2))
+    light = actor_subsystem.spawn_actor_from_class(unreal.PointLight, unreal.Vector(0, 0, 400))
+    light.light_component.set_intensity(8000.0)
+    light.light_component.set_light_color(unreal.LinearColor(1.0, 0.8, 0.55, 1.0))
+    light.light_component.set_attenuation_radius(2500.0)
+    actor_subsystem.spawn_actor_from_class(unreal.SkyLight, unreal.Vector(0, 0, 600))
+    for index in range(4):
+        actor_subsystem.spawn_actor_from_class(unreal.PlayerStart, unreal.Vector(-300, -300 + index * 200, 60))
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+    world.get_world_settings().set_editor_property("default_game_mode", unreal.NDLobbyGameMode.static_class())
+    level_subsystem.save_current_level()
+    unreal.log("NDE: Madriguera de prueba creada en " + LOBBY_PATH)
+
+# Ajustes de red: la Madriguera y la casa de prueba (Project Settings > NDE Red).
+settings = unreal.get_default_object(unreal.NDNetworkSettings)
+settings.set_editor_property("lobby_map", unreal.load_asset(LOBBY_PATH))
+settings.set_editor_property("expedition_test_map", unreal.load_asset(LEVEL_PATH))
+
+ini_path = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_config_dir() + "DefaultGame.ini")
+with open(ini_path, "r", encoding="utf-8") as ini:
+    ini_text = ini.read()
+if "[/Script/NDE.NDNetworkSettings]" not in ini_text:
+    with open(ini_path, "a", encoding="utf-8") as ini:
+        ini.write("\n[/Script/NDE.NDNetworkSettings]\n")
+        ini.write("LobbyMap=" + LOBBY_PATH + "." + LOBBY_PATH.split("/")[-1] + "\n")
+        ini.write("ExpeditionTestMap=" + LEVEL_PATH + "." + LEVEL_PATH.split("/")[-1] + "\n")
+    unreal.log("NDE: mapas de red guardados en DefaultGame.ini")
+else:
+    unreal.log_warning("NDE: DefaultGame.ini ya tiene ajustes de red; revisa LobbyMap y ExpeditionTestMap en Project Settings > NDE Red.")

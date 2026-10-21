@@ -161,6 +161,12 @@ ANDPrototypeCharacter::ANDPrototypeCharacter()
 		NoseMesh->SetStaticMesh(CubeMesh.Object);
 	}
 
+	TestToolA = TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_T03.DA_Tool_T03")));
+	TestToolB = TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_T07.DA_Tool_T07")));
+	TestPingTool = TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_T02.DA_Tool_T02")));
+	TestConsumables.Add(TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_T17.DA_Tool_T17"))));
+	TestConsumables.Add(TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_T18.DA_Tool_T18"))));
+
 	Carry = CreateDefaultSubobject<UNDCarryComponent>(TEXT("Carry"));
 	Loadout = CreateDefaultSubobject<UNDLoadoutComponent>(TEXT("Loadout"));
 	ExpeditionPlayer = CreateDefaultSubobject<UNDExpeditionPlayerComponent>(TEXT("ExpeditionPlayer"));
@@ -171,6 +177,19 @@ void ANDPrototypeCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	Loadout->OnFlashlightChanged.AddDynamic(this, &ANDPrototypeCharacter::HandleFlashlightChanged);
+}
+
+void ANDPrototypeCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// Mientras no exista el bloqueo de loadout de La Madriguera, cada jugador sale con el equipo de prueba.
+	static int32 NextConsumable = 0;
+	UNDToolDefinition* Consumable = TestConsumables.Num() > 0
+		? TestConsumables[NextConsumable++ % TestConsumables.Num()].LoadSynchronous()
+		: nullptr;
+	Loadout->PingTool = TestPingTool.LoadSynchronous();
+	Loadout->SetLoadout(TestToolA.LoadSynchronous(), TestToolB.LoadSynchronous(), Consumable, 0);
 }
 
 void ANDPrototypeCharacter::HandleFlashlightChanged(bool bOn)

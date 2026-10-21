@@ -6,6 +6,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "Core/NDTypes.h"
+#include "Expedition/NDExpeditionTypes.h"
 #include "NDExpeditionDirector.generated.h"
 
 class UBoxComponent;
@@ -51,6 +53,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Expedition")
 	float DawnLightIntensity = 6.f;
 
+	/** Segundos mostrando el resultado antes de pedir la vuelta a La Madriguera. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Expedition")
+	float ResultsDisplaySeconds = 4.f;
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition", meta = (WorldContext = "WorldContextObject"))
 	static ANDExpeditionDirector* Get(const UObject* WorldContextObject);
 
@@ -68,4 +74,15 @@ protected:
 	void HandleHouseEntryOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	void UpdateSkyVisuals();
+
+	/** Con ANDExpeditionGameState la sesión de red manda: arranca en InProgress. */
+	UFUNCTION()
+	void HandleSessionPhaseChanged(ENDExpeditionSessionPhase NewPhase);
+
+	UFUNCTION()
+	void HandleExpeditionSettled(const FNDRunSummary& Summary);
+
+	void RequestReturnToLobby();
+
+	FTimerHandle ReturnTimer;
 };

@@ -17,6 +17,7 @@ class UInputMappingContext;
 class UNDCarryComponent;
 class UNDLoadoutComponent;
 class UNDExpeditionPlayerComponent;
+class UNDToolDefinition;
 struct FInputActionValue;
 
 UCLASS()
@@ -61,6 +62,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Prototype")
 	float CrouchSpeed = 185.f;
 
+	/** Equipo de prueba (los assets los crea Scripts/nde_setup_bucle.py). */
+	UPROPERTY(EditAnywhere, Category = "NDE|Prototype")
+	TSoftObjectPtr<UNDToolDefinition> TestToolA;
+
+	UPROPERTY(EditAnywhere, Category = "NDE|Prototype")
+	TSoftObjectPtr<UNDToolDefinition> TestToolB;
+
+	UPROPERTY(EditAnywhere, Category = "NDE|Prototype")
+	TSoftObjectPtr<UNDToolDefinition> TestPingTool;
+
+	/** Se reparten por turnos para probar los dos consumibles. */
+	UPROPERTY(EditAnywhere, Category = "NDE|Prototype")
+	TArray<TSoftObjectPtr<UNDToolDefinition>> TestConsumables;
+
 	/** Muestra el estado de la expedición en pantalla (texto de depuración). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Prototype")
 	bool bShowDebugHud = true;
@@ -69,6 +84,7 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void PawnClientRestart() override;
 	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
 
 protected:
 	void EnsureInputObjects();

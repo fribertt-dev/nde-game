@@ -9,6 +9,7 @@
 #include "Networking/NDNetworkSettings.h"
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
+#include "Prototype/NDPrototypeCharacter.h"
 #include "TimerManager.h"
 
 namespace NDExpeditionGameMode
@@ -23,6 +24,8 @@ ANDExpeditionGameMode::ANDExpeditionGameMode()
 	GameStateClass = ANDExpeditionGameState::StaticClass();
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
+	// Provisional hasta que exista el Desvelado definitivo.
+	DefaultPawnClass = ANDPrototypeCharacter::StaticClass();
 	bUseSeamlessTravel = true;
 }
 

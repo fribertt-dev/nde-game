@@ -7,6 +7,9 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
+#include "Networking/NDExpeditionGameMode.h"
+#include "Networking/NDExpeditionGameState.h"
+#include "TimerManager.h"
 #include "Expedition/NDExpeditionComponent.h"
 #include "Expedition/NDNightClockComponent.h"
 
@@ -58,13 +61,55 @@ UNDNightClockComponent* ANDExpeditionDirector::GetNightClock(const UObject* Worl
 
 void ANDExpeditionDirector::BeginPlay()
 {
+	ANDExpeditionGameState* SessionState = HasAuthority() ? GetWorld()->GetGameState<ANDExpeditionGameState>() : nullptr;
+	if (SessionState)
+	{
+		// Debe fijarse antes de que los componentes hagan su BeginPlay.
+		Expedition->bAutoStart = false;
+	}
+
 	Super::BeginPlay();
 
 	if (HasAuthority())
 	{
 		HouseEntry->OnComponentBeginOverlap.AddDynamic(this, &ANDExpeditionDirector::HandleHouseEntryOverlap);
+		Expedition->OnExpeditionSettled.AddDynamic(this, &ANDExpeditionDirector::HandleExpeditionSettled);
+		if (SessionState)
+		{
+			SessionState->OnSessionPhaseChanged.AddDynamic(this, &ANDExpeditionDirector::HandleSessionPhaseChanged);
+			HandleSessionPhaseChanged(SessionState->GetSessionPhase());
+		}
 	}
 	UpdateSkyVisuals();
+}
+
+void ANDExpeditionDirector::HandleSessionPhaseChanged(ENDExpeditionSessionPhase NewPhase)
+{
+	if (NewPhase != ENDExpeditionSessionPhase::InProgress || Expedition->HasStarted())
+	{
+		return;
+	}
+	if (const ANDExpeditionGameState* SessionState = GetWorld()->GetGameState<ANDExpeditionGameState>())
+	{
+		Expedition->SetRunGuid(SessionState->GetRunGuid());
+	}
+	Expedition->StartExpedition();
+}
+
+void ANDExpeditionDirector::HandleExpeditionSettled(const FNDRunSummary& Summary)
+{
+	if (GetWorld()->GetAuthGameMode<ANDExpeditionGameMode>())
+	{
+		GetWorldTimerManager().SetTimer(ReturnTimer, this, &ANDExpeditionDirector::RequestReturnToLobby, FMath::Max(0.1f, ResultsDisplaySeconds), false);
+	}
+}
+
+void ANDExpeditionDirector::RequestReturnToLobby()
+{
+	if (ANDExpeditionGameMode* GameMode = GetWorld()->GetAuthGameMode<ANDExpeditionGameMode>())
+	{
+		GameMode->EndExpedition();
+	}
 }
 
 void ANDExpeditionDirector::HandleHouseEntryOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
