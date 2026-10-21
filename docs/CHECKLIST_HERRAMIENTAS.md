@@ -14,6 +14,5 @@ Ejecuta cada comando en una terminal (PowerShell o similar) y anota el resultado
 | Espacio en disco | Explorador | 150 GB libres o más |
 
 ## Notas
-- Activa en UE 5.7 el plugin de control de versiones Git (Editor > Source Control > Git LFS 2) para usar bloqueo de archivos binarios.
-- Los `.uasset`, `.umap` y `.blend` van marcados como `lockable` en `.gitattributes` para evitar conflictos entre varias personas.
+- En UE 5.7 usa Revision Control > Connect > "Git (beta version)". LFS funciona igual gracias a `.gitattributes`.
 - La cuota gratuita de GitHub LFS es de 10 GB de almacenamiento y ancho de banda al mes; un juego UE la supera pronto, así que conviene prever un paquete de datos.
