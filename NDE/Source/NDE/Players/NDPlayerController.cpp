@@ -102,6 +102,11 @@ void ANDPlayerController::PlayerTick(float DeltaTime)
 
 void ANDPlayerController::UpdateLobbyStatusWidget()
 {
+	// En el host, los controladores de los clientes también hacen tick, pero no tienen pantalla.
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
 	const bool bInLobby = GetWorld()->GetGameState<ANDLobbyGameState>() != nullptr;
 	if (!bInLobby)
 	{
