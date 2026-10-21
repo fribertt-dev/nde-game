@@ -1,0 +1,428 @@
+#include "Loot/NDLootActor.h"
+
+#include "Components/StaticMeshComponent.h"
+#include "Engine/CollisionProfile.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "GameFramework/Pawn.h"
+#include "Net/UnrealNetwork.h"
+#include "Expedition/NDExpeditionComponent.h"
+#include "Expedition/NDExpeditionDirector.h"
+#include "Loot/NDCarryComponent.h"
+#include "Loot/NDLootDefinition.h"
+#include "Tools/NDLoadoutComponent.h"
+#include "Tools/NDToolDeployables.h"
+
+ANDLootActor::ANDLootActor()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.TickInterval = 0.2f;
+
+	bReplicates = true;
+	SetReplicateMovement(true);
+
+	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
+	Mesh->SetCollisionProfileName(UCollisionProfile::PhysicsActor_ProfileName);
+	Mesh->SetSimulatePhysics(true);
+	Mesh->SetNotifyRigidBodyCollision(true);
+	Mesh->SetGenerateOverlapEvents(true);
+	SetRootComponent(Mesh);
+}
+
+void ANDLootActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ANDLootActor, Definition);
+	DOREPLIFETIME(ANDLootActor, LootGuid);
+	DOREPLIFETIME(ANDLootActor, LootState);
+	DOREPLIFETIME(ANDLootActor, Condition);
+	DOREPLIFETIME(ANDLootActor, Carriers);
+}
+
+void ANDLootActor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ApplyDefinitionVisuals();
+}
+
+void ANDLootActor::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ApplyDefinitionVisuals();
+
+	if (HasAuthority())
+	{
+		if (!LootGuid.IsValid())
+		{
+			LootGuid = FGuid::NewGuid();
+		}
+		LastSafeLocation = GetActorLocation();
+		Mesh->OnComponentHit.AddDynamic(this, &ANDLootActor::HandleMeshHit);
+	}
+
+	ApplyStateLocally();
+}
+
+void ANDLootActor::ApplyDefinitionVisuals()
+{
+	if (!Definition || !Mesh)
+	{
+		return;
+	}
+	if (!Definition->Mesh.IsNull())
+	{
+		if (UStaticMesh* LoadedMesh = Definition->Mesh.LoadSynchronous())
+		{
+			Mesh->SetStaticMesh(LoadedMesh);
+		}
+	}
+	Mesh->SetWorldScale3D(Definition->MeshScale);
+}
+
+void ANDLootActor::OnRep_Definition()
+{
+	ApplyDefinitionVisuals();
+}
+
+void ANDLootActor::OnRep_LootState()
+{
+	ApplyStateLocally();
+}
+
+void ANDLootActor::OnRep_Condition()
+{
+	OnConditionChanged.Broadcast(this, Condition);
+}
+
+void ANDLootActor::ApplyStateLocally()
+{
+	switch (LootState)
+	{
+	case ENDLootState::WorldLoose:
+		SetActorHiddenInGame(false);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Mesh->SetSimulatePhysics(true);
+		break;
+	case ENDLootState::Carried:
+		SetActorHiddenInGame(false);
+		Mesh->SetSimulatePhysics(false);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		break;
+	case ENDLootState::Pocketed:
+	case ENDLootState::Deposited:
+		Mesh->SetSimulatePhysics(false);
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		SetActorHiddenInGame(true);
+		break;
+	}
+}
+
+bool ANDLootActor::IsCarriedBy(const APawn* Pawn) const
+{
+	return Pawn && Carriers.Contains(Pawn);
+}
+
+int32 ANDLootActor::GetEffectiveCarrierCount() const
+{
+	int32 Count = 0;
+	bool bHasCart = false;
+	for (const APawn* Carrier : Carriers)
+	{
+		if (!Carrier)
+		{
+			continue;
+		}
+		++Count;
+		if (const UNDLoadoutComponent* Loadout = Carrier->FindComponentByClass<UNDLoadoutComponent>())
+		{
+			bHasCart |= Loadout->HasCart();
+		}
+	}
+	if (bHasCart && Definition && Definition->bCartAllowed)
+	{
+		++Count;
+	}
+	return Count;
+}
+
+bool ANDLootActor::HasEnoughCarriers() const
+{
+	return Definition && GetEffectiveCarrierCount() >= Definition->GetRequiredCarriers();
+}
+
+int32 ANDLootActor::GetCurrentLootPoints() const
+{
+	return Definition ? FMath::RoundToInt(Definition->BaseValue * Definition->GetConditionFactor(Condition)) : 0;
+}
+
+bool ANDLootActor::CanBeGrabbedBy(const APawn* Pawn) const
+{
+	if (!Pawn || !Definition || IsCarriedBy(Pawn))
+	{
+		return false;
+	}
+	switch (LootState)
+	{
+	case ENDLootState::WorldLoose:
+		return true;
+	case ENDLootState::Carried:
+		// Un segundo jugador puede unirse a un bulto que necesita ayuda.
+		return Carriers.Num() < Definition->GetRequiredCarriers();
+	default:
+		return false;
+	}
+}
+
+bool ANDLootActor::AddCarrier(APawn* Pawn)
+{
+	if (!HasAuthority() || !CanBeGrabbedBy(Pawn))
+	{
+		return false;
+	}
+
+	Carriers.Add(Pawn);
+	SetInstigator(Pawn);
+	if (Carriers.Num() == 1)
+	{
+		LootState = ENDLootState::Carried;
+		ApplyStateLocally();
+		AttachToLeader();
+	}
+	return true;
+}
+
+void ANDLootActor::RemoveCarrier(APawn* Pawn, const FVector& ReleaseVelocity)
+{
+	if (!HasAuthority() || !Carriers.Contains(Pawn))
+	{
+		return;
+	}
+
+	const bool bWasLeader = GetLeadCarrier() == Pawn;
+	Carriers.Remove(Pawn);
+	if (UNDCarryComponent* Carry = Pawn ? Pawn->FindComponentByClass<UNDCarryComponent>() : nullptr)
+	{
+		Carry->NotifyLootReleased(this);
+	}
+
+	if (Carriers.Num() == 0)
+	{
+		if (Pawn)
+		{
+			LastSafeLocation = Pawn->GetActorLocation();
+		}
+		ReleaseToWorld(ReleaseVelocity);
+	}
+	else if (bWasLeader)
+	{
+		AttachToLeader();
+	}
+}
+
+void ANDLootActor::SetPocketed(APawn* Pawn)
+{
+	if (!HasAuthority() || !Pawn)
+	{
+		return;
+	}
+	SetInstigator(Pawn);
+	PocketOwner = Pawn;
+	LootState = ENDLootState::Pocketed;
+	ApplyStateLocally();
+	AttachToActor(Pawn, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+}
+
+void ANDLootActor::DropFromPocket(const FVector& Location)
+{
+	if (!HasAuthority() || LootState != ENDLootState::Pocketed)
+	{
+		return;
+	}
+	if (APawn* Owner = PocketOwner.Get())
+	{
+		LastSafeLocation = Owner->GetActorLocation();
+	}
+	PocketOwner.Reset();
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	SetActorLocation(Location, false, nullptr, ETeleportType::TeleportPhysics);
+	LootState = ENDLootState::WorldLoose;
+	ApplyStateLocally();
+}
+
+void ANDLootActor::MarkDeposited()
+{
+	if (!HasAuthority() || LootState == ENDLootState::Deposited)
+	{
+		return;
+	}
+
+	// Se suelta de todos sin devolverlo al mundo.
+	TArray<TObjectPtr<APawn>> PreviousCarriers = Carriers;
+	Carriers.Reset();
+	if (APawn* Owner = PocketOwner.Get())
+	{
+		PreviousCarriers.Add(Owner);
+	}
+	PocketOwner.Reset();
+	for (APawn* Carrier : PreviousCarriers)
+	{
+		if (UNDCarryComponent* Carry = Carrier ? Carrier->FindComponentByClass<UNDCarryComponent>() : nullptr)
+		{
+			Carry->NotifyLootReleased(this);
+		}
+	}
+
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	LootState = ENDLootState::Deposited;
+	ApplyStateLocally();
+
+	// La riqueza no se representa con mallas amontonadas (GDD 5.7).
+	SetLifeSpan(1.f);
+}
+
+void ANDLootActor::AttachToLeader()
+{
+	APawn* Leader = GetLeadCarrier();
+	if (!Leader)
+	{
+		return;
+	}
+	AttachToActor(Leader, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	SetActorRelativeLocation(GetCarryOffset());
+	SetActorRelativeRotation(FRotator::ZeroRotator);
+}
+
+FVector ANDLootActor::GetCarryOffset() const
+{
+	if (!Definition)
+	{
+		return FVector(60.f, 0.f, 10.f);
+	}
+	switch (Definition->Category)
+	{
+	case ENDLootCategory::Medium: return FVector(70.f, 0.f, 20.f);
+	case ENDLootCategory::Heavy:  return FVector(110.f, 0.f, -10.f);
+	case ENDLootCategory::Huge:   return FVector(140.f, 0.f, -20.f);
+	default:                      return FVector(60.f, 0.f, 10.f);
+	}
+}
+
+void ANDLootActor::ReleaseToWorld(const FVector& ReleaseVelocity)
+{
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	LootState = ENDLootState::WorldLoose;
+	ApplyStateLocally();
+	if (!ReleaseVelocity.IsNearlyZero())
+	{
+		Mesh->SetPhysicsLinearVelocity(ReleaseVelocity);
+	}
+}
+
+void ANDLootActor::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!HasAuthority() || LootState != ENDLootState::Carried || Carriers.Num() < 2)
+	{
+		return;
+	}
+
+	// Si los portadores se separan demasiado, el que se aleja suelta el bulto.
+	const APawn* Leader = GetLeadCarrier();
+	for (int32 Index = Carriers.Num() - 1; Index >= 1; --Index)
+	{
+		APawn* Helper = Carriers[Index];
+		if (!Helper || !Leader || FVector::Dist(Helper->GetActorLocation(), Leader->GetActorLocation()) > MaxCoCarryDistance)
+		{
+			RemoveCarrier(Helper, FVector::ZeroVector);
+		}
+	}
+}
+
+void ANDLootActor::HandleMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
+{
+	if (LootState != ENDLootState::WorldLoose)
+	{
+		return;
+	}
+	const float Mass = FMath::Max(1.f, Mesh->GetMass());
+	ApplyImpact(NormalImpulse.Size() / Mass, Hit.ImpactPoint);
+}
+
+void ANDLootActor::ApplyImpact(float DeltaSpeed, const FVector& Location)
+{
+	if (!HasAuthority() || !Definition)
+	{
+		return;
+	}
+
+	const double Now = GetWorld()->GetTimeSeconds();
+	if (Now - LastImpactTime < ImpactCooldownSeconds)
+	{
+		return;
+	}
+
+	const float DamageThreshold = Definition->GetDamageSpeedThreshold();
+	if (DeltaSpeed < DamageThreshold * 0.5f)
+	{
+		return;
+	}
+	LastImpactTime = Now;
+
+	// Ruido del golpe para el sistema de sigilo. La espuma silenciosa lo amortigua.
+	const float NoiseScale = FMath::Clamp(DeltaSpeed / FMath::Max(1.f, DamageThreshold), 0.2f, 1.5f);
+	const float Muffle = ANDSilentFoamPatch::GetNoiseMultiplierAt(this, Location);
+	MakeNoise(FMath::Clamp(Definition->ImpactNoiseLoudness * NoiseScale * Muffle, 0.f, 1.f), GetInstigator(), Location);
+
+	if (Muffle < 1.f)
+	{
+		// Sobre espuma el golpe no daña (GDD 18, T17).
+		return;
+	}
+
+	if (DeltaSpeed >= Definition->GetBreakSpeedThreshold())
+	{
+		SetCondition(ENDLootCondition::Broken);
+	}
+	else if (DeltaSpeed >= DamageThreshold && Condition == ENDLootCondition::Intact)
+	{
+		SetCondition(ENDLootCondition::Damaged);
+	}
+}
+
+void ANDLootActor::SetCondition(ENDLootCondition NewCondition)
+{
+	if (NewCondition <= Condition)
+	{
+		return;
+	}
+	Condition = NewCondition;
+	OnConditionChanged.Broadcast(this, Condition);
+
+	if (Condition == ENDLootCondition::Broken)
+	{
+		if (UNDExpeditionComponent* Expedition = ANDExpeditionDirector::GetExpedition(this))
+		{
+			Expedition->NotifyLootBroken(this);
+		}
+	}
+}
+
+void ANDLootActor::FellOutOfWorld(const UDamageType& DamageType)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	// Nunca se destruye ni se duplica: vuelve al último punto seguro con penalización.
+	Mesh->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Mesh->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	SetActorLocation(LastSafeLocation + FVector(0.f, 0.f, 50.f), false, nullptr, ETeleportType::TeleportPhysics);
+	if (Condition == ENDLootCondition::Intact)
+	{
+		SetCondition(ENDLootCondition::Damaged);
+	}
+}

@@ -17,4 +17,6 @@ Los binarios (`.uasset`, `.umap`, `.blend`, `.fbx`, texturas y audio) se guardan
 
 Todo el contenido propio va en `NDE/Content/_NDE_/`. Ver [docs/ESTRUCTURA_CONTENT.md](docs/ESTRUCTURA_CONTENT.md).
 
+Bucle de expedición (corte gris, cómo probarlo): [docs/BUCLE_EXPEDICION.md](docs/BUCLE_EXPEDICION.md)
+
 Lista de comprobación de herramientas: [docs/CHECKLIST_HERRAMIENTAS.md](docs/CHECKLIST_HERRAMIENTAS.md)
