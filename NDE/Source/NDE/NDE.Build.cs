@@ -7,15 +7,12 @@ public class NDE : ModuleRules
 	public NDE(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+
+		// Permite includes por subcarpeta, p. ej. "Core/NDTypes.h".
 		PublicIncludePaths.Add(ModuleDirectory);
-	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "GameplayTags", "UMG", "CommonUI", "CommonInput", "DeveloperSettings" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "GameplayTags", "CommonUI", "CommonInput" });
 
-		// Uncomment if you are using online features
-		// PrivateDependencyModuleNames.Add("OnlineSubsystem");
-
-		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
+		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "CoreOnline", "DeveloperSettings", "NetCore", "OnlineSubsystem", "OnlineSubsystemUtils", "Slate", "SlateCore" });
 	}
 }
