@@ -7,11 +7,63 @@
 #include "Engine/World.h"
 #include "Networking/NDExpeditionGameMode.h"
 #include "Networking/NDLobbyGameMode.h"
+#include "Networking/NDLobbyGameState.h"
+#include "Networking/NDNetworkSettings.h"
 #include "Players/NDPlayerState.h"
+#include "UI/NDLobbyStatusWidget.h"
 
 namespace NDPlayerController
 {
 	constexpr double MinSecondsBetweenReadyRequests = 0.25;
+}
+
+void ANDPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+	if (IsLocalController())
+	{
+		// Al venir del menú el ratón y el foco siguen en la interfaz.
+		SetInputMode(FInputModeGameOnly());
+		SetShowMouseCursor(false);
+	}
+}
+
+void ANDPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+	UpdateLobbyStatusWidget();
+}
+
+void ANDPlayerController::UpdateLobbyStatusWidget()
+{
+	const bool bInLobby = GetWorld()->GetGameState<ANDLobbyGameState>() != nullptr;
+	if (!bInLobby)
+	{
+		if (LobbyStatusWidget)
+		{
+			LobbyStatusWidget->RemoveFromParent();
+			LobbyStatusWidget = nullptr;
+		}
+		return;
+	}
+	// Tras un viaje sin costuras el widget anterior ya no está en pantalla.
+	if (LobbyStatusWidget && LobbyStatusWidget->IsInViewport())
+	{
+		return;
+	}
+
+	const TSubclassOf<UNDLobbyStatusWidget> WidgetClass = UNDNetworkSettings::Get()->LobbyStatusWidgetClass.LoadSynchronous();
+	if (!WidgetClass)
+	{
+		if (!bWarnedMissingLobbyWidget)
+		{
+			UE_LOG(LogNDNet, Warning, TEXT("LobbyStatusWidgetClass no configurado en Project Settings > NDE Red."));
+			bWarnedMissingLobbyWidget = true;
+		}
+		return;
+	}
+	LobbyStatusWidget = CreateWidget<UNDLobbyStatusWidget>(this, WidgetClass);
+	LobbyStatusWidget->AddToViewport();
 }
 
 void ANDPlayerController::RequestSetReady(bool bReady)

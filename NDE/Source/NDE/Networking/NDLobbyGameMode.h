@@ -25,9 +25,13 @@ public:
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 	virtual void Logout(AController* Exiting) override;
 
+	/** Si el mapa tiene zonas de salida, solo cuenta "listo" dentro de una de ellas. */
 	void HandleReadyRequest(ANDPlayerController* Requester, bool bReady);
 
 protected:
+	bool IsInsideReadyZone(const ANDPlayerController* Requester) const;
+	void SpawnReadyZoneIfMissing();
+
 	void EvaluateReadyState();
 	void StartTravelCountdown();
 	void CancelTravelCountdown();

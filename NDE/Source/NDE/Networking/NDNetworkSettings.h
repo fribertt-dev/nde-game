@@ -6,6 +6,8 @@
 #include "Engine/DeveloperSettings.h"
 #include "NDNetworkSettings.generated.h"
 
+class UNDLobbyStatusWidget;
+class UNDMainMenuWidget;
 class UWorld;
 
 /**
@@ -35,6 +37,14 @@ public:
 	/** Casa de pruebas hasta que exista el generador procedural. */
 	UPROPERTY(Config, EditAnywhere, Category = "Mapas")
 	TSoftObjectPtr<UWorld> ExpeditionTestMap;
+
+	/** Widget del menú principal. Cambiar por un WBP con estilo propio. */
+	UPROPERTY(Config, EditAnywhere, Category = "Interfaz")
+	TSoftClassPtr<UNDMainMenuWidget> MainMenuWidgetClass;
+
+	/** Widget de estado de La Madriguera (listos y cuenta atrás). */
+	UPROPERTY(Config, EditAnywhere, Category = "Interfaz")
+	TSoftClassPtr<UNDLobbyStatusWidget> LobbyStatusWidgetClass;
 
 	UPROPERTY(Config, EditAnywhere, Category = "Sesion", meta = (ClampMin = "1", ClampMax = "6"))
 	int32 MaxPlayers = 6;

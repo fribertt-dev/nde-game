@@ -32,6 +32,9 @@ public:
 	void LeaveSession();
 
 protected:
+	virtual void BeginPlay() override;
+	virtual void PlayerTick(float DeltaTime) override;
+
 	UFUNCTION(Server, Reliable)
 	void ServerSetReady(bool bReady);
 
@@ -39,6 +42,14 @@ protected:
 	void ServerDebugReturnToLobby();
 
 private:
+	/** Muestra el estado de la sala en La Madriguera y lo quita fuera de ella. */
+	void UpdateLobbyStatusWidget();
+
 	/** Evita que un cliente sature al servidor alternando "listo". */
 	double LastReadyRequestTime = -1.0;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UNDLobbyStatusWidget> LobbyStatusWidget;
+
+	bool bWarnedMissingLobbyWidget = false;
 };

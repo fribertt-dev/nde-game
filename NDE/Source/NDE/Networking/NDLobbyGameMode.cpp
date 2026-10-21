@@ -5,9 +5,12 @@
 #include "Core/NDGameInstance.h"
 #include "Core/NDLog.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "Networking/NDLobbyGameState.h"
 #include "Networking/NDNetworkSettings.h"
+#include "Networking/NDReadyZone.h"
 #include "Networking/NDSessionSubsystem.h"
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
@@ -62,6 +65,25 @@ void ANDLobbyGameMode::BeginPlay()
 	{
 		Sessions->SetSessionJoinable(true);
 	}
+	SpawnReadyZoneIfMissing();
+}
+
+void ANDLobbyGameMode::SpawnReadyZoneIfMissing()
+{
+	UWorld* World = GetWorld();
+	if (TActorIterator<ANDReadyZone>(World))
+	{
+		return;
+	}
+	// Mapas sin zona colocada a mano: una delante del primer PlayerStart.
+	TActorIterator<APlayerStart> Start(World);
+	if (!Start)
+	{
+		return;
+	}
+	const FVector Location = Start->GetActorLocation() + Start->GetActorForwardVector() * 600.f;
+	World->SpawnActor<ANDReadyZone>(Location, Start->GetActorRotation());
+	UE_LOG(LogNDNet, Log, TEXT("Zona de salida creada en %s"), *Location.ToString());
 }
 
 void ANDLobbyGameMode::PostLogin(APlayerController* NewPlayer)
@@ -85,8 +107,27 @@ void ANDLobbyGameMode::HandleReadyRequest(ANDPlayerController* Requester, bool b
 	{
 		return;
 	}
+	if (bReady && !IsInsideReadyZone(Requester))
+	{
+		UE_LOG(LogNDNet, Log, TEXT("Listo ignorado: %s esta fuera de la zona de salida"), *PS->GetPlayerName());
+		return;
+	}
 	PS->SetReady(bReady);
 	EvaluateReadyState();
+}
+
+bool ANDLobbyGameMode::IsInsideReadyZone(const ANDPlayerController* Requester) const
+{
+	bool bAnyZone = false;
+	for (TActorIterator<ANDReadyZone> It(GetWorld()); It; ++It)
+	{
+		bAnyZone = true;
+		if (It->ContainsController(Requester))
+		{
+			return true;
+		}
+	}
+	return !bAnyZone;
 }
 
 void ANDLobbyGameMode::EvaluateReadyState()
