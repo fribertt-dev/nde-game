@@ -22,11 +22,11 @@ Esta etapa deja la arquitectura de UI del GDD (capítulo 32) en C++. Las pantall
 | `UI/NDUISettings` | Project Settings > Game > NDE UI |
 | `UI/NDUITags` | Etiquetas `UI.Screen.*` de todas las pantallas del flujo |
 | `UI/NDUIFunctionLibrary` | Reloj nocturno (tiempo restante, progreso, huida), formato `M:SS`, nombre de especie |
-| `Core/NDPlayerController`, `Core/NDFrontEndGameMode` | El controlador local inicializa la UI y abre la pantalla inicial |
+| `UI/NDHUD`, `Core/NDFrontEndGameMode` | El HUD del jugador local inicializa la UI y abre la pantalla inicial; cualquier GameMode lo usa con `HUDClass` |
 | `UI/Tests` | Pruebas automáticas del mock y del reloj (`NDE.UI.*` en Session Frontend) |
 
 Reglas que ya cumple el código:
-- Ni el GameMode ni el Level Blueprint crean widgets. Lo hace el PlayerController local a través del subsistema.
+- Ni el GameMode ni el Level Blueprint crean widgets. Lo hace el HUD del jugador local a través del subsistema.
 - Las pantallas refrescan por evento (`OnDataChanged`), sin Tick ni bindings por frame.
 - La UI solo pide (`RequestPurchase`, `RequestVoteContract`...). El resultado llega por `OnCommandResult`, y en el mock cada respuesta va marcada como simulada y no se guarda nada.
 - Cada especie es única por partida y no puedes marcarte listo sin especie.

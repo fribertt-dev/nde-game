@@ -20,7 +20,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNDUIOnToastRequested, const FNDUITo
 /**
  * Punto único de entrada a la UI de cada jugador local (UNDUIManagerSubsystem, GDD 32.3).
  * Crea la raíz por capas, abre pantallas por etiqueta según DA_UIScreenRegistry y entrega el
- * proveedor de datos. GameMode y Level Blueprint no crean widgets: lo pide el PlayerController local.
+ * proveedor de datos. GameMode y Level Blueprint no crean widgets: lo pide el HUD del jugador local (ANDHUD).
  */
 UCLASS()
 class NDE_API UNDUIManagerSubsystem : public ULocalPlayerSubsystem
@@ -30,7 +30,7 @@ class NDE_API UNDUIManagerSubsystem : public ULocalPlayerSubsystem
 public:
 	virtual void Deinitialize() override;
 
-	// Lo llama ANDPlayerController al empezar. Crea la raíz si falta o si cambió de mapa.
+	// Lo llama ANDHUD al empezar. Crea la raíz si falta o si cambió de mapa.
 	void NotifyPlayerControllerReady(APlayerController* PlayerController);
 
 	UFUNCTION(BlueprintCallable, Category = "NDE|UI", meta = (Categories = "UI.Screen"))

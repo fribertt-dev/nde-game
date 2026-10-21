@@ -1,9 +1,9 @@
 #include "Core/NDFrontEndGameMode.h"
 
-#include "Core/NDPlayerController.h"
+#include "UI/NDHUD.h"
 
 ANDFrontEndGameMode::ANDFrontEndGameMode()
 {
-	PlayerControllerClass = ANDFrontEndPlayerController::StaticClass();
+	HUDClass = ANDFrontEndHUD::StaticClass();
 	DefaultPawnClass = nullptr;
 }
