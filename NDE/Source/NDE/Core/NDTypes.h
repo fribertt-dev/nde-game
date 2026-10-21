@@ -35,12 +35,28 @@ enum class ENDExpeditionSessionPhase : uint8
 UENUM(BlueprintType)
 enum class ENDDisconnectReason : uint8
 {
-	None,
-	LeftVoluntarily,
-	HostLeft,
-	ConnectionLost,
-	TravelFailed,
-	VersionMismatch,
-	SessionFull,
-	JoinFailed
+	None UMETA(DisplayName = "Sin motivo"),
+	LeftVoluntarily UMETA(DisplayName = "Saliste de la sala"),
+	HostLeft UMETA(DisplayName = "El host cerro la partida"),
+	ConnectionLost UMETA(DisplayName = "Se perdio la conexion con la partida"),
+	TravelFailed UMETA(DisplayName = "No se pudo cargar el mapa"),
+	VersionMismatch UMETA(DisplayName = "La sala usa otra version del juego"),
+	SessionFull UMETA(DisplayName = "La sala esta llena"),
+	JoinFailed UMETA(DisplayName = "No se pudo entrar en la sala"),
+	ExpeditionInProgress UMETA(DisplayName = "La banda esta en plena expedicion"),
+	RejoinExpired UMETA(DisplayName = "Paso el tiempo para volver a la partida")
+};
+
+/** Contrato que se puede votar en La Madriguera. */
+USTRUCT(BlueprintType)
+struct FNDContractOption
+{
+	GENERATED_BODY()
+
+	/** Id estable del contrato (GDD 23.5); lo recibe la expedición en la URL de viaje. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName ContractId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText DisplayName;
 };

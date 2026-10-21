@@ -246,22 +246,3 @@ if not eal.does_asset_exist(LOBBY_PATH):
     world.get_world_settings().set_editor_property("default_game_mode", unreal.NDLobbyGameMode.static_class())
     level_subsystem.save_current_level()
     unreal.log("NDE: Madriguera de prueba creada en " + LOBBY_PATH)
-
-# Ajustes de red: la Madriguera y la casa de prueba (Project Settings > NDE Red).
-# La clase no es BlueprintType y puede no estar expuesta a Python; el .ini de abajo basta.
-if hasattr(unreal, "NDNetworkSettings"):
-    settings = unreal.get_default_object(unreal.NDNetworkSettings)
-    settings.set_editor_property("lobby_map", unreal.load_asset(LOBBY_PATH))
-    settings.set_editor_property("expedition_test_map", unreal.load_asset(LEVEL_PATH))
-
-ini_path = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_config_dir() + "DefaultGame.ini")
-with open(ini_path, "r", encoding="utf-8") as ini:
-    ini_text = ini.read()
-if "[/Script/NDE.NDNetworkSettings]" not in ini_text:
-    with open(ini_path, "a", encoding="utf-8") as ini:
-        ini.write("\n[/Script/NDE.NDNetworkSettings]\n")
-        ini.write("LobbyMap=" + LOBBY_PATH + "." + LOBBY_PATH.split("/")[-1] + "\n")
-        ini.write("ExpeditionTestMap=" + LEVEL_PATH + "." + LEVEL_PATH.split("/")[-1] + "\n")
-    unreal.log("NDE: mapas de red guardados en DefaultGame.ini")
-else:
-    unreal.log_warning("NDE: DefaultGame.ini ya tiene ajustes de red; revisa LobbyMap y ExpeditionTestMap en Project Settings > NDE Red.")

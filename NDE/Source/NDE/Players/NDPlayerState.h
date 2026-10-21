@@ -21,14 +21,21 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void CopyProperties(APlayerState* PlayerState) override;
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	bool IsReady() const { return bIsReady; }
 
 	/** Solo servidor. Los clientes piden el cambio con ANDPlayerController::ServerSetReady. */
 	void SetReady(bool bNewReady);
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Sala")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Lobby")
 	FNDOnReadyChanged OnReadyChanged;
+
+	/** Índice del contrato votado en ANDLobbyGameState::GetContractOptions; INDEX_NONE sin voto. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
+	int32 GetVotedContractIndex() const { return VotedContractIndex; }
+
+	/** Solo servidor (un voto por jugador, el último cuenta). */
+	void SetVotedContractIndex(int32 NewIndex) { VotedContractIndex = NewIndex; }
 
 private:
 	UFUNCTION()
@@ -36,4 +43,7 @@ private:
 
 	UPROPERTY(ReplicatedUsing = OnRep_IsReady)
 	bool bIsReady = false;
+
+	UPROPERTY(Replicated)
+	int32 VotedContractIndex = INDEX_NONE;
 };

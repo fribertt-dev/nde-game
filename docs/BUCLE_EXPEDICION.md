@@ -1,6 +1,6 @@
 # Bucle de expedición: corte gris
 
-Primer corte jugable del bucle central: entrar en la casa, coger botín, llevarlo a la camioneta, votar la retirada y escapar antes del amanecer. Cubre los capítulos 7, 8, 12, 16 y 18 del GDD con valores provisionales. Todo el C++ está en `NDE/Source/NDE/`, en las carpetas `Expedition`, `Loot`, `Contracts`, `Tools`, `Prototype` y `Tests`.
+Primer corte jugable del bucle central: entrar en la casa, coger botín, llevarlo a la camioneta, votar la retirada y escapar antes del amanecer. Cubre los capítulos 7, 8, 12, 16 y 18 del GDD con valores provisionales. Todo el C++ está en `NDE/Source/NDE/`, en las carpetas `Expedition`, `Loot`, `Contracts`, `Tools` y `Tests`; el personaje es `Players/NDCharacter`.
 
 ## Cómo probarlo
 
@@ -50,7 +50,7 @@ En `Tools > Session Frontend > Automation`, filtra por `NDE.Expedition`. Las pru
 
 - **Red y multijugador:** `ANDExpeditionGameMode` debe localizar `UNDExpeditionComponent` (con `ANDExpeditionDirector::GetExpedition`), inyectar el RunGuid con `SetRunGuid()`, asignar el contrato con `SetContract()` antes de `StartExpedition()` y escuchar `OnExpeditionSettled`, que entrega un `FNDRunSummary`, para guardar los perfiles y volver a la Madriguera.
 - **Sigilo e IA:** los objetos y los señuelos emiten ruido con `MakeNoise` (con su instigador). `ANDSilentFoamPatch::GetNoiseMultiplierAt()` sirve para amortiguar pasos. El gigante captura con `SetParticipantCaptured(PlayerState, true)` y la jaula rescata con `false`. Al ser capturado, el jugador suelta todo el botín.
-- **Personaje final:** basta con añadir `UNDCarryComponent`, `UNDLoadoutComponent` y `UNDExpeditionPlayerComponent` al Desvelado definitivo. `ANDPrototypeCharacter` y `ANDPrototypeGameMode` son temporales.
+- **Personaje:** `ANDCharacter` (y `BP_Desvelado`) ya lleva `UNDCarryComponent`, `UNDLoadoutComponent` y `UNDExpeditionPlayerComponent`. El texto de depuración está en `Expedition/NDExpeditionDebugHud`.
 
 ## Pendiente en este frente
 

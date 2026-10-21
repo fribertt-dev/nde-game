@@ -131,7 +131,7 @@ void UNDSessionSubsystem::TravelToLobbyAsHost()
 	const FString LobbyPackage = UNDNetworkSettings::Get()->LobbyMap.ToSoftObjectPath().GetLongPackageName();
 	if (LobbyPackage.IsEmpty())
 	{
-		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Network."));
 		return;
 	}
 	UGameplayStatics::OpenLevel(this, FName(*LobbyPackage), true, TEXT("listen?game=Lobby"));
@@ -281,6 +281,7 @@ void UNDSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinSe
 	}
 
 	OnJoinSessionComplete.Broadcast(true);
+	LastConnectString = ConnectString;
 
 	// La versión viaja en la URL para que el servidor rechace builds incompatibles (PreLogin).
 	const FString URL = FString::Printf(TEXT("%s?NDEVersion=%s"), *ConnectString, *UNDNetworkSettings::Get()->CompatibilityVersion);

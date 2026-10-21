@@ -13,61 +13,61 @@ class NDE_API UNDContractDefinition : public UPrimaryDataAsset
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract")
 	FName ContractId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract")
 	FText DisplayName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato", meta = (MultiLine = true))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract", meta = (MultiLine = true))
 	FText Description;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato", meta = (ClampMin = 1, ClampMax = 4))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract", meta = (ClampMin = 1, ClampMax = 4))
 	int32 DifficultyTier = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato", meta = (ClampMin = 1, ClampMax = 6))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract", meta = (ClampMin = 1, ClampMax = 6))
 	int32 RecommendedPlayers = 4;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objetivo")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	ENDObjectiveType ObjectiveType = ENDObjectiveType::Quota;
 
 	/** Puntos de botín válidos que hay que depositar. 0 = sin cuota. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objetivo", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective", meta = (ClampMin = 0))
 	int32 RequiredQuotaValue = 0;
 
 	/** LootId que deben llegar a la camioneta sin romperse. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objetivo")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	TArray<FName> RequiredLootIds;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objetivo")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	ENDSecondaryObjective SecondaryObjective = ENDSecondaryObjective::None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objetivo")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	FText SecondaryObjectiveText;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recompensa", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (ClampMin = 0))
 	int32 BasePayoutPerPlayer = 150;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recompensa", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (ClampMin = 0))
 	int32 ReputationReward = 45;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recompensa", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Reward", meta = (ClampMin = 0))
 	float ContractValueMultiplier = 1.f;
 
 	/** Duración de la noche (GDD 7.8: 600 s por defecto, 480 corto, 720-840 avanzado, 900 operación). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Noche", meta = (ClampMin = 30))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Night", meta = (ClampMin = 30))
 	float NightDurationSeconds = 600.f;
 
 	/** Ventana final tras el amanecer. No ampliable con herramientas normales. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Noche", meta = (ClampMin = 0))
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Night", meta = (ClampMin = 0))
 	float DawnGraceSeconds = 45.f;
 
 	/** Solo se desactiva si la tarjeta del contrato lo anuncia. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Noche")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Night")
 	bool bDawnEnabled = true;
 
 	/** Mapa de la casa. En el corte gris todos usan el mismo nivel de prueba. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contrato")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Contract")
 	TSoftObjectPtr<UWorld> HouseMap;
 
 	virtual FPrimaryAssetId GetPrimaryAssetId() const override

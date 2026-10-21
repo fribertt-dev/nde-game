@@ -11,6 +11,7 @@ void ANDExpeditionGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 	DOREPLIFETIME(ANDExpeditionGameState, PhaseSequence);
 	DOREPLIFETIME(ANDExpeditionGameState, PhaseStartServerTime);
 	DOREPLIFETIME(ANDExpeditionGameState, RunGuid);
+	DOREPLIFETIME(ANDExpeditionGameState, ContractId);
 }
 
 void ANDExpeditionGameState::SetSessionPhase(ENDExpeditionSessionPhase NewPhase)

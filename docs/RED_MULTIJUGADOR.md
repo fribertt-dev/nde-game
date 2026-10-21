@@ -8,7 +8,7 @@ Estado: **fase 1** (esqueleto de red). Base: GDD secciones 21, 22 y 25.
 |---|---|---|
 | `UNDGameInstance` | `Core/` | Vive toda la ejecución. Vuelve al menú ante fallos de red o de viaje y guarda el motivo para la UI. Comandos de consola de prueba. |
 | `UNDSessionSubsystem` | `Networking/` | Crear, buscar, unirse, invitar y salir de salas. Usa la interfaz genérica de sesiones de Unreal: Steam ahora, otras plataformas después. Sin Steam usa salas LAN. |
-| `UNDNetworkSettings` | `Networking/` | Project Settings > Game > **NDE Red**: mapas, jugadores máximos y mínimos, cuenta atrás y versión de compatibilidad. |
+| `UNDNetworkSettings` | `Networking/` | Project Settings > Game > **NDE Network**: mapas, jugadores máximos y mínimos, cuenta atrás y versión de compatibilidad. |
 | `ANDLobbyGameMode` / `ANDLobbyGameState` | `Networking/` | La Madriguera: rechaza versiones distintas y salas llenas, controla "listo" y lanza el viaje a la expedición. |
 | `ANDExpeditionGameMode` / `ANDExpeditionGameState` | `Networking/` | Espera a que carguen todos, abre la partida, liquida una sola vez y vuelve a La Madriguera. Replica `RunGuid`, fase y hora de servidor de la fase. |
 | `ANDPlayerState` | `Players/` | "Listo" replicado. |
@@ -32,7 +32,7 @@ Las reglas de la expedición (fases del 7.1, reloj de noche, botín, cuota y liq
    - `L_Madriguera`: GameMode Override = `NDLobbyGameMode`.
    - `L_Expedicion_Test`: GameMode Override = `NDExpeditionGameMode`.
 3. Project Settings > Maps & Modes: *Game Default Map* = `L_MenuPrincipal`. Comprobar que *Game Instance Class* = `NDGameInstance`.
-4. Project Settings > Game > NDE Red: revisar que los tres mapas apunten a esos niveles.
+4. Project Settings > Game > NDE Network: revisar que los tres mapas apunten a esos niveles.
 
 Aún no hay personaje propio: se usa el pawn por defecto (cámara voladora).
 
