@@ -15,4 +15,6 @@ git clone https://github.com/fribertt-dev/nde-game.git
 
 Los binarios (`.uasset`, `.umap`, `.blend`, `.fbx`, texturas y audio) se guardan con Git LFS según `.gitattributes`. El editor usa el proveedor "Git (beta version)" de Unreal; el bloqueo de archivos queda pendiente hasta instalar el plugin Git LFS 2 si el equipo crece.
 
+Todo el contenido propio va en `NDE/Content/_NDE_/`. Ver [docs/ESTRUCTURA_CONTENT.md](docs/ESTRUCTURA_CONTENT.md).
+
 Lista de comprobación de herramientas: [docs/CHECKLIST_HERRAMIENTAS.md](docs/CHECKLIST_HERRAMIENTAS.md)
