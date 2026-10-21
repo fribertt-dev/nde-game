@@ -35,12 +35,14 @@ enum class ENDExpeditionSessionPhase : uint8
 UENUM(BlueprintType)
 enum class ENDDisconnectReason : uint8
 {
-	None,
-	LeftVoluntarily,
-	HostLeft,
-	ConnectionLost,
-	TravelFailed,
-	VersionMismatch,
-	SessionFull,
-	JoinFailed
+	None UMETA(DisplayName = "Sin motivo"),
+	LeftVoluntarily UMETA(DisplayName = "Saliste de la sala"),
+	HostLeft UMETA(DisplayName = "El host cerro la partida o se perdio la conexion con el"),
+	ConnectionLost UMETA(DisplayName = "Se perdio la conexion"),
+	TravelFailed UMETA(DisplayName = "No se pudo cargar el mapa"),
+	VersionMismatch UMETA(DisplayName = "La sala usa otra version del juego"),
+	SessionFull UMETA(DisplayName = "La sala esta llena"),
+	JoinFailed UMETA(DisplayName = "No se pudo entrar en la sala"),
+	ExpeditionInProgress UMETA(DisplayName = "La banda esta en plena expedicion"),
+	RejoinExpired UMETA(DisplayName = "Paso el tiempo para volver a la partida")
 };

@@ -37,12 +37,61 @@ void ANDExpeditionGameMode::InitGame(const FString& MapName, const FString& Opti
 void ANDExpeditionGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
 	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-	// TODO(fase 4): entrar a mitad de expedición como espectador y rejoin (GDD 21.6).
 	// En el editor se permite para probar el mapa de expedición directamente con varios clientes PIE.
-	if (ErrorMessage.IsEmpty() && !GIsEditor)
+	if (!ErrorMessage.IsEmpty() || GIsEditor)
 	{
-		ErrorMessage = TEXT("NDE_IN_PROGRESS: la banda esta en plena expedicion.");
+		return;
 	}
+
+	// Solo pueden entrar quienes ya estaban en esta expedición y se cayeron hace poco.
+	// TODO: entrar como espectador si el lobby lo permite (GDD 21.6).
+	if (IsWithinRejoinWindow(UniqueId))
+	{
+		return;
+	}
+	ErrorMessage = DisconnectedPlayers.Contains(UniqueId.ToString())
+		? TEXT("NDE_REJOIN_EXPIRED: paso el tiempo para volver a la partida.")
+		: TEXT("NDE_IN_PROGRESS: la banda esta en plena expedicion.");
+}
+
+bool ANDExpeditionGameMode::IsWithinRejoinWindow(const FUniqueNetIdRepl& UniqueId) const
+{
+	const double* DroppedAt = UniqueId.IsValid() ? DisconnectedPlayers.Find(UniqueId.ToString()) : nullptr;
+	return DroppedAt && GetWorld()->GetTimeSeconds() - *DroppedAt <= UNDNetworkSettings::Get()->RejoinWindowSeconds;
+}
+
+void ANDExpeditionGameMode::PostLogin(APlayerController* NewPlayer)
+{
+	Super::PostLogin(NewPlayer);
+
+	APlayerState* PS = NewPlayer ? NewPlayer->PlayerState : nullptr;
+	if (PS && DisconnectedPlayers.Remove(PS->GetUniqueId().ToString()) > 0)
+	{
+		UE_LOG(LogNDNet, Log, TEXT("%s volvio a la expedicion"), *PS->GetPlayerName());
+		OnPlayerRejoined.Broadcast(PS);
+	}
+}
+
+void ANDExpeditionGameMode::Logout(AController* Exiting)
+{
+	const ANDExpeditionGameState* ExpState = GetGameState<ANDExpeditionGameState>();
+	APlayerState* PS = Exiting ? Exiting->PlayerState : nullptr;
+	const bool bInProgress = ExpState && ExpState->GetSessionPhase() == ENDExpeditionSessionPhase::InProgress;
+
+	// El host no se cuenta: si se va él, se cierra la partida entera.
+	const APlayerController* PC = Cast<APlayerController>(Exiting);
+	if (bInProgress && PS && PC && !PC->IsLocalController())
+	{
+		UE_LOG(LogNDNet, Log, TEXT("%s se desconecto en plena expedicion; tiene %.0f s para volver"),
+			*PS->GetPlayerName(), UNDNetworkSettings::Get()->RejoinWindowSeconds);
+		if (PS->GetUniqueId().IsValid())
+		{
+			DisconnectedPlayers.Add(PS->GetUniqueId().ToString(), GetWorld()->GetTimeSeconds());
+		}
+		OnPlayerDisconnected.Broadcast(PS);
+	}
+
+	Super::Logout(Exiting);
 }
 
 void ANDExpeditionGameMode::StartPlay()

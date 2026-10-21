@@ -39,6 +39,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void QuitGame();
 
+	/** true si hay una expedición a la que aún podemos volver. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Menu")
+	bool CanRejoinExpedition() const;
+
+	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
+	void RejoinExpedition();
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Menu")
 	const TArray<FNDSessionInfo>& GetLastSessions() const { return LastSessions; }
 
@@ -79,6 +86,9 @@ private:
 
 	UFUNCTION()
 	void HandleJoinClicked() { JoinFirstCompatibleSession(); }
+
+	UFUNCTION()
+	void HandleRejoinClicked() { RejoinExpedition(); }
 
 	void BuildFallbackLayout();
 	UButton* AddFallbackButton(class UVerticalBox* Box, const FText& Label);

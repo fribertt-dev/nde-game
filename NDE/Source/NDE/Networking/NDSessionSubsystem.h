@@ -88,6 +88,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Sesion")
 	bool IsUsingLAN() const;
 
+	/** Dirección del último host al que nos unimos, para volver a una expedición. */
+	const FString& GetLastConnectString() const { return LastConnectString; }
+
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Sesion")
 	FNDOnSessionOperationComplete OnHostSessionComplete;
 
@@ -118,6 +121,7 @@ private:
 	void HandleSessionUserInviteAccepted(const bool bWasSuccessful, const int32 ControllerId, FUniqueNetIdPtr UserId, const FOnlineSessionSearchResult& InviteResult);
 
 	TSharedPtr<FOnlineSessionSearch> LastSearch;
+	FString LastConnectString;
 
 	/** Si al terminar de destruir una sala hay que crear otra (re-host). */
 	TOptional<bool> PendingHostFriendsOnly;

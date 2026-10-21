@@ -6,6 +6,7 @@
 #include "Core/NDLog.h"
 #include "Engine/World.h"
 #include "Networking/NDExpeditionGameMode.h"
+#include "Networking/NDExpeditionGameState.h"
 #include "Networking/NDLobbyGameMode.h"
 #include "Networking/NDLobbyGameState.h"
 #include "Networking/NDNetworkSettings.h"
@@ -64,6 +65,21 @@ void ANDPlayerController::UpdateLobbyStatusWidget()
 	}
 	LobbyStatusWidget = CreateWidget<UNDLobbyStatusWidget>(this, WidgetClass);
 	LobbyStatusWidget->AddToViewport();
+}
+
+void ANDPlayerController::PawnLeavingGame()
+{
+	// En la casa, el personaje de quien se cae se queda quieto unos segundos en vez de
+	// desaparecer de golpe (GDD 21.6). Lo que cargaba lo suelta el sistema de botín.
+	APawn* LeavingPawn = GetPawn();
+	const float Linger = UNDNetworkSettings::Get()->DisconnectedPawnLingerSeconds;
+	if (LeavingPawn && Linger > 0.f && GetWorld()->GetGameState<ANDExpeditionGameState>())
+	{
+		UnPossess();
+		LeavingPawn->SetLifeSpan(Linger);
+		return;
+	}
+	Super::PawnLeavingGame();
 }
 
 void ANDPlayerController::RequestSetReady(bool bReady)

@@ -68,4 +68,12 @@ public:
 	/** Tiempo máximo de Insertion esperando a que carguen todos los jugadores. */
 	UPROPERTY(Config, EditAnywhere, Category = "Expedicion", meta = (ClampMin = "5"))
 	float InsertionLoadTimeoutSeconds = 60.f;
+
+	/** Segundos que tiene un jugador caído para volver a la misma expedición (GDD 21.6). */
+	UPROPERTY(Config, EditAnywhere, Category = "Expedicion", meta = (ClampMin = "0"))
+	float RejoinWindowSeconds = 120.f;
+
+	/** Segundos que el personaje de un jugador caído queda quieto en la casa antes de desaparecer. */
+	UPROPERTY(Config, EditAnywhere, Category = "Expedicion", meta = (ClampMin = "0"))
+	float DisconnectedPawnLingerSeconds = 10.f;
 };
