@@ -9,7 +9,7 @@
 class UNDMainMenuWidget;
 
 /**
- * Muestra el menú principal configurado en Project Settings > Game > NDE Red.
+ * Muestra el menú principal configurado en Project Settings > Game > NDE Network.
  * Si no hay clase configurada, no muestra nada y lo avisa en el log.
  */
 UCLASS()

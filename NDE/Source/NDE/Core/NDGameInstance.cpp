@@ -101,7 +101,7 @@ void UNDGameInstance::OpenMainMenuMap()
 	}
 	else
 	{
-		UE_LOG(LogNDNet, Error, TEXT("MainMenuMap no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Error, TEXT("MainMenuMap no configurado en Project Settings > NDE Network."));
 		bReturningToMenu = false;
 	}
 }

@@ -131,7 +131,7 @@ void UNDSessionSubsystem::TravelToLobbyAsHost()
 	const FString LobbyPackage = UNDNetworkSettings::Get()->LobbyMap.ToSoftObjectPath().GetLongPackageName();
 	if (LobbyPackage.IsEmpty())
 	{
-		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Network."));
 		return;
 	}
 	UGameplayStatics::OpenLevel(this, FName(*LobbyPackage), true, TEXT("listen?game=Lobby"));

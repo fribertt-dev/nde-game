@@ -128,7 +128,7 @@ void ANDPlayerController::UpdateLobbyStatusWidget()
 	{
 		if (!bWarnedMissingLobbyWidget)
 		{
-			UE_LOG(LogNDNet, Warning, TEXT("LobbyStatusWidgetClass no configurado en Project Settings > NDE Red."));
+			UE_LOG(LogNDNet, Warning, TEXT("LobbyStatusWidgetClass no configurado en Project Settings > NDE Network."));
 			bWarnedMissingLobbyWidget = true;
 		}
 		return;

@@ -27,15 +27,15 @@ public:
 	virtual void Shutdown() override;
 
 	/** Sale de la sala y vuelve al menú principal mostrando el motivo. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Red")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Network")
 	void ReturnToMainMenuWithReason(ENDDisconnectReason Reason);
 
 	/** Motivo de la última salida, para que el menú lo muestre una vez. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Red")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Network")
 	ENDDisconnectReason ConsumeLastDisconnectReason();
 
 	/** Texto para el jugador. Las DisplayName del enum no existen fuera del editor. */
-	UFUNCTION(BlueprintPure, Category = "NDE|Red")
+	UFUNCTION(BlueprintPure, Category = "NDE|Network")
 	static FText GetDisconnectReasonText(ENDDisconnectReason Reason);
 
 	/** Comandos de consola para probar salas sin UI. */
@@ -65,15 +65,15 @@ public:
 	void NDNetSim(const FString& Preset);
 
 	/** true si salimos de una expedición en marcha y aún estamos a tiempo de volver. */
-	UFUNCTION(BlueprintPure, Category = "NDE|Red")
+	UFUNCTION(BlueprintPure, Category = "NDE|Network")
 	bool CanRejoinExpedition() const;
 
 	/** Segundos que quedan para volver; 0 si no se puede. */
-	UFUNCTION(BlueprintPure, Category = "NDE|Red")
+	UFUNCTION(BlueprintPure, Category = "NDE|Network")
 	float GetRejoinSecondsLeft() const;
 
 	/** Vuelve a conectar con el host de la expedición que dejamos. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Red")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Network")
 	bool RejoinExpedition();
 
 	void SetLastDisconnectReason(ENDDisconnectReason Reason) { LastDisconnectReason = Reason; }

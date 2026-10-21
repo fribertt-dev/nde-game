@@ -22,33 +22,33 @@ class NDE_API UNDProfileSubsystem : public UGameInstanceSubsystem
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int64 GetCoins() const;
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int32 GetReputation() const;
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int32 GetExpeditionsCompleted() const;
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	bool IsUnlocked(FName UnlockId) const;
 
 	/**
 	 * Cobra la recompensa de una expedición. Si ese RunGuid ya se cobró, no hace nada
 	 * y devuelve false (reintentos o mensajes repetidos no duplican monedas).
 	 */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Profile")
 	bool ApplyRunReward(const FGuid& RunGuid, int32 Coins, int32 Reputation);
 
 	/** Gasta monedas si alcanzan. Devuelve false si no hay saldo. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Profile")
 	bool TrySpendCoins(int32 Amount);
 
-	UFUNCTION(BlueprintCallable, Category = "NDE|Perfil")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Profile")
 	void Unlock(FName UnlockId);
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Perfil")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Profile")
 	FNDOnProfileChanged OnProfileChanged;
 
 private:

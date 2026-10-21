@@ -61,46 +61,46 @@ public:
 	void BindPlatformDelegates();
 
 	/** Crea la sala y, al completarse, abre La Madriguera como listen server. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void HostSession(bool bFriendsOnly);
 
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void FindSessions(int32 MaxResults = 50);
 
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void JoinSessionByIndex(int32 SearchIndex);
 
 	/** Abre la ventana de invitaciones de la plataforma (overlay de Steam). */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	bool ShowInviteUI();
 
 	/** Destruye la sala local. No viaja; para volver al menú usar UNDGameInstance::ReturnToMainMenuWithReason. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void DestroySession();
 
 	/** Cierra o abre la sala a nuevas entradas (p. ej. durante una expedición). */
 	void SetSessionJoinable(bool bJoinable);
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintPure, Category = "NDE|Session")
 	bool HasActiveSession() const;
 
 	/** true si el subsistema activo es NULL (sin Steam): las salas son LAN. */
-	UFUNCTION(BlueprintPure, Category = "NDE|Sesion")
+	UFUNCTION(BlueprintPure, Category = "NDE|Session")
 	bool IsUsingLAN() const;
 
 	/** Dirección del último host al que nos unimos, para volver a una expedición. */
 	const FString& GetLastConnectString() const { return LastConnectString; }
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Sesion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnHostSessionComplete;
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Sesion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnFindSessionsComplete OnFindSessionsComplete;
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Sesion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnJoinSessionComplete;
 
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Sesion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnDestroySessionComplete;
 
 	/** Claves propias en los ajustes de sala. */

@@ -17,7 +17,7 @@ void ANDMenuPlayerController::BeginPlay()
 	const TSubclassOf<UNDMainMenuWidget> MenuClass = UNDNetworkSettings::Get()->MainMenuWidgetClass.LoadSynchronous();
 	if (!MenuClass)
 	{
-		UE_LOG(LogNDNet, Warning, TEXT("MainMenuWidgetClass no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Warning, TEXT("MainMenuWidgetClass no configurado en Project Settings > NDE Network."));
 		return;
 	}
 

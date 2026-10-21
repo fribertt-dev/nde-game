@@ -183,7 +183,7 @@ void ANDExpeditionGameMode::TravelToLobby()
 	const FString LobbyPackage = UNDNetworkSettings::Get()->LobbyMap.ToSoftObjectPath().GetLongPackageName();
 	if (LobbyPackage.IsEmpty())
 	{
-		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Error, TEXT("LobbyMap no configurado en Project Settings > NDE Network."));
 		return;
 	}
 

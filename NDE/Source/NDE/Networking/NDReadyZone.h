@@ -30,10 +30,10 @@ public:
 	bool ContainsController(const AController* Controller) const;
 
 protected:
-	UPROPERTY(VisibleAnywhere, Category = "NDE|Sala")
+	UPROPERTY(VisibleAnywhere, Category = "NDE|Lobby")
 	TObjectPtr<UBoxComponent> Zone;
 
-	UPROPERTY(VisibleAnywhere, Category = "NDE|Sala")
+	UPROPERTY(VisibleAnywhere, Category = "NDE|Lobby")
 	TObjectPtr<UTextRenderComponent> Label;
 
 private:

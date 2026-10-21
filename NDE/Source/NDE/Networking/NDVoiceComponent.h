@@ -36,14 +36,14 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 	/** Solo jugador local: empieza o deja de transmitir (pulsar para hablar). */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Voz")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Voice")
 	void SetTransmitting(bool bTransmit);
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Voz")
+	UFUNCTION(BlueprintPure, Category = "NDE|Voice")
 	bool IsTransmitting() const { return bLocalTransmitting; }
 
 	/** Servidor: cada pulso de ruido de voz, además del aviso a AIPerception. */
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Voz")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Voice")
 	FNDOnVoiceNoise OnVoiceNoise;
 
 protected:

@@ -223,7 +223,7 @@ void ANDLobbyGameMode::TravelToExpedition()
 	const FString MapPackage = UNDNetworkSettings::Get()->ExpeditionTestMap.ToSoftObjectPath().GetLongPackageName();
 	if (!LobbyState || MapPackage.IsEmpty())
 	{
-		UE_LOG(LogNDNet, Error, TEXT("ExpeditionTestMap no configurado en Project Settings > NDE Red."));
+		UE_LOG(LogNDNet, Error, TEXT("ExpeditionTestMap no configurado en Project Settings > NDE Network."));
 		return;
 	}
 

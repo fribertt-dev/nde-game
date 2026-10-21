@@ -28,28 +28,28 @@ public:
 	virtual void Logout(AController* Exiting) override;
 
 	/** Cierra la expedición y vuelve a La Madriguera. Se ejecuta una sola vez por RunGuid. */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedicion")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedition")
 	void EndExpedition();
 
 	/**
 	 * Entrega a un jugador su recompensa de esta expedición; su perfil la guarda una
 	 * sola vez por RunGuid. Llamar antes de EndExpedition con los datos del resumen.
 	 */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedicion")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedition")
 	void GrantRunReward(APlayerController* Player, int32 Coins, int32 Reputation);
 
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedicion")
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedition")
 	void GrantRunRewardToAll(int32 Coins, int32 Reputation);
 
 	/**
 	 * Un jugador se cayó o salió en plena expedición. Su PlayerState aún es válido
 	 * durante el aviso: es el momento de soltar lo que cargaba y marcarlo como desconectado.
 	 */
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedicion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedition")
 	FNDOnExpeditionPlayerConnection OnPlayerDisconnected;
 
 	/** Un jugador caído volvió dentro de la ventana de rejoin. */
-	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedicion")
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedition")
 	FNDOnExpeditionPlayerConnection OnPlayerRejoined;
 
 protected:

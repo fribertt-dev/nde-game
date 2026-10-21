@@ -20,11 +20,11 @@ class NDE_API ANDPlayerController : public APlayerController
 public:
 	ANDPlayerController();
 
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sala")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Lobby")
 	void RequestSetReady(bool bReady);
 
 	/** Vota un contrato de La Madriguera (índice en ANDLobbyGameState::GetContractOptions). */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sala")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Lobby")
 	void RequestVote(int32 ContractIndex);
 
 	/** Atajo de consola: NDVote 1 vota el primer contrato. */
@@ -35,7 +35,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientReceiveRunReward(const FGuid& RunGuid, int32 Coins, int32 Reputation);
 
-	UFUNCTION(BlueprintPure, Category = "NDE|Voz")
+	UFUNCTION(BlueprintPure, Category = "NDE|Voice")
 	UNDVoiceComponent* GetVoiceComponent() const { return VoiceComponent; }
 
 	/** Atajo de consola: alterna "listo" en La Madriguera. */
@@ -47,7 +47,7 @@ public:
 	void NDDebugReturnToLobby(int32 Coins = 100);
 
 	/** Sale de la sala y vuelve al menú principal. */
-	UFUNCTION(BlueprintCallable, Category = "NDE|Sala")
+	UFUNCTION(BlueprintCallable, Category = "NDE|Lobby")
 	void LeaveSession();
 
 	/** El host avisa de que cierra la partida, para que el cliente no ofrezca volver a ella. */
@@ -87,6 +87,6 @@ private:
 	void HandleVoteKey2() { RequestVote(1); }
 	void HandleVoteKey3() { RequestVote(2); }
 
-	UPROPERTY(VisibleAnywhere, Category = "NDE|Voz")
+	UPROPERTY(VisibleAnywhere, Category = "NDE|Voice")
 	TObjectPtr<UNDVoiceComponent> VoiceComponent;
 };
