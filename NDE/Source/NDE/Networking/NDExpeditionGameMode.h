@@ -6,6 +6,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "NDExpeditionGameMode.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNDOnExpeditionPlayerConnection, APlayerState*, PlayerState);
+
 /**
  * Orquesta la expedición en el servidor (GDD 22.2): espera a que carguen todos,
  * abre la partida, congela resultados y vuelve a La Madriguera.
@@ -22,10 +24,23 @@ public:
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void StartPlay() override;
 	virtual void HandleSeamlessTravelPlayer(AController*& C) override;
+	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
 
 	/** Cierra la expedición y vuelve a La Madriguera. Se ejecuta una sola vez por RunGuid. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedicion")
 	void EndExpedition();
+
+	/**
+	 * Un jugador se cayó o salió en plena expedición. Su PlayerState aún es válido
+	 * durante el aviso: es el momento de soltar lo que cargaba y marcarlo como desconectado.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedicion")
+	FNDOnExpeditionPlayerConnection OnPlayerDisconnected;
+
+	/** Un jugador caído volvió dentro de la ventana de rejoin. */
+	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedicion")
+	FNDOnExpeditionPlayerConnection OnPlayerRejoined;
 
 protected:
 	void CheckAllPlayersLoaded();
@@ -36,4 +51,10 @@ protected:
 	FTimerHandle ReturnTimer;
 	double LoadingStartTime = 0.0;
 	bool bSettlementStarted = false;
+
+private:
+	/** Id de plataforma de quien se cayó → hora (GetTimeSeconds) en que se cayó. */
+	TMap<FString, double> DisconnectedPlayers;
+
+	bool IsWithinRejoinWindow(const FUniqueNetIdRepl& UniqueId) const;
 };

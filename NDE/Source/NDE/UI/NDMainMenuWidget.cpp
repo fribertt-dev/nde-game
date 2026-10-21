@@ -39,7 +39,12 @@ void UNDMainMenuWidget::NativeConstruct()
 		const ENDDisconnectReason Reason = GI->ConsumeLastDisconnectReason();
 		if (Reason != ENDDisconnectReason::None && Reason != ENDDisconnectReason::LeftVoluntarily)
 		{
-			SetStatus(FString::Printf(TEXT("Has vuelto al menu: %s"), *UEnum::GetDisplayValueAsText(Reason).ToString()));
+			FString Message = UNDGameInstance::GetDisconnectReasonText(Reason).ToString();
+			if (GI->CanRejoinExpedition())
+			{
+				Message += FString::Printf(TEXT(" Puedes volver a la expedicion durante %.0f s."), GI->GetRejoinSecondsLeft());
+			}
+			SetStatus(Message);
 			OnSessionError(Reason);
 		}
 	}
@@ -101,6 +106,23 @@ void UNDMainMenuWidget::QuitGame()
 	UKismetSystemLibrary::QuitGame(this, GetOwningPlayer(), EQuitPreference::Quit, false);
 }
 
+bool UNDMainMenuWidget::CanRejoinExpedition() const
+{
+	const UNDGameInstance* GI = GetGameInstance<UNDGameInstance>();
+	return GI && GI->CanRejoinExpedition();
+}
+
+void UNDMainMenuWidget::RejoinExpedition()
+{
+	UNDGameInstance* GI = GetGameInstance<UNDGameInstance>();
+	if (GI && GI->RejoinExpedition())
+	{
+		SetStatus(TEXT("Volviendo a la expedicion..."));
+		return;
+	}
+	SetStatus(UNDGameInstance::GetDisconnectReasonText(ENDDisconnectReason::RejoinExpired).ToString());
+}
+
 void UNDMainMenuWidget::HandleHostComplete(bool bWasSuccessful)
 {
 	if (!bWasSuccessful)
@@ -145,6 +167,10 @@ void UNDMainMenuWidget::BuildFallbackLayout()
 	Title->SetFont(TitleFont);
 	Box->AddChildToVerticalBox(Title)->SetPadding(FMargin(40.f, 40.f, 40.f, 20.f));
 
+	if (CanRejoinExpedition())
+	{
+		AddFallbackButton(Box, NSLOCTEXT("NDE", "MenuRejoin", "Volver a la expedicion"))->OnClicked.AddDynamic(this, &ThisClass::HandleRejoinClicked);
+	}
 	AddFallbackButton(Box, NSLOCTEXT("NDE", "MenuHost", "Crear sala"))->OnClicked.AddDynamic(this, &ThisClass::HandleHostClicked);
 	AddFallbackButton(Box, NSLOCTEXT("NDE", "MenuFind", "Buscar salas"))->OnClicked.AddDynamic(this, &ThisClass::HandleFindClicked);
 	AddFallbackButton(Box, NSLOCTEXT("NDE", "MenuJoin", "Unirse a la primera sala"))->OnClicked.AddDynamic(this, &ThisClass::HandleJoinClicked);

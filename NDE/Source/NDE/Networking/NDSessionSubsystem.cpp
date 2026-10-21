@@ -281,6 +281,7 @@ void UNDSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinSe
 	}
 
 	OnJoinSessionComplete.Broadcast(true);
+	LastConnectString = ConnectString;
 
 	// La versión viaja en la URL para que el servidor rechace builds incompatibles (PreLogin).
 	const FString URL = FString::Printf(TEXT("%s?NDEVersion=%s"), *ConnectString, *UNDNetworkSettings::Get()->CompatibilityVersion);

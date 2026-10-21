@@ -6,6 +6,7 @@
 #include "Engine/Engine.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/UObjectGlobals.h"
+#include "Networking/NDExpeditionGameState.h"
 #include "Networking/NDNetworkSettings.h"
 #include "Networking/NDSessionSubsystem.h"
 
@@ -51,6 +52,7 @@ void UNDGameInstance::ReturnToMainMenuWithReason(ENDDisconnectReason Reason)
 	bReturningToMenu = true;
 	LastDisconnectReason = Reason;
 	ExpectedExpeditionPlayers = 0;
+	RememberExpeditionForRejoin(Reason);
 
 	if (UNDSessionSubsystem* Sessions = GetSubsystem<UNDSessionSubsystem>())
 	{
@@ -69,6 +71,63 @@ void UNDGameInstance::ReturnToMainMenuWithReason(ENDDisconnectReason Reason)
 		UE_LOG(LogNDNet, Error, TEXT("MainMenuMap no configurado en Project Settings > NDE Red."));
 		bReturningToMenu = false;
 	}
+}
+
+void UNDGameInstance::RememberExpeditionForRejoin(ENDDisconnectReason Reason)
+{
+	RejoinAddress.Reset();
+	RejoinDeadline = 0.0;
+
+	// Solo un cliente que estaba en una expedición en marcha puede volver a ella.
+	const UWorld* World = GetWorld();
+	const ANDExpeditionGameState* ExpState = World ? World->GetGameState<ANDExpeditionGameState>() : nullptr;
+	const bool bWasInExpedition = World && World->GetNetMode() == NM_Client
+		&& ExpState && ExpState->GetSessionPhase() == ENDExpeditionSessionPhase::InProgress;
+	const bool bReasonAllowsRejoin = Reason == ENDDisconnectReason::LeftVoluntarily
+		|| Reason == ENDDisconnectReason::ConnectionLost
+		|| Reason == ENDDisconnectReason::HostLeft;
+	const UNDSessionSubsystem* Sessions = GetSubsystem<UNDSessionSubsystem>();
+	if (!bWasInExpedition || !bReasonAllowsRejoin || !Sessions || Sessions->GetLastConnectString().IsEmpty())
+	{
+		return;
+	}
+
+	RejoinAddress = Sessions->GetLastConnectString();
+	RejoinDeadline = FPlatformTime::Seconds() + UNDNetworkSettings::Get()->RejoinWindowSeconds;
+	UE_LOG(LogNDNet, Log, TEXT("Se puede volver a la expedicion en %s durante %.0f s"), *RejoinAddress, UNDNetworkSettings::Get()->RejoinWindowSeconds);
+}
+
+bool UNDGameInstance::CanRejoinExpedition() const
+{
+	return !RejoinAddress.IsEmpty() && FPlatformTime::Seconds() < RejoinDeadline;
+}
+
+float UNDGameInstance::GetRejoinSecondsLeft() const
+{
+	return CanRejoinExpedition() ? static_cast<float>(RejoinDeadline - FPlatformTime::Seconds()) : 0.f;
+}
+
+bool UNDGameInstance::RejoinExpedition()
+{
+	APlayerController* PC = GetFirstLocalPlayerController();
+	if (!CanRejoinExpedition() || !PC)
+	{
+		LastDisconnectReason = ENDDisconnectReason::RejoinExpired;
+		return false;
+	}
+
+	// El servidor reconoce al jugador por su id de plataforma (ANDExpeditionGameMode::PreLogin).
+	const FString URL = FString::Printf(TEXT("%s?NDEVersion=%s"), *RejoinAddress, *UNDNetworkSettings::Get()->CompatibilityVersion);
+	RejoinAddress.Reset();
+	RejoinDeadline = 0.0;
+	UE_LOG(LogNDNet, Log, TEXT("Volviendo a la expedicion: %s"), *URL);
+	PC->ClientTravel(URL, TRAVEL_Absolute);
+	return true;
+}
+
+void UNDGameInstance::NDRejoin()
+{
+	RejoinExpedition();
 }
 
 void UNDGameInstance::HandlePostLoadMap(UWorld* LoadedWorld)
@@ -134,6 +193,23 @@ void UNDGameInstance::NDLeave()
 	ReturnToMainMenuWithReason(ENDDisconnectReason::LeftVoluntarily);
 }
 
+FText UNDGameInstance::GetDisconnectReasonText(ENDDisconnectReason Reason)
+{
+	switch (Reason)
+	{
+	case ENDDisconnectReason::LeftVoluntarily:		return NSLOCTEXT("NDE", "ReasonLeft", "Saliste de la sala.");
+	case ENDDisconnectReason::HostLeft:				return NSLOCTEXT("NDE", "ReasonHostLeft", "Se perdio la conexion con el host o cerro la partida.");
+	case ENDDisconnectReason::ConnectionLost:		return NSLOCTEXT("NDE", "ReasonConnection", "Se perdio la conexion.");
+	case ENDDisconnectReason::TravelFailed:			return NSLOCTEXT("NDE", "ReasonTravel", "No se pudo cargar el mapa.");
+	case ENDDisconnectReason::VersionMismatch:		return NSLOCTEXT("NDE", "ReasonVersion", "La sala usa otra version del juego.");
+	case ENDDisconnectReason::SessionFull:			return NSLOCTEXT("NDE", "ReasonFull", "La sala esta llena.");
+	case ENDDisconnectReason::JoinFailed:			return NSLOCTEXT("NDE", "ReasonJoin", "No se pudo entrar en la sala.");
+	case ENDDisconnectReason::ExpeditionInProgress:	return NSLOCTEXT("NDE", "ReasonInProgress", "La banda esta en plena expedicion.");
+	case ENDDisconnectReason::RejoinExpired:		return NSLOCTEXT("NDE", "ReasonRejoinExpired", "Paso el tiempo para volver a la partida.");
+	default:										return FText::GetEmpty();
+	}
+}
+
 ENDDisconnectReason UNDGameInstance::ConsumeLastDisconnectReason()
 {
 	const ENDDisconnectReason Reason = LastDisconnectReason;
@@ -161,8 +237,17 @@ void UNDGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
 	{
 		Reason = ENDDisconnectReason::SessionFull;
 	}
+	else if (ErrorString.Contains(TEXT("NDE_IN_PROGRESS")) || ErrorString.Contains(TEXT("NDE_TRAVELING")))
+	{
+		Reason = ENDDisconnectReason::ExpeditionInProgress;
+	}
+	else if (ErrorString.Contains(TEXT("NDE_REJOIN_EXPIRED")))
+	{
+		Reason = ENDDisconnectReason::RejoinExpired;
+	}
 
-	// TODO(fase 4): si cae el host durante una expedición, restaurar checkpoint (GDD 21.6).
+	// Sin migración de host en listen server (GDD 21.6): si se va el host, se vuelve al menú.
+	// TODO: restaurar checkpoint o compensación verificada cuando exista el servicio de perfil.
 	ReturnToMainMenuWithReason(Reason);
 }
 
