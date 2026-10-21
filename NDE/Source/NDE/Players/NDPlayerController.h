@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Sala")
 	void LeaveSession();
 
+	/** El host avisa de que cierra la partida, para que el cliente no ofrezca volver a ella. */
+	UFUNCTION(Client, Reliable)
+	void ClientHostClosedSession();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void PlayerTick(float DeltaTime) override;

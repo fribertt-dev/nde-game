@@ -37,8 +37,8 @@ enum class ENDDisconnectReason : uint8
 {
 	None UMETA(DisplayName = "Sin motivo"),
 	LeftVoluntarily UMETA(DisplayName = "Saliste de la sala"),
-	HostLeft UMETA(DisplayName = "El host cerro la partida o se perdio la conexion con el"),
-	ConnectionLost UMETA(DisplayName = "Se perdio la conexion"),
+	HostLeft UMETA(DisplayName = "El host cerro la partida"),
+	ConnectionLost UMETA(DisplayName = "Se perdio la conexion con la partida"),
 	TravelFailed UMETA(DisplayName = "No se pudo cargar el mapa"),
 	VersionMismatch UMETA(DisplayName = "La sala usa otra version del juego"),
 	SessionFull UMETA(DisplayName = "La sala esta llena"),

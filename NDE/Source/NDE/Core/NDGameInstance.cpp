@@ -9,6 +9,14 @@
 #include "Networking/NDExpeditionGameState.h"
 #include "Networking/NDNetworkSettings.h"
 #include "Networking/NDSessionSubsystem.h"
+#include "Players/NDPlayerController.h"
+#include "TimerManager.h"
+
+namespace
+{
+	/** Margen para que el aviso de cierre llegue a los clientes antes de cortar la conexión. */
+	constexpr float HostCloseDelaySeconds = 0.5f;
+}
 
 void UNDGameInstance::Init()
 {
@@ -54,13 +62,38 @@ void UNDGameInstance::ReturnToMainMenuWithReason(ENDDisconnectReason Reason)
 	ExpectedExpeditionPlayers = 0;
 	RememberExpeditionForRejoin(Reason);
 
+	// Como host, avisamos a los clientes antes de cerrar para que sepan que la partida terminó.
+	const UWorld* World = GetWorld();
+	if (World && World->GetNetMode() == NM_ListenServer && World->GetNumPlayerControllers() > 1)
+	{
+		NotifyClientsHostClosing();
+		GetTimerManager().SetTimer(HostCloseTimer, this, &ThisClass::OpenMainMenuMap, HostCloseDelaySeconds, false);
+		return;
+	}
+	OpenMainMenuMap();
+}
+
+void UNDGameInstance::NotifyClientsHostClosing()
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		ANDPlayerController* PC = Cast<ANDPlayerController>(It->Get());
+		if (PC && !PC->IsLocalController())
+		{
+			PC->ClientHostClosedSession();
+		}
+	}
+}
+
+void UNDGameInstance::OpenMainMenuMap()
+{
 	if (UNDSessionSubsystem* Sessions = GetSubsystem<UNDSessionSubsystem>())
 	{
 		Sessions->DestroySession();
 	}
 
 	const FString MenuPackage = UNDNetworkSettings::Get()->MainMenuMap.ToSoftObjectPath().GetLongPackageName();
-	UE_LOG(LogNDNet, Log, TEXT("Volviendo al menu (%s)"), *UEnum::GetValueAsString(Reason));
+	UE_LOG(LogNDNet, Log, TEXT("Volviendo al menu (%s)"), *UEnum::GetValueAsString(LastDisconnectReason));
 	if (!MenuPackage.IsEmpty())
 	{
 		// Abrir un mapa sin ?listen cierra el servidor o la conexión al host.
@@ -83,9 +116,9 @@ void UNDGameInstance::RememberExpeditionForRejoin(ENDDisconnectReason Reason)
 	const ANDExpeditionGameState* ExpState = World ? World->GetGameState<ANDExpeditionGameState>() : nullptr;
 	const bool bWasInExpedition = World && World->GetNetMode() == NM_Client
 		&& ExpState && ExpState->GetSessionPhase() == ENDExpeditionSessionPhase::InProgress;
+	// HostLeft llega solo cuando el host avisa que cierra: ya no hay partida a la que volver.
 	const bool bReasonAllowsRejoin = Reason == ENDDisconnectReason::LeftVoluntarily
-		|| Reason == ENDDisconnectReason::ConnectionLost
-		|| Reason == ENDDisconnectReason::HostLeft;
+		|| Reason == ENDDisconnectReason::ConnectionLost;
 	const UNDSessionSubsystem* Sessions = GetSubsystem<UNDSessionSubsystem>();
 	if (!bWasInExpedition || !bReasonAllowsRejoin || !Sessions || Sessions->GetLastConnectString().IsEmpty())
 	{
@@ -198,8 +231,8 @@ FText UNDGameInstance::GetDisconnectReasonText(ENDDisconnectReason Reason)
 	switch (Reason)
 	{
 	case ENDDisconnectReason::LeftVoluntarily:		return NSLOCTEXT("NDE", "ReasonLeft", "Saliste de la sala.");
-	case ENDDisconnectReason::HostLeft:				return NSLOCTEXT("NDE", "ReasonHostLeft", "Se perdio la conexion con el host o cerro la partida.");
-	case ENDDisconnectReason::ConnectionLost:		return NSLOCTEXT("NDE", "ReasonConnection", "Se perdio la conexion.");
+	case ENDDisconnectReason::HostLeft:				return NSLOCTEXT("NDE", "ReasonHostLeft", "El host cerro la partida.");
+	case ENDDisconnectReason::ConnectionLost:		return NSLOCTEXT("NDE", "ReasonConnection", "Se perdio la conexion con la partida.");
 	case ENDDisconnectReason::TravelFailed:			return NSLOCTEXT("NDE", "ReasonTravel", "No se pudo cargar el mapa.");
 	case ENDDisconnectReason::VersionMismatch:		return NSLOCTEXT("NDE", "ReasonVersion", "La sala usa otra version del juego.");
 	case ENDDisconnectReason::SessionFull:			return NSLOCTEXT("NDE", "ReasonFull", "La sala esta llena.");
@@ -226,9 +259,8 @@ void UNDGameInstance::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
 	UE_LOG(LogNDNet, Warning, TEXT("Fallo de red %s: %s"), ENetworkFailure::ToString(FailureType), *ErrorString);
 
 	// Si el servidor rechazó por versión o sala llena, PreLogin ya dejó el motivo en el texto.
-	ENDDisconnectReason Reason = FailureType == ENetworkFailure::ConnectionLost
-		? ENDDisconnectReason::HostLeft
-		: ENDDisconnectReason::ConnectionLost;
+	// Si el host cerró a propósito, ClientHostClosedSession ya nos devolvió al menú y este aviso se ignora.
+	ENDDisconnectReason Reason = ENDDisconnectReason::ConnectionLost;
 	if (ErrorString.Contains(TEXT("NDE_VERSION")))
 	{
 		Reason = ENDDisconnectReason::VersionMismatch;
