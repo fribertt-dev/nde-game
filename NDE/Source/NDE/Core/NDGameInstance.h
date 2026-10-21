@@ -59,7 +59,7 @@ public:
 
 	/**
 	 * Desarrollo: simula una red peor en este PC (GDD 26.1).
-	 * Presets: off, buena (~30 ms), media (~150 ms, 2% pérdida), mala (~220 ms, 5% pérdida).
+	 * Presets: off, good (~30 ms), medium (~150 ms, 2% pérdida), bad (~220 ms, 5% pérdida).
 	 */
 	UFUNCTION(Exec)
 	void NDNetSim(const FString& Preset);

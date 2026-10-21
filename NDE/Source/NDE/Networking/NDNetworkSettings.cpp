@@ -20,7 +20,7 @@ UNDNetworkSettings::UNDNetworkSettings()
 		Option.ContractId = FName(Id);
 		Option.DisplayName = Name;
 	};
-	AddContract(TEXT("C01_Galletas"), NSLOCTEXT("NDE", "ContractC01", "Las galletas de la abuela"));
-	AddContract(TEXT("C02_Reloj"), NSLOCTEXT("NDE", "ContractC02", "El reloj de bolsillo"));
-	AddContract(TEXT("C03_Juguetes"), NSLOCTEXT("NDE", "ContractC03", "El baul de juguetes"));
+	AddContract(TEXT("C01_Cookies"), NSLOCTEXT("NDE", "ContractC01", "Las galletas de la abuela"));
+	AddContract(TEXT("C02_PocketWatch"), NSLOCTEXT("NDE", "ContractC02", "El reloj de bolsillo"));
+	AddContract(TEXT("C03_ToyChest"), NSLOCTEXT("NDE", "ContractC03", "El baul de juguetes"));
 }

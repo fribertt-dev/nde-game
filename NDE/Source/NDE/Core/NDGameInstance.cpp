@@ -165,18 +165,18 @@ void UNDGameInstance::NDNetSim(const FString& Preset)
 	int32 Lag = 0;
 	int32 Variance = 0;
 	int32 Loss = 0;
-	if (Preset.Equals(TEXT("buena"), ESearchCase::IgnoreCase))
+	if (Preset.Equals(TEXT("good"), ESearchCase::IgnoreCase))
 	{
 		Lag = 15;
 		Variance = 5;
 	}
-	else if (Preset.Equals(TEXT("media"), ESearchCase::IgnoreCase))
+	else if (Preset.Equals(TEXT("medium"), ESearchCase::IgnoreCase))
 	{
 		Lag = 75;
 		Variance = 15;
 		Loss = 2;
 	}
-	else if (Preset.Equals(TEXT("mala"), ESearchCase::IgnoreCase))
+	else if (Preset.Equals(TEXT("bad"), ESearchCase::IgnoreCase))
 	{
 		Lag = 110;
 		Variance = 40;
@@ -184,7 +184,7 @@ void UNDGameInstance::NDNetSim(const FString& Preset)
 	}
 	else if (!Preset.Equals(TEXT("off"), ESearchCase::IgnoreCase))
 	{
-		UE_LOG(LogNDNet, Display, TEXT("Uso: NDNetSim off | buena | media | mala"));
+		UE_LOG(LogNDNet, Display, TEXT("Uso: NDNetSim off | good | medium | bad"));
 		return;
 	}
 
