@@ -12,12 +12,12 @@ bool FNDUIMockSpeciesUniqueTest::RunTest(const FString& Parameters)
 {
 	UNDUIMockDataProvider* Provider = NewObject<UNDUIMockDataProvider>();
 
-	// En el mock, otro jugador ya es Mapache.
-	Provider->RequestSelectSpecies(ENDDesveladoSpecies::Mapache);
+	// En el mock, otro jugador ya es Raccoon.
+	Provider->RequestSelectSpecies(ENDDesveladoSpecies::Raccoon);
 	TestTrue(TEXT("No se puede elegir una especie tomada"), Provider->GetLocalPlayer().Species == ENDDesveladoSpecies::None);
 
-	Provider->RequestSelectSpecies(ENDDesveladoSpecies::Zorro);
-	TestTrue(TEXT("Se puede elegir una especie libre"), Provider->GetLocalPlayer().Species == ENDDesveladoSpecies::Zorro);
+	Provider->RequestSelectSpecies(ENDDesveladoSpecies::Fox);
+	TestTrue(TEXT("Se puede elegir una especie libre"), Provider->GetLocalPlayer().Species == ENDDesveladoSpecies::Fox);
 	return true;
 }
 

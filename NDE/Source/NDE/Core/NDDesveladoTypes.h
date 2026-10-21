@@ -9,10 +9,10 @@ UENUM(BlueprintType)
 enum class ENDDesveladoSpecies : uint8
 {
 	None		UMETA(Hidden),
-	Mapache,
+	Raccoon		UMETA(DisplayName = "Mapache"),
 	Lemur		UMETA(DisplayName = "Lémur"),
-	Murcielago	UMETA(DisplayName = "Murciélago"),
-	Zorro		UMETA(DisplayName = "Zorro pequeño"),
-	Huron		UMETA(DisplayName = "Hurón"),
-	Buho		UMETA(DisplayName = "Búho"),
+	Bat			UMETA(DisplayName = "Murciélago"),
+	Fox			UMETA(DisplayName = "Zorro pequeño"),
+	Ferret		UMETA(DisplayName = "Hurón"),
+	Owl			UMETA(DisplayName = "Búho"),
 };

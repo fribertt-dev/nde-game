@@ -29,7 +29,7 @@ void UNDUIManagerSubsystem::LoadSettingsAssets()
 	if (!ScreenRegistry)
 	{
 		ScreenRegistry = Settings->ScreenRegistry.LoadSynchronous();
-		UE_CLOG(!ScreenRegistry, LogNDUI, Warning, TEXT("Falta ScreenRegistry en Project Settings > Game > NDE UI"));
+		UE_CLOG(!ScreenRegistry, LogNDUI, Warning, TEXT("ScreenRegistry is not set in Project Settings > Game > NDE UI"));
 	}
 	if (!Theme)
 	{
@@ -41,7 +41,7 @@ void UNDUIManagerSubsystem::LoadSettingsAssets()
 		{
 			DataProvider = NewObject<UNDUIDataProvider>(this, ProviderClass);
 		}
-		UE_CLOG(!DataProvider, LogNDUI, Warning, TEXT("Falta DataProviderClass en Project Settings > Game > NDE UI"));
+		UE_CLOG(!DataProvider, LogNDUI, Warning, TEXT("DataProviderClass is not set in Project Settings > Game > NDE UI"));
 	}
 }
 
@@ -68,7 +68,7 @@ void UNDUIManagerSubsystem::NotifyPlayerControllerReady(APlayerController* Playe
 	UClass* LayoutClass = GetDefault<UNDUISettings>()->RootLayoutClass.LoadSynchronous();
 	if (!LayoutClass)
 	{
-		UE_LOG(LogNDUI, Error, TEXT("Falta RootLayoutClass en Project Settings > Game > NDE UI"));
+		UE_LOG(LogNDUI, Error, TEXT("RootLayoutClass is not set in Project Settings > Game > NDE UI"));
 		return;
 	}
 
@@ -83,14 +83,14 @@ UNDUIBaseScreen* UNDUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
 {
 	if (!RootLayout || !ScreenRegistry)
 	{
-		UE_LOG(LogNDUI, Error, TEXT("PushScreen(%s) antes de inicializar la UI"), *ScreenTag.ToString());
+		UE_LOG(LogNDUI, Error, TEXT("PushScreen(%s) called before the UI was initialized"), *ScreenTag.ToString());
 		return nullptr;
 	}
 
 	const FNDUIScreenEntry* Entry = ScreenRegistry->FindScreen(ScreenTag);
 	if (!Entry)
 	{
-		UE_LOG(LogNDUI, Error, TEXT("La pantalla %s no está en el registro"), *ScreenTag.ToString());
+		UE_LOG(LogNDUI, Error, TEXT("Screen %s is not in the screen registry"), *ScreenTag.ToString());
 		return nullptr;
 	}
 
@@ -98,7 +98,7 @@ UNDUIBaseScreen* UNDUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
 	UNDUIBaseScreen* Screen = RootLayout->PushToLayer(Entry->Layer, ScreenClass);
 	if (!Screen)
 	{
-		UE_LOG(LogNDUI, Error, TEXT("No se pudo crear la pantalla %s"), *ScreenTag.ToString());
+		UE_LOG(LogNDUI, Error, TEXT("Could not create screen %s"), *ScreenTag.ToString());
 		return nullptr;
 	}
 

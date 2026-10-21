@@ -52,9 +52,9 @@ UNDUIMockDataProvider::UNDUIMockDataProvider()
 {
 	LobbyPlayers = {
 		MakePlayer(TEXT("mock-0"), LOCTEXT("PlayerYou", "Tú"), ENDDesveladoSpecies::None, true, true, false, 120),
-		MakePlayer(TEXT("mock-1"), LOCTEXT("Player1", "Bigotes"), ENDDesveladoSpecies::Mapache, false, false, true, 340),
-		MakePlayer(TEXT("mock-2"), LOCTEXT("Player2", "Pelusa"), ENDDesveladoSpecies::Buho, false, false, false, 80),
-		MakePlayer(TEXT("mock-3"), LOCTEXT("Player3", "Ceniza"), ENDDesveladoSpecies::Huron, false, false, true, 510),
+		MakePlayer(TEXT("mock-1"), LOCTEXT("Player1", "Bigotes"), ENDDesveladoSpecies::Raccoon, false, false, true, 340),
+		MakePlayer(TEXT("mock-2"), LOCTEXT("Player2", "Pelusa"), ENDDesveladoSpecies::Owl, false, false, false, 80),
+		MakePlayer(TEXT("mock-3"), LOCTEXT("Player3", "Ceniza"), ENDDesveladoSpecies::Ferret, false, false, true, 510),
 	};
 
 	// Subconjunto del catálogo de contratos del GDD, capítulo 12.

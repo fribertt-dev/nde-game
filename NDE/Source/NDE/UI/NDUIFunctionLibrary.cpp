@@ -75,12 +75,12 @@ FText UNDUIFunctionLibrary::GetSpeciesDisplayName(ENDDesveladoSpecies Species)
 {
 	switch (Species)
 	{
-	case ENDDesveladoSpecies::Mapache:		return NSLOCTEXT("NDUI", "SpeciesMapache", "Mapache");
+	case ENDDesveladoSpecies::Raccoon:		return NSLOCTEXT("NDUI", "SpeciesRaccoon", "Mapache");
 	case ENDDesveladoSpecies::Lemur:		return NSLOCTEXT("NDUI", "SpeciesLemur", "Lémur");
-	case ENDDesveladoSpecies::Murcielago:	return NSLOCTEXT("NDUI", "SpeciesMurcielago", "Murciélago");
-	case ENDDesveladoSpecies::Zorro:		return NSLOCTEXT("NDUI", "SpeciesZorro", "Zorro pequeño");
-	case ENDDesveladoSpecies::Huron:		return NSLOCTEXT("NDUI", "SpeciesHuron", "Hurón");
-	case ENDDesveladoSpecies::Buho:			return NSLOCTEXT("NDUI", "SpeciesBuho", "Búho");
+	case ENDDesveladoSpecies::Bat:	return NSLOCTEXT("NDUI", "SpeciesBat", "Murciélago");
+	case ENDDesveladoSpecies::Fox:		return NSLOCTEXT("NDUI", "SpeciesFox", "Zorro pequeño");
+	case ENDDesveladoSpecies::Ferret:		return NSLOCTEXT("NDUI", "SpeciesFerret", "Hurón");
+	case ENDDesveladoSpecies::Owl:			return NSLOCTEXT("NDUI", "SpeciesOwl", "Búho");
 	default:								return NSLOCTEXT("NDUI", "SpeciesNone", "Sin especie");
 	}
 }
