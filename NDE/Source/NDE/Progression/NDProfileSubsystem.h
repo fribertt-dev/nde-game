@@ -22,15 +22,19 @@ class NDE_API UNDProfileSubsystem : public UGameInstanceSubsystem
 public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 
+	/** Monedas del perfil local. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int64 GetCoins() const;
 
+	/** Reputación del perfil local. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int32 GetReputation() const;
 
+	/** Expediciones terminadas con este perfil. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	int32 GetExpeditionsCompleted() const;
 
+	/** true si el perfil tiene este desbloqueo. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Profile")
 	bool IsUnlocked(FName UnlockId) const;
 
@@ -45,9 +49,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Profile")
 	bool TrySpendCoins(int32 Amount);
 
+	/** Añade un desbloqueo al perfil y lo guarda. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Profile")
 	void Unlock(FName UnlockId);
 
+	/** Se dispara cuando cambian monedas, reputación o desbloqueos. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Profile")
 	FNDOnProfileChanged OnProfileChanged;
 

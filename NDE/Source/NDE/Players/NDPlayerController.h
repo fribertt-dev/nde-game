@@ -20,6 +20,7 @@ class NDE_API ANDPlayerController : public APlayerController
 public:
 	ANDPlayerController();
 
+	/** Pide al servidor marcar o desmarcar al jugador como listo. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Lobby")
 	void RequestSetReady(bool bReady);
 
@@ -35,6 +36,7 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientReceiveRunReward(const FGuid& RunGuid, int32 Coins, int32 Reputation);
 
+	/** Componente de voz de proximidad del jugador. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Voice")
 	UNDVoiceComponent* GetVoiceComponent() const { return VoiceComponent; }
 
@@ -87,6 +89,7 @@ private:
 	void HandleVoteKey2() { RequestVote(1); }
 	void HandleVoteKey3() { RequestVote(2); }
 
+	/** Voz de proximidad: pulsar para hablar y ruido para los monstruos. */
 	UPROPERTY(VisibleAnywhere, Category = "NDE|Voice")
 	TObjectPtr<UNDVoiceComponent> VoiceComponent;
 };

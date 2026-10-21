@@ -22,9 +22,11 @@ class NDE_API UNDMainMenuWidget : public UUserWidget
 	GENERATED_BODY()
 
 public:
+	/** Crea una sala y abre La Madriguera como host. bFriendsOnly: solo amigos de Steam pueden entrar. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void HostSession(bool bFriendsOnly = false);
 
+	/** Busca salas abiertas; el resultado llega en OnSessionsFound. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void FindSessions();
 
@@ -36,6 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void JoinFirstCompatibleSession();
 
+	/** Cierra el juego. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void QuitGame();
 
@@ -43,9 +46,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Menu")
 	bool CanRejoinExpedition() const;
 
+	/** Vuelve a la expedición de la que te desconectaste, si aún hay tiempo. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void RejoinExpedition();
 
+	/** Salas encontradas en la última búsqueda. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Menu")
 	const TArray<FNDSessionInfo>& GetLastSessions() const { return LastSessions; }
 
@@ -54,6 +59,7 @@ protected:
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
+	/** Terminó la búsqueda de salas; aquí se rellena la lista. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Menu")
 	void OnSessionsFound(const TArray<FNDSessionInfo>& Sessions, bool bWasSuccessful);
 
