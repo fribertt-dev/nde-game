@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/EngineBaseTypes.h"
 #include "Engine/GameInstance.h"
+#include "Engine/TimerHandle.h"
 #include "Core/NDTypes.h"
 #include "Networking/NDSessionSubsystem.h"
 #include "NDGameInstance.generated.h"
@@ -93,5 +94,9 @@ private:
 	double RejoinDeadline = 0.0;
 
 	void RememberExpeditionForRejoin(ENDDisconnectReason Reason);
+	void NotifyClientsHostClosing();
+	void OpenMainMenuMap();
+
+	FTimerHandle HostCloseTimer;
 	bool bReturningToMenu = false;
 };

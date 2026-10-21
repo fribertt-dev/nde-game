@@ -131,6 +131,14 @@ void ANDPlayerController::ServerDebugReturnToLobby_Implementation()
 #endif
 }
 
+void ANDPlayerController::ClientHostClosedSession_Implementation()
+{
+	if (UNDGameInstance* GI = GetGameInstance<UNDGameInstance>())
+	{
+		GI->ReturnToMainMenuWithReason(ENDDisconnectReason::HostLeft);
+	}
+}
+
 void ANDPlayerController::LeaveSession()
 {
 	if (UNDGameInstance* GI = GetGameInstance<UNDGameInstance>())
