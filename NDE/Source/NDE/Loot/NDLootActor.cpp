@@ -240,9 +240,9 @@ void ANDLootActor::DropFromPocket(const FVector& Location)
 	{
 		return;
 	}
-	if (APawn* Owner = PocketOwner.Get())
+	if (APawn* PocketPawn = PocketOwner.Get())
 	{
-		LastSafeLocation = Owner->GetActorLocation();
+		LastSafeLocation = PocketPawn->GetActorLocation();
 	}
 	PocketOwner.Reset();
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
@@ -261,9 +261,9 @@ void ANDLootActor::MarkDeposited()
 	// Se suelta de todos sin devolverlo al mundo.
 	TArray<TObjectPtr<APawn>> PreviousCarriers = Carriers;
 	Carriers.Reset();
-	if (APawn* Owner = PocketOwner.Get())
+	if (APawn* PocketPawn = PocketOwner.Get())
 	{
-		PreviousCarriers.Add(Owner);
+		PreviousCarriers.Add(PocketPawn);
 	}
 	PocketOwner.Reset();
 	for (APawn* Carrier : PreviousCarriers)

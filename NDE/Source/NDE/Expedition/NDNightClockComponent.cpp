@@ -115,7 +115,8 @@ ENDNightPhase UNDNightClockComponent::ComputePhase(double ElapsedSeconds, float 
 		return ElapsedSeconds >= Duration + Grace ? ENDNightPhase::DayEnded : ENDNightPhase::DawnGrace;
 	}
 
-	const double Alpha = ElapsedSeconds / Duration;
+	// Tolerancia: los umbrales son float y 0.8 en double queda por debajo de 0.8f.
+	const double Alpha = ElapsedSeconds / Duration + UE_KINDA_SMALL_NUMBER;
 	if (Alpha >= PreDawnStartAlpha)
 	{
 		return ENDNightPhase::PreDawn;
