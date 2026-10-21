@@ -66,6 +66,11 @@ void ANDLobbyGameMode::BeginPlay()
 		Sessions->SetSessionJoinable(true);
 	}
 	SpawnReadyZoneIfMissing();
+
+	if (ANDLobbyGameState* LobbyState = GetGameState<ANDLobbyGameState>())
+	{
+		LobbyState->SetContractOptions(UNDNetworkSettings::Get()->ContractOptions);
+	}
 }
 
 void ANDLobbyGameMode::SpawnReadyZoneIfMissing()
@@ -114,6 +119,46 @@ void ANDLobbyGameMode::HandleReadyRequest(ANDPlayerController* Requester, bool b
 	}
 	PS->SetReady(bReady);
 	EvaluateReadyState();
+}
+
+void ANDLobbyGameMode::HandleVoteRequest(ANDPlayerController* Requester, int32 ContractIndex)
+{
+	const ANDLobbyGameState* LobbyState = GetGameState<ANDLobbyGameState>();
+	ANDPlayerState* PS = Requester ? Requester->GetPlayerState<ANDPlayerState>() : nullptr;
+	if (!LobbyState || !PS || LobbyState->GetPhase() == ENDLobbyPhase::Traveling
+		|| !LobbyState->GetContractOptions().IsValidIndex(ContractIndex))
+	{
+		return;
+	}
+	PS->SetVotedContractIndex(ContractIndex);
+	UE_LOG(LogNDNet, Log, TEXT("%s vota %s"), *PS->GetPlayerName(), *LobbyState->GetContractOptions()[ContractIndex].ContractId.ToString());
+}
+
+int32 ANDLobbyGameMode::PickWinningContract() const
+{
+	const ANDLobbyGameState* LobbyState = GetGameState<ANDLobbyGameState>();
+	const int32 NumOptions = LobbyState ? LobbyState->GetContractOptions().Num() : 0;
+	if (NumOptions == 0)
+	{
+		return INDEX_NONE;
+	}
+
+	int32 BestVotes = 0;
+	TArray<int32> Tied;
+	for (int32 Index = 0; Index < NumOptions; ++Index)
+	{
+		const int32 Votes = LobbyState->GetVoteCount(Index);
+		if (Votes > BestVotes)
+		{
+			BestVotes = Votes;
+			Tied.Reset();
+		}
+		if (Votes == BestVotes)
+		{
+			Tied.Add(Index);
+		}
+	}
+	return Tied[FMath::RandRange(0, Tied.Num() - 1)];
 }
 
 bool ANDLobbyGameMode::IsInsideReadyZone(const ANDPlayerController* Requester) const
@@ -194,6 +239,13 @@ void ANDLobbyGameMode::TravelToExpedition()
 		Sessions->SetSessionJoinable(false);
 	}
 
-	UE_LOG(LogNDNet, Log, TEXT("Saliendo de expedicion con %d jugadores a %s"), LobbyState->PlayerArray.Num(), *MapPackage);
-	GetWorld()->ServerTravel(MapPackage + TEXT("?game=Expedition"));
+	const int32 Winner = PickWinningContract();
+	LobbyState->SetSelectedContractIndex(Winner);
+	const FName ContractId = LobbyState->GetContractOptions().IsValidIndex(Winner)
+		? LobbyState->GetContractOptions()[Winner].ContractId
+		: NAME_None;
+
+	UE_LOG(LogNDNet, Log, TEXT("Saliendo de expedicion con %d jugadores a %s, contrato %s"),
+		LobbyState->PlayerArray.Num(), *MapPackage, *ContractId.ToString());
+	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?game=Expedition?Contract=%s"), *MapPackage, *ContractId.ToString()));
 }

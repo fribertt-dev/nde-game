@@ -30,10 +30,20 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Sala")
 	FNDOnReadyChanged OnReadyChanged;
 
+	/** Índice del contrato votado en ANDLobbyGameState::GetContractOptions; INDEX_NONE sin voto. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Sala")
+	int32 GetVotedContractIndex() const { return VotedContractIndex; }
+
+	/** Solo servidor (un voto por jugador, el último cuenta). */
+	void SetVotedContractIndex(int32 NewIndex) { VotedContractIndex = NewIndex; }
+
 private:
 	UFUNCTION()
 	void OnRep_IsReady();
 
 	UPROPERTY(ReplicatedUsing = OnRep_IsReady)
 	bool bIsReady = false;
+
+	UPROPERTY(Replicated)
+	int32 VotedContractIndex = INDEX_NONE;
 };

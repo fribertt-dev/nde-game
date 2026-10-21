@@ -5,6 +5,7 @@
 #include "Core/NDGameInstance.h"
 #include "Core/NDLog.h"
 #include "Engine/World.h"
+#include "Kismet/GameplayStatics.h"
 #include "Networking/NDExpeditionGameState.h"
 #include "Networking/NDNetworkSettings.h"
 #include "Players/NDPlayerController.h"
@@ -93,7 +94,9 @@ void ANDExpeditionGameMode::StartPlay()
 	if (ANDExpeditionGameState* ExpState = GetGameState<ANDExpeditionGameState>())
 	{
 		ExpState->SetRunGuid(FGuid::NewGuid());
-		UE_LOG(LogNDNet, Log, TEXT("Expedicion %s: esperando jugadores"), *ExpState->GetRunGuid().ToString());
+		ExpState->SetContractId(FName(*UGameplayStatics::ParseOption(OptionsString, TEXT("Contract"))));
+		UE_LOG(LogNDNet, Log, TEXT("Expedicion %s, contrato %s: esperando jugadores"),
+			*ExpState->GetRunGuid().ToString(), *ExpState->GetContractId().ToString());
 	}
 
 	LoadingStartTime = GetWorld()->GetTimeSeconds();
@@ -153,6 +156,26 @@ void ANDExpeditionGameMode::EndExpedition()
 	// TODO(integración): guardar en UNDProfileSubsystem el FNDRunSummary de OnExpeditionSettled.
 	ExpState->SetSessionPhase(ENDExpeditionSessionPhase::Settlement);
 	GetWorldTimerManager().SetTimer(ReturnTimer, this, &ThisClass::TravelToLobby, NDExpeditionGameMode::SettlementToTravelSeconds, false);
+}
+
+void ANDExpeditionGameMode::GrantRunReward(APlayerController* Player, int32 Coins, int32 Reputation)
+{
+	const ANDExpeditionGameState* ExpState = GetGameState<ANDExpeditionGameState>();
+	ANDPlayerController* PC = Cast<ANDPlayerController>(Player);
+	if (!PC || !ExpState)
+	{
+		return;
+	}
+	// El perfil es local (GDD 21.8 opción C): cada jugador guarda lo suyo en su PC.
+	PC->ClientReceiveRunReward(ExpState->GetRunGuid(), Coins, Reputation);
+}
+
+void ANDExpeditionGameMode::GrantRunRewardToAll(int32 Coins, int32 Reputation)
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		GrantRunReward(It->Get(), Coins, Reputation);
+	}
 }
 
 void ANDExpeditionGameMode::TravelToLobby()

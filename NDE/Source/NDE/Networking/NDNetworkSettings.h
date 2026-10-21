@@ -4,9 +4,11 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "Core/NDTypes.h"
 #include "NDNetworkSettings.generated.h"
 
 class UNDLobbyStatusWidget;
+class USoundAttenuation;
 class UNDMainMenuWidget;
 class UWorld;
 
@@ -46,6 +48,10 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Interfaz")
 	TSoftClassPtr<UNDLobbyStatusWidget> LobbyStatusWidgetClass;
 
+	/** Contratos que se votan en La Madriguera. Provisional hasta que existan los Data Assets de contrato. */
+	UPROPERTY(Config, EditAnywhere, Category = "Sesion")
+	TArray<FNDContractOption> ContractOptions;
+
 	UPROPERTY(Config, EditAnywhere, Category = "Sesion", meta = (ClampMin = "1", ClampMax = "6"))
 	int32 MaxPlayers = 6;
 
@@ -76,4 +82,28 @@ public:
 	/** Segundos que el personaje de un jugador caído queda quieto en la casa antes de desaparecer. */
 	UPROPERTY(Config, EditAnywhere, Category = "Expedicion", meta = (ClampMin = "0"))
 	float DisconnectedPawnLingerSeconds = 10.f;
+
+	/** Atenuación de la voz de los compañeros en la casa. Vacío: se usan los radios de abajo. */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz")
+	TSoftObjectPtr<USoundAttenuation> VoiceAttenuation;
+
+	/** Hasta esta distancia la voz se oye entera (GDD 31.2). */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz", meta = (ClampMin = "0"))
+	float VoiceFullVolumeRadius = 300.f;
+
+	/** A partir de aquí no se oye a un compañero, y el monstruo tampoco oye la voz. */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz", meta = (ClampMin = "1"))
+	float VoiceNoiseMaxRange = 1400.f;
+
+	/** Volumen de ruido (0-1) de un comentario breve. */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz", meta = (ClampMin = "0", ClampMax = "1"))
+	float VoiceBriefLoudness = 0.35f;
+
+	/** Volumen de ruido (0-1) de una conversación sostenida. */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz", meta = (ClampMin = "0", ClampMax = "1"))
+	float VoiceSustainedLoudness = 0.7f;
+
+	/** Segundos hablando seguidos a partir de los cuales cuenta como conversación sostenida. */
+	UPROPERTY(Config, EditAnywhere, Category = "Voz", meta = (ClampMin = "0"))
+	float VoiceSustainedSeconds = 3.f;
 };

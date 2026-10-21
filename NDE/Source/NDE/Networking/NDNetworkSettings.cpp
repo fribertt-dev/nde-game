@@ -13,4 +13,14 @@ UNDNetworkSettings::UNDNetworkSettings()
 	// Sin WBP propio se usan las clases C++, que montan una disposición mínima.
 	MainMenuWidgetClass = UNDMainMenuWidget::StaticClass();
 	LobbyStatusWidgetClass = UNDLobbyStatusWidget::StaticClass();
+
+	auto AddContract = [this](const TCHAR* Id, const FText& Name)
+	{
+		FNDContractOption& Option = ContractOptions.AddDefaulted_GetRef();
+		Option.ContractId = FName(Id);
+		Option.DisplayName = Name;
+	};
+	AddContract(TEXT("C01_Galletas"), NSLOCTEXT("NDE", "ContractC01", "Las galletas de la abuela"));
+	AddContract(TEXT("C02_Reloj"), NSLOCTEXT("NDE", "ContractC02", "El reloj de bolsillo"));
+	AddContract(TEXT("C03_Juguetes"), NSLOCTEXT("NDE", "ContractC03", "El baul de juguetes"));
 }

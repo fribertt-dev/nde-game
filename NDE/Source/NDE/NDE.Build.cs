@@ -13,6 +13,6 @@ public class NDE : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "CoreOnline", "DeveloperSettings", "NetCore", "OnlineSubsystem", "OnlineSubsystemUtils", "Slate", "SlateCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "CoreOnline", "DeveloperSettings", "NetCore", "OnlineSubsystem", "OnlineSubsystemUtils", "Slate", "SlateCore" });
 	}
 }

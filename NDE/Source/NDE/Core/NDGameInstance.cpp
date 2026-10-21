@@ -158,6 +158,47 @@ bool UNDGameInstance::RejoinExpedition()
 	return true;
 }
 
+void UNDGameInstance::NDNetSim(const FString& Preset)
+{
+#if !UE_BUILD_SHIPPING
+	// Retardo por sentido (el ida y vuelta es el doble), variación y pérdida de paquetes.
+	int32 Lag = 0;
+	int32 Variance = 0;
+	int32 Loss = 0;
+	if (Preset.Equals(TEXT("buena"), ESearchCase::IgnoreCase))
+	{
+		Lag = 15;
+		Variance = 5;
+	}
+	else if (Preset.Equals(TEXT("media"), ESearchCase::IgnoreCase))
+	{
+		Lag = 75;
+		Variance = 15;
+		Loss = 2;
+	}
+	else if (Preset.Equals(TEXT("mala"), ESearchCase::IgnoreCase))
+	{
+		Lag = 110;
+		Variance = 40;
+		Loss = 5;
+	}
+	else if (!Preset.Equals(TEXT("off"), ESearchCase::IgnoreCase))
+	{
+		UE_LOG(LogNDNet, Display, TEXT("Uso: NDNetSim off | buena | media | mala"));
+		return;
+	}
+
+	UWorld* World = GetWorld();
+	GEngine->Exec(World, *FString::Printf(TEXT("NetEmulation.PktLag %d"), Lag));
+	GEngine->Exec(World, *FString::Printf(TEXT("NetEmulation.PktLagVariance %d"), Variance));
+	GEngine->Exec(World, *FString::Printf(TEXT("NetEmulation.PktLoss %d"), Loss));
+
+	const FString Message = FString::Printf(TEXT("Red simulada: %s (ida y vuelta ~%d ms, perdida %d%%)"), *Preset, Lag * 2, Loss);
+	UE_LOG(LogNDNet, Display, TEXT("%s"), *Message);
+	GEngine->AddOnScreenDebugMessage(INDEX_NONE, 5.f, FColor::Yellow, Message);
+#endif
+}
+
 void UNDGameInstance::NDRejoin()
 {
 	RejoinExpedition();

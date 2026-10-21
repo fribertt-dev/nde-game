@@ -46,3 +46,17 @@ enum class ENDDisconnectReason : uint8
 	ExpeditionInProgress UMETA(DisplayName = "La banda esta en plena expedicion"),
 	RejoinExpired UMETA(DisplayName = "Paso el tiempo para volver a la partida")
 };
+
+/** Contrato que se puede votar en La Madriguera. */
+USTRUCT(BlueprintType)
+struct FNDContractOption
+{
+	GENERATED_BODY()
+
+	/** Id estable del contrato (GDD 23.5); lo recibe la expedición en la URL de viaje. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName ContractId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText DisplayName;
+};
