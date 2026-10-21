@@ -248,9 +248,11 @@ if not eal.does_asset_exist(LOBBY_PATH):
     unreal.log("NDE: Madriguera de prueba creada en " + LOBBY_PATH)
 
 # Ajustes de red: la Madriguera y la casa de prueba (Project Settings > NDE Red).
-settings = unreal.get_default_object(unreal.NDNetworkSettings)
-settings.set_editor_property("lobby_map", unreal.load_asset(LOBBY_PATH))
-settings.set_editor_property("expedition_test_map", unreal.load_asset(LEVEL_PATH))
+# La clase no es BlueprintType y puede no estar expuesta a Python; el .ini de abajo basta.
+if hasattr(unreal, "NDNetworkSettings"):
+    settings = unreal.get_default_object(unreal.NDNetworkSettings)
+    settings.set_editor_property("lobby_map", unreal.load_asset(LOBBY_PATH))
+    settings.set_editor_property("expedition_test_map", unreal.load_asset(LEVEL_PATH))
 
 ini_path = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_config_dir() + "DefaultGame.ini")
 with open(ini_path, "r", encoding="utf-8") as ini:
