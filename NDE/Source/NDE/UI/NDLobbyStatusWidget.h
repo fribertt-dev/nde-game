@@ -25,9 +25,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	float GetSecondsUntilTravel() const;
 
+	/** Jugadores marcados como listos en La Madriguera. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	int32 GetNumReadyPlayers() const { return LastReady; }
 
+	/** Jugadores conectados a la sala. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	int32 GetNumPlayers() const { return LastTotal; }
 
@@ -39,15 +41,19 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/** Cambió cuántos jugadores están listos. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Lobby")
 	void OnReadyCountChanged(int32 Ready, int32 Total);
 
+	/** Empezó la cuenta atrás hacia la expedición. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Lobby")
 	void OnCountdownStarted(double TravelServerTime);
 
+	/** Se canceló la cuenta atrás (alguien dejó de estar listo). */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Lobby")
 	void OnCountdownCancelled();
 
+	/** La banda está viajando a la expedición. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Lobby")
 	void OnTraveling();
 

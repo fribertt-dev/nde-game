@@ -52,6 +52,7 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Session")
 	TArray<FNDContractOption> ContractOptions;
 
+	/** Plazas máximas de cada sala. */
 	UPROPERTY(Config, EditAnywhere, Category = "Session", meta = (ClampMin = "1", ClampMax = "6"))
 	int32 MaxPlayers = 6;
 

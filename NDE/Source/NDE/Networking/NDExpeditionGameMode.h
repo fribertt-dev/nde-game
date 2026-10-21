@@ -38,6 +38,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedition")
 	void GrantRunReward(APlayerController* Player, int32 Coins, int32 Reputation);
 
+	/** Igual que GrantRunReward, para todos los jugadores conectados. */
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Expedition")
 	void GrantRunRewardToAll(int32 Coins, int32 Reputation);
 

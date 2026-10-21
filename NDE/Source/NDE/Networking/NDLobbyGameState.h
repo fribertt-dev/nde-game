@@ -18,6 +18,7 @@ class NDE_API ANDLobbyGameState : public AGameStateBase
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** Fase actual de La Madriguera. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	ENDLobbyPhase GetPhase() const { return Phase; }
 
@@ -25,12 +26,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	double GetTravelServerTime() const { return TravelServerTime; }
 
+	/** Jugadores marcados como listos. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	int32 GetNumReadyPlayers() const;
 
+	/** Contratos que se pueden votar. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	const TArray<FNDContractOption>& GetContractOptions() const { return ContractOptions; }
 
+	/** Votos que lleva el contrato con este índice. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Lobby")
 	int32 GetVoteCount(int32 ContractIndex) const;
 
@@ -45,6 +49,7 @@ public:
 	/** Solo servidor. */
 	void SetPhase(ENDLobbyPhase NewPhase, double InTravelServerTime = 0.0);
 
+	/** Se dispara al cambiar la fase de La Madriguera. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Lobby")
 	FNDOnLobbyPhaseChanged OnPhaseChanged;
 

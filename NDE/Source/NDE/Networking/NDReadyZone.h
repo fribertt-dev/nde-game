@@ -30,9 +30,11 @@ public:
 	bool ContainsController(const AController* Controller) const;
 
 protected:
+	/** Volumen donde el jugador queda listo al entrar. */
 	UPROPERTY(VisibleAnywhere, Category = "NDE|Lobby")
 	TObjectPtr<UBoxComponent> Zone;
 
+	/** Texto que muestra cuántos jugadores están listos. */
 	UPROPERTY(VisibleAnywhere, Category = "NDE|Lobby")
 	TObjectPtr<UTextRenderComponent> Label;
 

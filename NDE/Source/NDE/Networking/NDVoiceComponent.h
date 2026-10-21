@@ -39,6 +39,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Voice")
 	void SetTransmitting(bool bTransmit);
 
+	/** true mientras el jugador local está hablando. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Voice")
 	bool IsTransmitting() const { return bLocalTransmitting; }
 

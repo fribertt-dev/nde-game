@@ -21,9 +21,11 @@ class NDE_API ANDExpeditionGameState : public AGameStateBase
 public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** Fase de red de la expedición (carga, juego, liquidación, vuelta). */
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition")
 	ENDExpeditionSessionPhase GetSessionPhase() const { return SessionPhase; }
 
+	/** Contador que sube con cada cambio de fase. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition")
 	int32 GetPhaseSequence() const { return PhaseSequence; }
 
@@ -31,6 +33,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition")
 	double GetPhaseStartServerTime() const { return PhaseStartServerTime; }
 
+	/** Id único de esta expedición; evita cobrar dos veces la recompensa. */
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition")
 	FGuid GetRunGuid() const { return RunGuid; }
 
@@ -44,6 +47,7 @@ public:
 	void SetSessionPhase(ENDExpeditionSessionPhase NewPhase);
 	void SetRunGuid(const FGuid& InRunGuid);
 
+	/** Se dispara al cambiar la fase de red de la expedición. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Expedition")
 	FNDOnExpeditionSessionPhaseChanged OnSessionPhaseChanged;
 

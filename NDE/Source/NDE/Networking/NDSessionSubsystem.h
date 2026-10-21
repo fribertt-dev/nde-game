@@ -18,21 +18,27 @@ struct FNDSessionInfo
 	UPROPERTY(BlueprintReadOnly)
 	int32 SearchIndex = INDEX_NONE;
 
+	/** Nombre del host de la sala. */
 	UPROPERTY(BlueprintReadOnly)
 	FString HostName;
 
+	/** Jugadores dentro de la sala. */
 	UPROPERTY(BlueprintReadOnly)
 	int32 CurrentPlayers = 0;
 
+	/** Plazas totales de la sala. */
 	UPROPERTY(BlueprintReadOnly)
 	int32 MaxPlayers = 0;
 
+	/** Latencia hasta el host, en milisegundos. */
 	UPROPERTY(BlueprintReadOnly)
 	int32 PingMs = 0;
 
+	/** Versión de compatibilidad que anuncia la sala. */
 	UPROPERTY(BlueprintReadOnly)
 	FString CompatibilityVersion;
 
+	/** true si la sala usa nuestra misma versión y se puede entrar. */
 	UPROPERTY(BlueprintReadOnly)
 	bool bIsCompatible = false;
 };
@@ -64,9 +70,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void HostSession(bool bFriendsOnly);
 
+	/** Busca salas abiertas; el resultado llega en OnFindSessionsComplete. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void FindSessions(int32 MaxResults = 50);
 
+	/** Se une a la sala con este índice de la última búsqueda. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Session")
 	void JoinSessionByIndex(int32 SearchIndex);
 
@@ -81,6 +89,7 @@ public:
 	/** Cierra o abre la sala a nuevas entradas (p. ej. durante una expedición). */
 	void SetSessionJoinable(bool bJoinable);
 
+	/** true si estamos dentro de una sala (como host o cliente). */
 	UFUNCTION(BlueprintPure, Category = "NDE|Session")
 	bool HasActiveSession() const;
 
@@ -91,15 +100,19 @@ public:
 	/** Dirección del último host al que nos unimos, para volver a una expedición. */
 	const FString& GetLastConnectString() const { return LastConnectString; }
 
+	/** Terminó de crearse la sala. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnHostSessionComplete;
 
+	/** Terminó la búsqueda de salas. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnFindSessionsComplete OnFindSessionsComplete;
 
+	/** Terminó el intento de unirse a una sala. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnJoinSessionComplete;
 
+	/** Terminó de cerrarse la sala local. */
 	UPROPERTY(BlueprintAssignable, Category = "NDE|Session")
 	FNDOnSessionOperationComplete OnDestroySessionComplete;
 
