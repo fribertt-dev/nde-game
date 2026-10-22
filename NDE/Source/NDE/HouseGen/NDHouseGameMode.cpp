@@ -20,6 +20,7 @@
 #include "Loot/NDLootActor.h"
 #include "Loot/NDLootDefinition.h"
 #include "Networking/NDExpeditionGameState.h"
+#include "UI/NDHUD.h"
 
 namespace NDHouseGameMode
 {
@@ -33,6 +34,8 @@ namespace NDHouseGameMode
 
 ANDHouseGameMode::ANDHouseGameMode()
 {
+	// El HUD del jugador local inicializa la UI (reloj, cuota y avisos con datos reales).
+	HUDClass = ANDHUD::StaticClass();
 	DefaultContract = TSoftObjectPtr<UNDContractDefinition>(NDHouseGameMode::ContractPath(TEXT("C01")));
 	for (const TCHAR* LootId : NDHouseGameMode::LootIds)
 	{

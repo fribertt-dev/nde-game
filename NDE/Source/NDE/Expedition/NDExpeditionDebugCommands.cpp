@@ -17,6 +17,10 @@
 #include "Loot/NDExtractionVan.h"
 #include "Loot/NDLootActor.h"
 #include "Loot/NDLootDefinition.h"
+#include "Engine/LocalPlayer.h"
+#include "UI/Data/NDUIDataProvider.h"
+#include "UI/NDUIFunctionLibrary.h"
+#include "UI/NDUIManagerSubsystem.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNDExpeditionDebug, Log, All);
 
@@ -80,6 +84,20 @@ namespace NDExpeditionDebug
 			Expedition->IsObjectiveMet() ? TEXT("cumplido") : TEXT("pendiente"),
 			LooseLoot,
 			*UEnum::GetValueAsString(Summary.Outcome));
+
+		// Lo mismo visto desde la UI del jugador local (proveedor de datos del HUD).
+		const APlayerController* LocalPC = World->GetFirstPlayerController();
+		const UNDUIManagerSubsystem* UIManager = LocalPC && LocalPC->GetLocalPlayer() ? LocalPC->GetLocalPlayer()->GetSubsystem<UNDUIManagerSubsystem>() : nullptr;
+		if (UNDUIDataProvider* Provider = UIManager ? UIManager->GetDataProvider() : nullptr)
+		{
+			const FNDNightClockVM UIClock = Provider->GetNightClock();
+			UE_LOG(LogNDExpeditionDebug, Log, TEXT("  UI: %s | fase %s | noche %s | huida %s | botin %d / %d"),
+				Provider->IsSimulated() ? TEXT("simulada") : TEXT("datos reales"),
+				*UEnum::GetValueAsString(UIClock.Phase),
+				*UNDUIFunctionLibrary::FormatClock(UNDUIFunctionLibrary::GetNightSecondsRemaining(World, UIClock)).ToString(),
+				*UNDUIFunctionLibrary::FormatClock(UNDUIFunctionLibrary::GetDawnEscapeSecondsRemaining(World, UIClock)).ToString(),
+				UIClock.SecuredLootValue, UIClock.Quota);
+		}
 		return Summary.Outcome == ENDExpeditionOutcome::None;
 	}
 
