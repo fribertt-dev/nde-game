@@ -72,6 +72,18 @@ struct NDE_API FNDHouseGenParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
 	float CarryEnvelopeWidth = 120.f;
 
+	/** Probabilidad (0-1) de que la casa tenga piso superior. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
+	float UpperFloorChance = 0.1f;
+
+	/** Probabilidad (0-1) de que la casa tenga sótano. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
+	float BasementChance = 0.15f;
+
+	/** Con piso superior, probabilidad (0-1) de que el dormitorio principal esté arriba. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
+	float UpstairsBedroomChance = 0.8f;
+
 	/** Probabilidad (0-1) de abrir un acceso secundario al patio. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
 	float SecondaryExitChance = 0.5f;
@@ -97,6 +109,9 @@ struct NDE_API FNDHouseGenParams
 
 	/** Cambia el rango de salas; 0 deja el del tamaño. Se limita a 5-17. */
 	void OverrideRoomRange(int32 InMinRooms, int32 InMaxRooms);
+
+	/** Fuerza o quita el piso superior y el sótano; Auto deja la probabilidad del tamaño. */
+	void ApplyFloorOptions(ENDFloorOption UpperFloor, ENDFloorOption Basement);
 };
 
 /** Hueco de una sala ya colocada, en celdas del lote. */
@@ -105,12 +120,20 @@ struct FNDHouseLayoutSocket
 	FName SocketId;
 	ENDRoomSocketType Type = ENDRoomSocketType::Door_M;
 	float Width = 0.f;
+	/** Desplazamiento del hueco a lo largo de la pared (ver FNDRoomDoorSocket::Offset). */
+	float Offset = 0.f;
+	/** Paso bajo: la criatura no cabe. */
+	bool bLowClearance = false;
 	FIntPoint LotCell = FIntPoint::ZeroValue;
 	ENDCellDirection LotDirection = ENDCellDirection::North;
 	/** Índice en FNDHouseLayout::Connections, o INDEX_NONE. */
 	int32 Connection = INDEX_NONE;
 	/** true si se abre al exterior (entrada principal o acceso secundario). */
 	bool bExit = false;
+	/** Puerta "Auto": no está en el módulo; se abrió para unir una escalera. Celda y lado del módulo sin girar. */
+	bool bAuto = false;
+	FIntPoint LocalCell = FIntPoint::ZeroValue;
+	ENDCellDirection LocalDirection = ENDCellDirection::North;
 
 	bool IsOpen() const { return Connection != INDEX_NONE || bExit; }
 	/** Celda vecina al otro lado del hueco. */
@@ -122,6 +145,8 @@ struct FNDHouseLayoutRoom
 	int32 InstanceId = INDEX_NONE;
 	const FNDRoomModuleDefinition* Def = nullptr;
 	FIntPoint Grid = FIntPoint::ZeroValue;
+	/** -1 sótano, 0 planta baja, 1 piso superior. */
+	int32 Floor = 0;
 	FIntPoint Size = FIntPoint(1, 1);
 	int32 YawSteps = 0;
 	int32 Depth = 0;
@@ -165,8 +190,14 @@ struct NDE_API FNDHouseLayout
 	/** false (con motivo) si el manifiesto pide módulos o huecos que no existen. */
 	static bool FromManifest(const FNDHouseGenerationManifest& Manifest, FNDHouseLayout& OutLayout, FString& OutError);
 
-	/** Centro de la sala en cm, relativo al centro del lote (Z = suelo). */
+	/** Centro de la sala en cm, relativo al centro del lote (Z = suelo de su piso). */
 	FVector GetRoomCenter(int32 RoomIndex) const;
+
+	/** Celdas ocupadas, como (X, Y, piso). */
+	void GetOccupancy(TMap<FIntVector, int32>& OutOccupancy) const;
+
+	/** Pisos que tiene la casa (de -1 a 1). */
+	void GetFloorRange(int32& OutLowest, int32& OutHighest) const;
 	/** Punto medio del hueco en el borde de la sala. */
 	FVector GetSocketLocation(int32 RoomIndex, int32 SocketIndex) const;
 	/** Celdas del lote que ocupa la sala. */
@@ -179,7 +210,10 @@ struct NDE_API FNDHouseLayout
 	 * Camino de salas From → To cruzando solo puertas y salas de al menos MinWidth cm.
 	 * Con MinWidth = 0 es la conectividad normal.
 	 */
-	bool FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms = nullptr) const;
+	bool FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms = nullptr, bool bCreature = false) const;
+
+	/** true si la puerta es un paso bajo (no pasa la criatura). */
+	bool IsLowClearance(const FNDHouseLayoutConnection& Link) const;
 
 	int32 CountMarkers(ENDRoomMarkerType Type) const;
 };

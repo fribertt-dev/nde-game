@@ -245,6 +245,124 @@ namespace NDRoomCatalog
 			AddMarker(Def, EMark::HideSpot, 0, 0, 0.f, 130.f);
 			Modules.Add(Def);
 		}
+
+		// Pisos: cada escalera son dos salas iguales, una encima de otra (arranque abajo, llegada arriba).
+		// Se entra abajo por S0 (pie de la rampa); la llegada tiene una sola puerta. Los huecos Stairs solo
+		// marcan la unión vertical. Sube 400 cm (un piso) con tramos de 26,6° como mucho.
+		auto MakeStairs = [](const TCHAR* BottomId, const TCHAR* TopId, int32 SizeX, int32 SizeY)
+		{
+			FNDRoomModuleDefinition Bottom = MakeModule(BottomId, ENDRoomType::R17_Stairwell, SizeX, SizeY);
+			Bottom.StairPart = ENDStairPart::Bottom;
+			Bottom.StairPairModuleId = FName(TopId);
+			FNDRoomModuleDefinition Top = MakeModule(TopId, ENDRoomType::R17_Stairwell, SizeX, SizeY);
+			Top.StairPart = ENDStairPart::Top;
+			Top.StairPairModuleId = FName(BottomId);
+			return TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition>(Bottom, Top);
+		};
+		auto AddSegment = [](FNDRoomModuleDefinition& Def, const FVector& Start, const FVector& End, float Width, float Height = 0.f)
+		{
+			FNDStairSegment& Segment = Def.StairSegments.AddDefaulted_GetRef();
+			Segment.Start = Start;
+			Segment.End = End;
+			Segment.Width = Width;
+			Segment.Height = Height;
+		};
+		{
+			// Recta 2x1: una rampa de punta a punta; se sale arriba por el otro extremo (N1). Abajo, N1 es un paso
+			// bajo el final de la rampa: ahí va la sala que sostiene la llegada si hace falta (no pasa la criatura).
+			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_Stairs_Bottom"), TEXT("D01_Stairs_Top"), 2, 1);
+			FNDRoomModuleDefinition& Bottom = Stairs.Key;
+			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Bottom, TEXT("N1"), 1, 0, EDir::North);
+			Bottom.DoorSockets.Last().bLowClearance = true;
+			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::West, ESock::Stairs);
+			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(400.f, 0.f, 400.f), 360.f);
+			AddSocket(Stairs.Value, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
+			Modules.Add(Bottom);
+			Modules.Add(Stairs.Value);
+		}
+		{
+			// En U 2x1: dos carriles de 170 cm separados por un murete. Se sube por el carril -Y hasta el rellano
+			// del fondo y se vuelve por el carril +Y: la llegada queda sobre la entrada, encima de la sala de la que sale.
+			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_StairsU_Bottom"), TEXT("D01_StairsU_Top"), 2, 1);
+			FNDRoomModuleDefinition& Bottom = Stairs.Key;
+			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
+			Bottom.DoorSockets.Last().Offset = 95.f;
+			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
+			AddSegment(Bottom, FVector(-400.f, -95.f, 0.f), FVector(200.f, -95.f, 200.f), 170.f);
+			AddSegment(Bottom, FVector(200.f, 0.f, 200.f), FVector(400.f, 0.f, 200.f), 360.f);
+			AddSegment(Bottom, FVector(200.f, 95.f, 200.f), FVector(-400.f, 95.f, 400.f), 170.f);
+			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(200.f, 0.f, 0.f), 20.f, 500.f);
+			AddSocket(Stairs.Value, TEXT("S0"), 0, 0, EDir::South);
+			Stairs.Value.DoorSockets.Last().Offset = -95.f;
+			AddSocket(Stairs.Value, TEXT("Down"), 1, 0, EDir::North, ESock::Stairs);
+			Modules.Add(Bottom);
+			Modules.Add(Stairs.Value);
+		}
+		{
+			// En L (2x2 sin la celda 0,1): tramo por X, rellano y tramo por Y; se sale arriba por el lado de la celda 1,1.
+			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_StairsL_Bottom"), TEXT("D01_StairsL_Top"), 2, 2);
+			FNDRoomModuleDefinition& Bottom = Stairs.Key;
+			Bottom.BlockedCells = { FIntPoint(0, 1) };
+			Stairs.Value.BlockedCells = { FIntPoint(0, 1) };
+			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
+			AddSegment(Bottom, FVector(-400.f, -200.f, 0.f), FVector(0.f, -200.f, 200.f), 360.f);
+			AddSegment(Bottom, FVector(0.f, -200.f, 200.f), FVector(400.f, -200.f, 200.f), 360.f);
+			AddSegment(Bottom, FVector(200.f, 0.f, 200.f), FVector(200.f, 400.f, 400.f), 360.f);
+			AddSocket(Stairs.Value, TEXT("E11"), 1, 1, EDir::East);
+			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
+			Modules.Add(Bottom);
+			Modules.Add(Stairs.Value);
+		}
+		{
+			// Dormitorio principal alargado: encaja mejor en el piso de arriba.
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_MasterBedroom_B"), ENDRoomType::R06_MasterBedroom, 2, 1, 2.f);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("W1"), 1, 0, EDir::West);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::MonsterAnchor, 1, 0);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 140.f, -140.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -140.f, -140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 140.f, 140.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_KidsBedroom_A"), ENDRoomType::R10_KidsBedroom, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddSocket(Def, TEXT("W0"), 0, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 120.f, 120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Basement_A"), ENDRoomType::R16_Basement, 2, 2, 1.3f);
+			AddSocket(Def, TEXT("S00"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N11"), 1, 1, EDir::North);
+			AddSocket(Def, TEXT("W10"), 1, 0, EDir::West);
+			AddSocket(Def, TEXT("E01"), 0, 1, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 1, 100.f, 100.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, -130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 1, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Workshop_A"), ENDRoomType::R16_Basement, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
+			Modules.Add(Def);
+		}
 		return Modules;
 	}
 }

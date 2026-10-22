@@ -28,9 +28,12 @@ public:
 
 	/**
 	 * Construye el módulo. OpeningWidths tiene un valor por hueco de la definición:
-	 * ancho del hueco abierto en cm, o 0 si se tapa con pared.
+	 * ancho del hueco abierto en cm, o 0 si se tapa con pared. CeilingPerCell (en el orden de
+	 * GetLocalCells) quita el techo donde hay otra sala encima; sin él, techo en todas las celdas.
 	 */
-	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers, bool bAddRoomLight = false);
+	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
+		bool bAddRoomLight = false, const TArray<bool>* CeilingPerCell = nullptr, const TArray<float>* OpeningOffsets = nullptr,
+		const TArray<FNDRoomDoorSocket>* ExtraOpenings = nullptr);
 
 	/** Módulo del catálogo que muestra este actor al colocarlo a mano en el editor. */
 	UPROPERTY(EditAnywhere, Category = "NDE|HouseGen")
@@ -70,8 +73,8 @@ protected:
 
 private:
 	void ClearGreybox();
-	void AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size);
+	void AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator);
 	void SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color);
-	void BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth);
+	void BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset = 0.f);
 	UInstancedStaticMeshComponent* GetMarkerMeshes(ENDRoomMarkerType Type);
 };

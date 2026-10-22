@@ -10,10 +10,19 @@ namespace NDHouseGen
 {
 	/** Lado de una celda de la rejilla de casas, en cm (GDD 15). */
 	constexpr float CellSize = 400.f;
-	/** Alto de pared y de hueco de puerta de los módulos greybox, en cm. */
-	constexpr float WallHeight = 300.f;
-	constexpr float DoorHeight = 220.f;
+	/**
+	 * Altura de cada piso, en cm: la planta 0 tiene el suelo en Z = 0, la 1 en Z = 400 y el sótano (-1)
+	 * en Z = -400. Las paredes llegan justo al forjado del piso de arriba (380 + 20 de forjado).
+	 */
+	constexpr float FloorHeight = 400.f;
 	constexpr float WallThickness = 20.f;
+	/** Alto de pared y de hueco de puerta de los módulos greybox, en cm. */
+	constexpr float WallHeight = FloorHeight - WallThickness;
+	constexpr float DoorHeight = 220.f;
+	/** Pisos posibles: sótano, planta baja y piso superior. */
+	constexpr int32 BasementFloor = -1;
+	constexpr int32 GroundFloor = 0;
+	constexpr int32 UpperFloor = 1;
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
@@ -56,9 +65,27 @@ enum class ENDRoomType : uint8
 	R13_Laundry UMETA(ToolTip = "Lavadero."),
 	R14_Library UMETA(ToolTip = "Biblioteca."),
 	R15_Playroom UMETA(ToolTip = "Habitación de juguetes."),
-	R16_Attic UMETA(ToolTip = "Desván (otra planta)."),
+	R16_Basement UMETA(ToolTip = "Sótano o taller bajo la planta baja."),
 	R17_Stairwell UMETA(ToolTip = "Escalera entre plantas."),
 	R18_Garden UMETA(ToolTip = "Jardín o patio.")
+};
+
+/** Parte de una escalera: cada escalera son dos salas iguales, una en cada piso. */
+UENUM(BlueprintType)
+enum class ENDStairPart : uint8
+{
+	None UMETA(ToolTip = "No es una escalera."),
+	Bottom UMETA(ToolTip = "Arranque: rampa que sube al piso de arriba; sin techo."),
+	Top UMETA(ToolTip = "Llegada: hueco en el suelo sobre la rampa.")
+};
+
+/** Si una casa tiene un piso extra: decide el tamaño de casa, o siempre sí / siempre no. */
+UENUM(BlueprintType)
+enum class ENDFloorOption : uint8
+{
+	Auto UMETA(ToolTip = "Según el tamaño de casa (las grandes lo tienen más a menudo)."),
+	Never UMETA(ToolTip = "Nunca."),
+	Always UMETA(ToolTip = "Siempre que quepa.")
 };
 
 /** Tamaño de casa (GDD 15.2): fija cuántas salas tiene y el lote mínimo. */
@@ -116,6 +143,39 @@ struct FNDRoomDoorSocket
 	/** Ancho libre del hueco en cm. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
 	float Width = 160.f;
+
+	/** Desplazamiento del hueco a lo largo de la pared, en cm (0 = centrado). La sala vecina lo copia. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	float Offset = 0.f;
+
+	/** Paso bajo (p. ej. bajo una rampa): caben los Desvelados, no la criatura. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	bool bLowClearance = false;
+};
+
+/**
+ * Pieza de la geometría de una escalera, en cm respecto al centro del módulo sin rotar (Z = suelo).
+ * Sin altura es una losa de 20 cm cuya cara de arriba va de Start a End (rampa o rellano);
+ * con altura es un murete vertical de Start a End.
+ */
+USTRUCT(BlueprintType)
+struct FNDStairSegment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FVector Start = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FVector End = FVector::ZeroVector;
+
+	/** Ancho de la rampa o grosor del murete. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float Width = 360.f;
+
+	/** 0 = losa (rampa o rellano); > 0 = murete de esta altura. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float Height = 0.f;
 };
 
 /** Punto marcado de un módulo, relativo al centro del módulo sin rotar. */
@@ -154,6 +214,18 @@ struct FNDRoomModuleDefinition
 	/** Tamaño en celdas de 400 cm (X, Y) sin rotar. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
 	FIntPoint FootprintCells = FIntPoint(1, 1);
+
+	/** Si es una escalera, qué mitad es. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	ENDStairPart StairPart = ENDStairPart::None;
+
+	/** Escalera: el módulo de la otra mitad (la llegada si este es el arranque, y al revés). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FName StairPairModuleId;
+
+	/** Arranque de escalera: rampas, rellanos y muretes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	TArray<FNDStairSegment> StairSegments;
 
 	/** Celdas del rectángulo que NO son de la sala (salas en L). Vacío = rectángulo completo. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
@@ -282,7 +354,7 @@ struct FNDHouseManifestRoom
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	FName ModuleId;
 
-	/** Celda mínima que ocupa (Z = planta; de momento siempre 0). */
+	/** Celda mínima que ocupa; Z es el piso (-1 sótano, 0 planta baja, 1 piso superior). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	FIntVector Grid = FIntVector::ZeroValue;
 
@@ -407,4 +479,10 @@ namespace NDHouseGen
 	NDE_API FColor GetRoomTypeColor(ENDRoomType Type);
 	/** "R06_MasterBedroom" */
 	NDE_API FString GetRoomTypeName(ENDRoomType Type);
+	/**
+	 * Puerta abierta en una pared sin hueco previsto en el módulo (para unir la segunda escalera).
+	 * Su id en el manifiesto es "Auto_X_Y_D" con la celda y el lado del módulo sin girar.
+	 */
+	NDE_API FName MakeAutoSocketId(const FIntPoint& LocalCell, ENDCellDirection LocalDirection);
+	NDE_API bool ParseAutoSocketId(FName SocketId, FIntPoint& OutLocalCell, ENDCellDirection& OutLocalDirection);
 }

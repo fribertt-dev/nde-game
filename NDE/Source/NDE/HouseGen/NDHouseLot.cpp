@@ -205,6 +205,7 @@ FNDHouseGenParams ANDHouseLot::MakeParams(int64 Seed) const
 	Params.Seed = Seed;
 	Params.District = District;
 	Params.OverrideRoomRange(MinRooms, MaxRooms);
+	Params.ApplyFloorOptions(UpperFloor, Basement);
 	FNDHouseLotInfo Lot = LotInfo;
 	Lot.LotTransform = GetActorTransform();
 	Params.SetLot(Lot);
@@ -285,9 +286,13 @@ void ANDHouseLot::BuildFromManifest()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	TSet<FIntPoint> UsedCells;
+	TMap<FIntVector, int32> Occupancy;
+	Layout.GetOccupancy(Occupancy);
 	for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 	{
 		const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];
+		TArray<FIntPoint> Cells;
+		Layout.GetRoomCells(RoomIndex, Cells);
 		const FTransform RoomTransform = FTransform(FRotator(0.f, Room.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(RoomIndex)) * LotToWorld;
 		ANDRoomModuleActor* RoomActor = World->SpawnActor<ANDRoomModuleActor>(ANDRoomModuleActor::StaticClass(), RoomTransform, SpawnParams);
 		if (!RoomActor)
@@ -297,21 +302,59 @@ void ANDHouseLot::BuildFromManifest()
 
 		// Los huecos del layout van en el mismo orden que en la definición.
 		TArray<float> Openings;
-		for (const FNDHouseLayoutSocket& Socket : Room.Sockets)
+		TArray<float> OpeningOffsets;
+		// Puertas "Auto" (no están en el módulo): celda, lado, ancho y desplazamiento del hueco.
+		TArray<FNDRoomDoorSocket> ExtraOpenings;
+		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
 		{
-			Openings.Add(Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f));
+			const FNDHouseLayoutSocket& Socket = Room.Sockets[SocketIndex];
+			// La unión vertical de una escalera no abre hueco en la pared.
+			const bool bWallOpening = Socket.Type != ENDRoomSocketType::Stairs;
+			Openings.Add(!bWallOpening ? 0.f : (Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f)));
+			// Hueco desplazado (escaleras en U): la pared vecina abre el suyo en el mismo sitio. Las paredes
+			// enfrentadas recorren el borde en sentidos opuestos, así que el desplazamiento cambia de signo.
+			float HoleOffset = Socket.Offset;
+			if (Socket.Connection != INDEX_NONE && FMath::IsNearlyZero(HoleOffset))
+			{
+				const FNDHouseLayoutConnection& Link = Layout.Connections[Socket.Connection];
+				const bool bIsA = Link.RoomA == RoomIndex && Link.SocketA == SocketIndex;
+				HoleOffset = -Layout.Rooms[bIsA ? Link.RoomB : Link.RoomA].Sockets[bIsA ? Link.SocketB : Link.SocketA].Offset;
+			}
+			OpeningOffsets.Add(HoleOffset);
+			if (Socket.bAuto)
+			{
+				FNDRoomDoorSocket& Extra = ExtraOpenings.AddDefaulted_GetRef();
+				Extra.SocketId = Socket.SocketId;
+				Extra.Cell = Socket.LocalCell;
+				Extra.Direction = Socket.LocalDirection;
+				Extra.Width = Openings.Last();
+				Extra.Offset = HoleOffset;
+			}
+		}
+		// Techo solo donde no hay otra sala encima: allí el suelo de arriba hace de techo.
+		TArray<bool> CeilingPerCell;
+		for (const FIntPoint& Cell : Cells)
+		{
+			CeilingPerCell.Add(!Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Room.Floor + 1)));
 		}
 		RoomActor->RoomInstanceId = RoomIndex;
-		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms);
+		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets, &ExtraOpenings);
 		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
+		if (Room.Floor > MaxVisibleFloor)
+		{
+			RoomActor->SetActorHiddenInGame(true);
+			RoomActor->SetActorEnableCollision(false);
+		}
 #if WITH_EDITOR
-		RoomActor->SetActorLabel(FString::Printf(TEXT("Room%02d_%s"), RoomIndex, *Room.Def->RoomModuleId.ToString()));
+		RoomActor->SetActorLabel(FString::Printf(TEXT("Room%02d_F%d_%s"), RoomIndex, Room.Floor, *Room.Def->RoomModuleId.ToString()));
 #endif
 		RoomActors.Add(RoomActor);
 
-		TArray<FIntPoint> Cells;
-		Layout.GetRoomCells(RoomIndex, Cells);
-		UsedCells.Append(Cells);
+		if (Room.Floor == NDHouseGen::GroundFloor)
+		{
+			UsedCells.Append(Cells);
+		}
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.
@@ -376,23 +419,48 @@ void ANDHouseLot::CheckNavigationPath()
 		return;
 	}
 	const FTransform LotToWorld = GetLotToWorld();
-	const FVector Start = LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.EntryRoom));
-	const FVector End = LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.BedroomRoom));
+	// Ruta de la criatura: de la Entrada al dormitorio y, si existen, a una sala del piso de arriba y del
+	// sótano (comprueba que el NavMesh sube y baja por las rampas).
+	auto FindRoomOnFloor = [this](int32 Floor)
+	{
+		return Layout.Rooms.IndexOfByPredicate([Floor](const FNDHouseLayoutRoom& R) { return R.Floor == Floor && R.Def->StairPart == ENDStairPart::None; });
+	};
+	const TPair<const TCHAR*, int32> Targets[] = {
+		{ TEXT("Dormitorio"), Layout.BedroomRoom },
+		{ TEXT("Piso superior"), FindRoomOnFloor(NDHouseGen::UpperFloor) },
+		{ TEXT("Sotano"), FindRoomOnFloor(NDHouseGen::BasementFloor) },
+	};
 	const FVector Extent(150.f, 150.f, 300.f);
 	FNavLocation StartOnNav;
-	FNavLocation EndOnNav;
-	const bool bProjected = NavSys->ProjectPointToNavigation(Start, StartOnNav, Extent) && NavSys->ProjectPointToNavigation(End, EndOnNav, Extent);
-	UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, StartOnNav.Location, EndOnNav.Location) : nullptr;
-	bNavPathVerified = Path && Path->IsValid() && !Path->IsPartial();
-
-	if (bNavPathVerified)
+	const bool bStartOnNav = NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.EntryRoom)), StartOnNav, Extent);
+	for (const TPair<const TCHAR*, int32>& Target : Targets)
 	{
-		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: PathExists Entrada -> Dormitorio OK (%.0f cm)"), *LotInfo.LotId.ToString(), Path->GetPathLength());
-	}
-	else
-	{
-		UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: PathExists Entrada -> Dormitorio FALLA (%s)"), *LotInfo.LotId.ToString(),
-			bProjected ? TEXT("sin camino completo") : TEXT("entrada o dormitorio fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
+		if (!Layout.Rooms.IsValidIndex(Target.Value))
+		{
+			continue;
+		}
+		FNavLocation EndOnNav;
+		const bool bProjected = bStartOnNav && NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.GetRoomCenter(Target.Value)), EndOnNav, Extent);
+		UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, StartOnNav.Location, EndOnNav.Location) : nullptr;
+		const bool bPathOk = Path && Path->IsValid() && !Path->IsPartial();
+		if (Target.Value == Layout.BedroomRoom)
+		{
+			bNavPathVerified = bPathOk;
+		}
+		if (bPathOk)
+		{
+			UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: PathExists Entrada -> %s OK (%.0f cm)"), *LotInfo.LotId.ToString(), Target.Key, Path->GetPathLength());
+		}
+		else if (Target.Value != Layout.BedroomRoom && Layout.Rooms[Target.Value].Floor == NDHouseGen::BasementFloor && bProjected)
+		{
+			// El sótano puede quedar unido solo por debajo de la rampa: pasan los Desvelados, no la criatura.
+			UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: Sotano sin camino para la criatura (solo se entra por debajo de la rampa)"), *LotInfo.LotId.ToString());
+		}
+		else
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: PathExists Entrada -> %s FALLA (%s)"), *LotInfo.LotId.ToString(), Target.Key,
+				bProjected ? TEXT("sin camino completo") : TEXT("fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
+		}
 	}
 }
 

@@ -121,6 +121,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	bool bLightRooms = true;
 
+	/** Piso superior: Auto según el tamaño de casa (Small casi nunca, Large a menudo), o siempre / nunca. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	ENDFloorOption UpperFloor = ENDFloorOption::Auto;
+
+	/** Sótano bajo la planta baja: Auto según el tamaño de casa, o siempre / nunca. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	ENDFloorOption Basement = ENDFloorOption::Auto;
+
+	/** Depuración: oculta los pisos por encima de este (0 = ver la planta baja desde arriba, -1 = ver el sótano). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "-1", ClampMax = "1"))
+	int32 MaxVisibleFloor = 1;
+
 	/** Dibuja en el servidor el grafo de salas, puertas y la ruta del bulto. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	bool bDrawDebugGraph = false;

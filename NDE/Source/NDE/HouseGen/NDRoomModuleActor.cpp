@@ -89,10 +89,10 @@ void ANDRoomModuleActor::ClearGreybox()
 	}
 }
 
-void ANDRoomModuleActor::AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size)
+void ANDRoomModuleActor::AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, const FRotator& Rotation)
 {
 	// El cubo del motor mide 100 cm y tiene el pivote en el centro.
-	Target->AddInstance(FTransform(FRotator::ZeroRotator, Center, Size / 100.f));
+	Target->AddInstance(FTransform(Rotation, Center, Size / 100.f));
 }
 
 void ANDRoomModuleActor::SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color)
@@ -132,7 +132,7 @@ UInstancedStaticMeshComponent* ANDRoomModuleActor::GetMarkerMeshes(ENDRoomMarker
 	return MarkerMeshes[Index];
 }
 
-void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth)
+void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset)
 {
 	using namespace NDHouseGen;
 	const FIntPoint Offset = DirectionToOffset(Direction);
@@ -154,17 +154,25 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 		return;
 	}
 
+	// Hueco de [Center - Door/2, Center + Door/2] a lo largo de la pared, que va de -CellSize/2 a +CellSize/2.
 	const float Door = FMath::Min(OpeningWidth, CellSize - 2.f * WallThickness);
-	const float Side = (CellSize - Door) * 0.5f;
-	for (const float Sign : { -1.f, 1.f })
+	const float Center = FMath::Clamp(OpeningOffset, -CellSize * 0.5f + Door * 0.5f, CellSize * 0.5f - Door * 0.5f);
+	const float Starts[] = { -CellSize * 0.5f, Center + Door * 0.5f };
+	const float Ends[] = { Center - Door * 0.5f, CellSize * 0.5f };
+	for (int32 Piece = 0; Piece < 2; ++Piece)
 	{
-		AddBox(WallMeshes, WallCenter + Tangent * (Sign * (Door + Side) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Side, WallHeight));
+		const float Length = Ends[Piece] - Starts[Piece];
+		if (Length > 1.f)
+		{
+			AddBox(WallMeshes, WallCenter + Tangent * ((Starts[Piece] + Ends[Piece]) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Length, WallHeight));
+		}
 	}
 	const float LintelHeight = WallHeight - DoorHeight;
-	AddBox(WallMeshes, WallCenter + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
+	AddBox(WallMeshes, WallCenter + Tangent * Center + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
 }
 
-void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers, bool bAddRoomLight)
+void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
+	bool bAddRoomLight, const TArray<bool>* CeilingPerCell, const TArray<float>* OpeningOffsets, const TArray<FNDRoomDoorSocket>* ExtraOpenings)
 {
 	using namespace NDHouseGen;
 	ClearGreybox();
@@ -179,11 +187,17 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	// techo opcional y paredes en cada borde que no da a otra celda de la sala.
 	TArray<FIntPoint> Cells;
 	Definition.GetLocalCells(Cells);
-	for (const FIntPoint& Cell : Cells)
+	for (int32 CellIndex = 0; CellIndex < Cells.Num(); ++CellIndex)
 	{
+		const FIntPoint& Cell = Cells[CellIndex];
 		const FVector CellCenter((Cell.X + 0.5f) * CellSize - Extent.X * 0.5f, (Cell.Y + 0.5f) * CellSize - Extent.Y * 0.5f, 0.f);
-		AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
-		if (bBuildCeiling)
+		// La llegada de una escalera es un hueco en el forjado: no lleva suelo.
+		if (Definition.StairPart != ENDStairPart::Top)
+		{
+			AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+		}
+		const bool bCeilingHere = !CeilingPerCell || !CeilingPerCell->IsValidIndex(CellIndex) || (*CeilingPerCell)[CellIndex];
+		if (bBuildCeiling && bCeilingHere)
 		{
 			AddBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
 		}
@@ -200,9 +214,47 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			{
 				return S.Cell == Cell && S.Direction == Direction;
 			});
-			const float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
+			float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
+			float HoleOffset = 0.f;
+			if (OpeningOffsets && OpeningOffsets->IsValidIndex(SocketIndex))
+			{
+				HoleOffset = (*OpeningOffsets)[SocketIndex];
+			}
+			else if (Definition.DoorSockets.IsValidIndex(SocketIndex))
+			{
+				HoleOffset = Definition.DoorSockets[SocketIndex].Offset;
+			}
+			// Puerta "Auto" en un borde sin hueco en el módulo.
+			const FNDRoomDoorSocket* Extra = ExtraOpenings
+				? ExtraOpenings->FindByPredicate([&Cell, Direction](const FNDRoomDoorSocket& S) { return S.Cell == Cell && S.Direction == Direction; })
+				: nullptr;
+			if (SocketIndex == INDEX_NONE && Extra)
+			{
+				Opening = Extra->Width;
+				HoleOffset = Extra->Offset;
+			}
 			const FIntPoint Offset = DirectionToOffset(Direction);
-			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
+			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening, HoleOffset);
+		}
+	}
+
+	// Arranque de escalera: rampas y rellanos (losas cuya cara de arriba va de Start a End) y muretes.
+	for (const FNDStairSegment& Segment : Definition.StairSegments)
+	{
+		const FVector Delta = Segment.End - Segment.Start;
+		const float Horizontal = FVector2D(Delta.X, Delta.Y).Size();
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+		const FVector Middle = (Segment.Start + Segment.End) * 0.5f;
+		if (Segment.Height > 0.f)
+		{
+			const float Bottom = FMath::Min(Segment.Start.Z, Segment.End.Z);
+			AddBox(FloorMeshes, FVector(Middle.X, Middle.Y, Bottom + Segment.Height * 0.5f), FVector(Horizontal, Segment.Width, Segment.Height), FRotator(0.f, Yaw, 0.f));
+		}
+		else
+		{
+			const FRotator Rotation(FMath::RadiansToDegrees(FMath::Atan2(Delta.Z, Horizontal)), Yaw, 0.f);
+			const FVector Center = Middle - Rotation.RotateVector(FVector::UpVector) * (WallThickness * 0.5f);
+			AddBox(FloorMeshes, Center, FVector(Delta.Size(), Segment.Width, WallThickness), Rotation);
 		}
 	}
 

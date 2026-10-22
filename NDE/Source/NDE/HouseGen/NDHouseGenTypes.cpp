@@ -78,6 +78,8 @@ namespace NDHouseGen
 		case ENDRoomSocketType::Arch_L: return 260.f;
 		case ENDRoomSocketType::Vent: return 40.f;
 		case ENDRoomSocketType::Secret: return 100.f;
+		// La escalera ocupa toda la celda menos las paredes.
+		case ENDRoomSocketType::Stairs: return CellSize - 2.f * WallThickness;
 		default: return 160.f;
 		}
 	}
@@ -117,6 +119,8 @@ namespace NDHouseGen
 		case ENDRoomType::R13_Laundry: return FColor(150, 210, 250);
 		case ENDRoomType::R14_Library: return FColor(110, 60, 30);
 		case ENDRoomType::R15_Playroom: return FColor(160, 230, 60);
+		case ENDRoomType::R16_Basement: return FColor(90, 80, 110);
+		case ENDRoomType::R17_Stairwell: return FColor(240, 240, 240);
 		default: return FColor(180, 100, 220);
 		}
 	}
@@ -124,5 +128,28 @@ namespace NDHouseGen
 	FString GetRoomTypeName(ENDRoomType Type)
 	{
 		return StaticEnum<ENDRoomType>()->GetNameStringByValue(static_cast<int64>(Type));
+	}
+
+	FName MakeAutoSocketId(const FIntPoint& LocalCell, ENDCellDirection LocalDirection)
+	{
+		return FName(*FString::Printf(TEXT("Auto_%d_%d_%d"), LocalCell.X, LocalCell.Y, static_cast<int32>(LocalDirection)));
+	}
+
+	bool ParseAutoSocketId(FName SocketId, FIntPoint& OutLocalCell, ENDCellDirection& OutLocalDirection)
+	{
+		TArray<FString> Parts;
+		SocketId.ToString().ParseIntoArray(Parts, TEXT("_"));
+		if (Parts.Num() != 4 || Parts[0] != TEXT("Auto") || !Parts[1].IsNumeric() || !Parts[2].IsNumeric() || !Parts[3].IsNumeric())
+		{
+			return false;
+		}
+		const int32 Direction = FCString::Atoi(*Parts[3]);
+		if (Direction < 0 || Direction > 3)
+		{
+			return false;
+		}
+		OutLocalCell = FIntPoint(FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2]));
+		OutLocalDirection = static_cast<ENDCellDirection>(Direction);
+		return true;
 	}
 }

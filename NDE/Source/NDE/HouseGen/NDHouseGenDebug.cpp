@@ -24,7 +24,7 @@ namespace NDHouseGenDebug
 	FString GetRoomLabel(const FNDHouseLayout& Layout, int32 RoomIndex)
 	{
 		const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];
-		return FString::Printf(TEXT("%s d%d%s"), *NDHouseGen::GetRoomTypeName(Room.Def->RoomType), Room.Depth,
+		return FString::Printf(TEXT("P%d %s d%d%s"), Room.Floor, *NDHouseGen::GetRoomTypeName(Room.Def->RoomType), Room.Depth,
 			RoomIndex == Layout.ObjectiveRoom ? TEXT(" OBJ") : TEXT(""));
 	}
 
