@@ -19,6 +19,8 @@ Todo lo del personaje está en **Project Settings > Game > NDE Scale** (`UNDScal
 
 **Alternativa descartada**: bajar la casa a la escala del Desvelado (puertas de unos 60 cm). Quita la sensación de "casa de gigante" del GDD y obliga a rehacer HouseGen (celdas, módulos, tests).
 
+Para capturas desde los ojos: `nde.Debug.PlacePlayer X Y Z Yaw Pitch` (servidor) y `nde.Debug.Delay <segundos> <comando>` (p. ej. `HighResShot 1280x720`).
+
 `nde.Scale.Debug [segundos]` dibuja delante del jugador una regla con suelo, escalón, ojos, cápsula, salto, puerta, techo y piso de arriba, además del ancho de una puerta y la huella de la cápsula.
 
 ## Cámara
