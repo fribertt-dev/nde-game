@@ -345,6 +345,12 @@ void UNDExpeditionComponent::UpdateDisconnections()
 			Participant.Status = ENDParticipantStatus::Disconnected;
 			bChanged = true;
 		}
+		else if (!bGone && Participant.Status == ENDParticipantStatus::Disconnected)
+		{
+			// Volvió a tiempo (Unreal le devuelve su PlayerState): sigue en la expedición.
+			Participant.Status = ENDParticipantStatus::Active;
+			bChanged = true;
+		}
 	}
 	if (bChanged)
 	{

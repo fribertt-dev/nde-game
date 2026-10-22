@@ -8,6 +8,8 @@
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Engine/NetConnection.h"
+#include "Engine/NetDriver.h"
 #include "HAL/IConsoleManager.h"
 #include "TimerManager.h"
 #include "Contracts/NDContractDefinition.h"
@@ -15,7 +17,9 @@
 #include "Expedition/NDExpeditionDirector.h"
 #include "Expedition/NDNightClockComponent.h"
 #include "Loot/NDCarryComponent.h"
+#include "HouseGen/NDHouseLot.h"
 #include "Loot/NDExtractionVan.h"
+#include "Loot/NDRescueContainer.h"
 #include "Loot/NDLootActor.h"
 #include "Loot/NDLootDefinition.h"
 #include "Engine/LocalPlayer.h"
@@ -190,7 +194,7 @@ namespace NDExpeditionDebug
 			int32 Deposited = 0;
 			for (TActorIterator<ANDLootActor> It(W); It && (Count <= 0 || Deposited < Count); ++It)
 			{
-				if (It->GetLootState() == ENDLootState::WorldLoose && Van->TryDeposit(*It, FirstPawn(W)))
+				if (It->GetLootState() == ENDLootState::WorldLoose && !It->IsLocked() && Van->TryDeposit(*It, FirstPawn(W)))
 				{
 					UE_LOG(LogNDExpeditionDebug, Log, TEXT("Depositado %s (%s)"), It->GetDefinition() ? *It->GetDefinition()->LootId.ToString() : TEXT("?"),
 						*It->GetLootGuid().ToString());
@@ -472,6 +476,138 @@ namespace NDExpeditionDebug
 		});
 	}
 
+	/**
+	 * Huella del estado de la casa en esta máquina: manifiesto, botín (LootGuid, estado, condición,
+	 * bloqueo y portadores), lo depositado y los tarros abiertos. Las posiciones (la física puede diferir
+	 * unos centímetros) no entran: con el detalle se listan para compararlas con margen.
+	 * Tiene que salir igual en el servidor y en cada cliente, también en uno que entra tarde o vuelve.
+	 */
+	/** nde.Expedition.StateHash con un segundo argumento 1: lista cada objeto. */
+	bool bStateHashDetail = false;
+
+	bool LogStateHash(UWorld* World)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		if (!Lot || !Lot->IsHouseBuilt())
+		{
+			return true;
+		}
+		struct FEntry { FString Key; uint32 Hash; };
+		TArray<FEntry> Entries;
+		TMap<FGuid, int32> Copies;
+		for (TActorIterator<ANDLootActor> It(World); It; ++It)
+		{
+			// Lo depositado se borra al segundo: cuenta por el libro de depósitos.
+			if (It->GetLootState() == ENDLootState::Deposited || It->IsActorBeingDestroyed())
+			{
+				continue;
+			}
+			++Copies.FindOrAdd(It->GetLootGuid());
+			uint32 Hash = GetTypeHash(It->GetLootGuid());
+			Hash = HashCombineFast(Hash, GetTypeHash(static_cast<uint8>(It->GetLootState())));
+			Hash = HashCombineFast(Hash, GetTypeHash(static_cast<uint8>(It->GetCondition())));
+			Hash = HashCombineFast(Hash, GetTypeHash(It->IsLocked()));
+			Hash = HashCombineFast(Hash, GetTypeHash(It->GetCarrierCount()));
+			Entries.Add({ It->GetLootGuid().ToString(), Hash });
+			if (bStateHashDetail)
+			{
+				FString Channels;
+				if (const UNetDriver* Driver = World->GetNetMode() != NM_Client ? World->GetNetDriver() : nullptr)
+				{
+					for (UNetConnection* Connection : Driver->ClientConnections)
+					{
+						Channels += Connection && Connection->FindActorChannelRef(*It) ? TEXT("C") : TEXT("-");
+					}
+				}
+				UE_LOG(LogNDExpeditionDebug, Log, TEXT("  %s %s estado %d cond %d bloq %d port %d pos %s vel %.0f canales %s"), *It->GetLootGuid().ToString(),
+					It->GetDefinition() ? *It->GetDefinition()->LootId.ToString() : TEXT("?"), static_cast<int32>(It->GetLootState()), static_cast<int32>(It->GetCondition()),
+					It->IsLocked() ? 1 : 0, It->GetCarrierCount(), *It->GetActorLocation().ToCompactString(), It->GetVelocity().Size(), *Channels);
+			}
+		}
+		Entries.Sort([](const FEntry& A, const FEntry& B) { return A.Key < B.Key; });
+		uint32 StateHash = GetTypeHash(Lot->GetManifest().ToDebugString());
+		for (const FEntry& Entry : Entries)
+		{
+			StateHash = HashCombineFast(StateHash, Entry.Hash);
+		}
+		int32 Deposited = 0;
+		if (const UNDExpeditionComponent* Expedition = ANDExpeditionDirector::GetExpedition(World))
+		{
+			TArray<FString> Guids;
+			for (const FNDDepositRecord& Record : Expedition->GetDeposits())
+			{
+				Guids.Add(Record.LootGuid.ToString());
+			}
+			Guids.Sort();
+			Deposited = Guids.Num();
+			for (const FString& Guid : Guids)
+			{
+				StateHash = HashCombineFast(StateHash, GetTypeHash(Guid));
+			}
+		}
+		int32 OpenJars = 0;
+		for (TActorIterator<ANDRescueContainer> It(World); It; ++It)
+		{
+			OpenJars += It->IsOpened() ? 1 : 0;
+		}
+		StateHash = HashCombineFast(StateHash, GetTypeHash(OpenJars));
+		int32 Duplicates = 0;
+		for (const TPair<FGuid, int32>& Pair : Copies)
+		{
+			Duplicates += Pair.Value > 1 ? Pair.Value - 1 : 0;
+		}
+		if (World->GetNetMode() != NM_Client)
+		{
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				const APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr;
+				const UPrimitiveComponent* Base = Pawn ? Pawn->GetMovementBase() : nullptr;
+				UE_LOG(LogNDExpeditionDebug, Log, TEXT("  jugador %s en %s sobre %s"), *GetNameSafe(Pawn), Pawn ? *Pawn->GetActorLocation().ToCompactString() : TEXT("-"),
+					Base ? *FString::Printf(TEXT("%s.%s"), *GetNameSafe(Base->GetOwner()), *Base->GetName()) : TEXT("nada"));
+			}
+		}
+		UE_LOG(LogNDExpeditionDebug, Log, TEXT("Estado [%s]: %08X | casa %08X | %d objetos en la casa, %d depositados, %d tarros abiertos, %d duplicados"),
+			World->GetNetMode() == NM_Client ? TEXT("cliente") : TEXT("servidor"), StateHash, GetTypeHash(Lot->GetManifest().ToDebugString()),
+			Entries.Num(), Deposited, OpenJars, Duplicates);
+		return true;
+	}
+
+	void StateHash(const TArray<FString>& Args, UWorld* World)
+	{
+		bStateHashDetail = Args.IsValidIndex(1) && FCString::Atoi(*Args[1]) != 0;
+		const float Interval = ArgFloat(Args, 0, 0.f);
+		if (Interval <= 0.f)
+		{
+			LogStateHash(World);
+			return;
+		}
+		// Ticker del motor: sigue tras viajar, desconectarse o volver a entrar.
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([](float)
+		{
+			if (UWorld* GameWorld = FindGameWorld())
+			{
+				LogStateHash(GameWorld);
+			}
+			return true;
+		}), Interval);
+	}
+
+	/** nde.Expedition.Later <segundos> <comando...>: como nde.Debug.Delay, pero sobrevive a viajes y desconexiones. */
+	void Later(const TArray<FString>& Args, UWorld* World)
+	{
+		if (Args.Num() < 2)
+		{
+			return;
+		}
+		const FString Command = FString::Join(TArrayView<const FString>(Args).RightChop(1), TEXT(" "));
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Command](float)
+		{
+			UE_LOG(LogNDExpeditionDebug, Log, TEXT("Later: %s"), *Command);
+			GEngine->Exec(FindGameWorld(), *Command);
+			return false;
+		}), FMath::Max(0.01f, FCString::Atof(*Args[0])));
+	}
+
 	void Shot(const TArray<FString>& Args, UWorld* World)
 	{
 		// Ticker del motor: la espera sobrevive al viaje (un cliente que se conecta después).
@@ -486,6 +622,14 @@ namespace NDExpeditionDebug
 			return false;
 		}), FMath::Max(0.01f, ArgFloat(Args, 0, 0.f)));
 	}
+
+	FAutoConsoleCommandWithWorldAndArgs StateHashCommand(TEXT("nde.Expedition.StateHash"),
+		TEXT("Huella del estado de la casa y el botin en esta maquina (igual en servidor y clientes). Uso: nde.Expedition.StateHash [cada cuantos segundos]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&StateHash));
+
+	FAutoConsoleCommandWithWorldAndArgs LaterCommand(TEXT("nde.Expedition.Later"),
+		TEXT("Lanza un comando de consola mas tarde, aunque se viaje o se desconecte. Uso: nde.Expedition.Later <segundos> <comando>"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Later));
 
 	FAutoConsoleCommandWithWorldAndArgs MeetCommand(TEXT("nde.Expedition.Meet"),
 		TEXT("Solo servidor: pone al jugador 0 delante del 1, mirandose, para ver lo que lleva el otro. Uso: nde.Expedition.Meet [cm] [segundos de espera]"),

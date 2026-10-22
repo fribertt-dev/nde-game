@@ -352,6 +352,9 @@ void ANDHouseLot::BuildFromManifest()
 		TArray<FIntPoint> Cells;
 		Layout.GetRoomCells(RoomIndex, Cells);
 		const FTransform RoomTransform = FTransform(FRotator(0.f, Room.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(RoomIndex)) * LotToWorld;
+		// Mismo nombre en todas las máquinas: así el servidor puede referirse a esta sala (p. ej. como suelo
+		// sobre el que está un jugador) y el cliente la encuentra. La revisión evita choques al regenerar.
+		SpawnParams.Name = FName(*FString::Printf(TEXT("NDRoom_%s_r%d_%02d"), *LotInfo.LotId.ToString(), Manifest.Revision, RoomIndex));
 		ANDRoomModuleActor* RoomActor = World->SpawnActor<ANDRoomModuleActor>(ANDRoomModuleActor::StaticClass(), RoomTransform, SpawnParams);
 		if (!RoomActor)
 		{
@@ -397,7 +400,7 @@ void ANDHouseLot::BuildFromManifest()
 		}
 		RoomActor->RoomInstanceId = RoomIndex;
 		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets, &ExtraOpenings);
-		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		// Sin acoplar al lote: la sala es estática (no se mueve) y el lote no; el lote la borra por su lista.
 		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
 		if (Room.Floor > MaxVisibleFloor)
 		{

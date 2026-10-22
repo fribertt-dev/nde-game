@@ -104,6 +104,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void FellOutOfWorld(const UDamageType& DamageType) override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:
@@ -121,6 +122,22 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_LootState)
 	bool bLocked = false;
+
+	/**
+	 * Dónde quedó quieto el objeto suelto (servidor). Los clientes lo colocan ahí: la posición replicada
+	 * no se vuelve a mandar cuando la física se duerme, y un cliente que entra tarde se quedaría con otra.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_RestTransform)
+	FVector_NetQuantize10 RestLocation = FVector::ZeroVector;
+
+	UPROPERTY(ReplicatedUsing = OnRep_RestTransform)
+	FRotator RestRotation = FRotator::ZeroRotator;
+
+	UFUNCTION()
+	void OnRep_RestTransform();
+
+	/** Cliente: si está suelto, en su sitio de reposo. */
+	void ApplyRestTransform();
 
 	/** Quién lo lleva (el primero manda). Cada máquina lo acopla a partir de esto (ver UpdateCarryAttachment). */
 	UPROPERTY(ReplicatedUsing = OnRep_Carriers)

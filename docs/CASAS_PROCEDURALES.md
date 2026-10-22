@@ -42,6 +42,16 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 - La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
 - El botín no recorta el NavMesh (se mueve y se lleva).
 
+## Entrada tardía y reconexión
+Un cliente que entra a mitad de noche o vuelve tras desconectarse recibe lo mismo que los demás:
+- **Casa:** el manifiesto (lote siempre relevante) y la construye igual; mismo hash. Las salas se crean con el mismo nombre en todas las máquinas (`NDRoom_<lote>_r<revisión>_<sala>`) y son estáticas, así el servidor puede referirse a su suelo sin que el cliente se quede atascado.
+- **Botín:** cada objeto es siempre relevante y nunca duerme en red, así que llega con su estado real (suelto, llevado y por quién, en la mochila, bloqueado en el tarro). La física solo corre en el servidor; los clientes siguen la posición replicada y, cuando el objeto se queda quieto, su sitio de reposo (`RestLocation`), que también recibe quien entra tarde. Lo depositado llega por el libro de depósitos de la expedición; los objetos depositados ya no existen. LootGuid estable: nunca hay duplicados ni pérdidas.
+- **Tarro de rescate:** su estado (abierto o cerrado) está replicado.
+- **Expedición:** quien vuelve a tiempo recupera su PlayerState y vuelve a estar activo; quien entra nuevo en los primeros 90 s cuenta como participante.
+- Aún no hay puertas que se abran ni escondites ocupables, así que no hay nada que sincronizar de ellos.
+
+Comprobación: `nde.Expedition.StateHash <cada s> [1 = detalle]` escribe en cada máquina una huella del estado (botín, depósitos, tarros) y, con detalle, cada objeto con su posición y (en el servidor) si cada cliente tiene su canal abierto. `nde.Expedition.Later <s> <comando>` lanza un comando aunque se viaje o se desconecte (p. ej. `disconnect` y `open 127.0.0.1:7788`). Prueba hecha con servidor y tres conexiones (A desde el principio, se desconecta y vuelve; B entra tarde) mientras el host coge, lanza, deposita y abre el tarro: en 6 de 6 partidas, con tres casas distintas, las tres máquinas acaban con la misma huella y las posiciones a menos de 1 mm.
+
 ## Contratos de D01 (C01 a C07)
 Cada contrato (`UNDContractDefinition`) trae `HouseRequirements`: salas obligatorias, dónde va el objetivo (sala objetivo, sala obligatoria, cabecera de la cama o tarro de rescate), 2-5 ubicaciones candidatas, accesos mínimos a esa sala (1-3 rutas), ancho mínimo de la ruta y el margen de botín sobre la cuota. El generador añade las salas obligatorias antes del relleno, abre bucles hacia el objetivo si faltan accesos y valida todo; el reparto del botín (`HouseGen/NDHouseLoot`) pone primero el objetivo en una de sus candidatas (la elige la semilla), luego los señuelos y después el relleno hasta cubrir la cuota con margen.
 
