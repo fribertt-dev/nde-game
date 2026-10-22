@@ -29,3 +29,8 @@ ANDFrontEndHUD::ANDFrontEndHUD()
 {
 	InitialScreen = NDUITags::Screen_MainMenu;
 }
+
+ANDExpeditionHUD::ANDExpeditionHUD()
+{
+	InitialScreen = NDUITags::Screen_ExpeditionHUD;
+}

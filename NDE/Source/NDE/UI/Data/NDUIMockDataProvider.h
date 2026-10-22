@@ -30,6 +30,7 @@ public:
 	virtual FNDNightClockVM GetNightClock_Implementation() const override { return NightClock; }
 	virtual TArray<FNDPlayerVoiceVM> GetVoiceStates_Implementation() const override { return VoiceStates; }
 	virtual FNDResultsVM GetLastResults_Implementation() const override { return Results; }
+	virtual FNDExpeditionHUDVM GetExpeditionHUD_Implementation() const override { return ExpeditionHUD; }
 
 	virtual void RequestSelectSpecies_Implementation(ENDDesveladoSpecies Species) override;
 	virtual void RequestSetReady_Implementation(bool bReady) override;
@@ -75,6 +76,9 @@ protected:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mock")
 	FNDResultsVM Results;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Mock")
+	FNDExpeditionHUDVM ExpeditionHUD;
 
 	UPROPERTY(Transient)
 	FName VotedContractId;

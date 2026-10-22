@@ -27,6 +27,8 @@
 #include "Net/UnrealNetwork.h"
 #include "Networking/NDLobbyGameState.h"
 #include "Players/NDScaleSettings.h"
+#include "UI/NDUIManagerSubsystem.h"
+#include "Engine/LocalPlayer.h"
 #include "Tools/NDLoadoutComponent.h"
 #include "Tools/NDToolDefinition.h"
 #include "UObject/ConstructorHelpers.h"
@@ -47,6 +49,11 @@ namespace NDCharacter
 		TEXT("nde.Camera.FirstPerson"),
 		-1,
 		TEXT("Cámara del Desvelado: 1 = primera persona (en los ojos), 0 = tercera persona, -1 = automático (primera persona salvo en La Madriguera)."));
+
+	TAutoConsoleVariable<int32> CVarDebugText(
+		TEXT("nde.Expedition.DebugText"),
+		-1,
+		TEXT("Texto de depuración de la expedición arriba a la izquierda: 1 = siempre, 0 = nunca, -1 = automático (solo si no hay HUD de expedición)."));
 
 	TAutoConsoleVariable<int32> CVarHeadBob(
 		TEXT("nde.Camera.HeadBob"),
@@ -259,10 +266,23 @@ void ANDCharacter::Tick(float DeltaSeconds)
 	{
 		UpdateMovementSpeed();
 	}
-	if (IsLocallyControlled() && bShowDebugHud)
+	if (IsLocallyControlled() && bShowDebugHud && ShouldDrawDebugText())
 	{
 		NDExpeditionDebugHud::Draw(this, *Carry, *Loadout, *ExpeditionPlayer);
 	}
+}
+
+bool ANDCharacter::ShouldDrawDebugText() const
+{
+	const int32 Mode = NDCharacter::CVarDebugText.GetValueOnGameThread();
+	if (Mode >= 0)
+	{
+		return Mode == 1;
+	}
+	// Automático: si la UI tiene su raíz en pantalla, el HUD de expedición ya enseña esto.
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	const UNDUIManagerSubsystem* UIManager = PC && PC->GetLocalPlayer() ? PC->GetLocalPlayer()->GetSubsystem<UNDUIManagerSubsystem>() : nullptr;
+	return !UIManager || !UIManager->GetRootLayout();
 }
 
 void ANDCharacter::UpdateHeadBob(float DeltaSeconds)

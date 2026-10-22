@@ -55,10 +55,25 @@ Para probar el reloj y la huida: en `WBP_ExpeditionHUD`, al activarse, haz cast 
 
 ## Datos reales de la expedición
 
-`UI/Data/NDUIExpeditionDataProvider` es ahora el proveedor por defecto. Hereda del mock y, cuando el mapa tiene un `ANDExpeditionDirector` (por ejemplo `L_CasaPrueba`), entrega datos reales: reloj nocturno (fase, tiempo hasta el amanecer y huida), cuota y botín asegurado, y resultado. Lanza toasts en los avisos de pre-amanecer, al amanecer y con el resultado. Lobby, tienda y el resto siguen simulados. `ANDHouseGameMode` usa `ANDHUD`.
+`UI/Data/NDUIExpeditionDataProvider` es ahora el proveedor por defecto. Hereda del mock y, cuando el mapa tiene un `ANDExpeditionDirector` (por ejemplo `L_CasaPrueba`), entrega datos reales: reloj nocturno (fase, tiempo hasta el amanecer y huida), cuota y botín asegurado, y resultado. Lanza toasts en los avisos de pre-amanecer, al amanecer y con el resultado. Lobby, tienda y el resto siguen simulados. `ANDHouseGameMode` usa `ANDExpeditionHUD`, que abre `UI.Screen.ExpeditionHUD`.
 
 - Las fases y resultados de la UI se llaman `ENDUINightPhase` y `ENDUIRunOutcome`, para no chocar con `ENDNightPhase` y `ENDExpeditionOutcome` de las reglas.
-- Mientras no existan `WBP_RootLayout` y el registro de pantallas, el log avisa de que faltan y no se ve nada nuevo en pantalla; el texto de depuración del bucle sigue arriba a la izquierda. Para comprobar los datos: `nde.Expedition.Status 5` escribe también la línea `UI:` del proveedor.
+- El proveedor también da `FNDExpeditionHUDVM` (contrato, objetivo, manos y mochila del jugador local; tema `ExpeditionHUD`) y `FNDResultsVM` con título, botín, cuota y la recompensa del jugador.
+- `nde.Expedition.Status 5` escribe también la línea `UI:` del proveedor.
+
+## HUD de expedición en C++ (sin WBP)
+
+Mientras no existan los WBP, todo funciona con pantallas hechas en C++ en `UI/Screens`:
+
+| Clase | Qué hace |
+|---|---|
+| `UNDUINativeRootLayout` | Raíz por defecto (Project Settings > NDE UI > RootLayoutClass): el Overlay con las cuatro pilas. |
+| `UNDUIExpeditionHUD` | `UI.Screen.ExpeditionHUD`, capa Game. Reloj con fase y barra (naranja desde el primer aviso, rojo en los últimos 30 s y en la huida), contrato, objetivo, botín asegurado frente a cuota, manos y mochila, y avisos por prioridad. Al acabar la noche abre el resultado. |
+| `UNDUIResultsScreen` | `UI.Screen.Results`, capa GameMenu: Golpe perfecto, Éxito, Extracción parcial o Fracaso, botín frente a cuota y tu parte en monedas y reputación. |
+
+- Si `ScreenRegistry` no está asignado, el subsistema usa un registro en memoria con estas dos pantallas. Un `DA_UIScreenRegistry` con WBP propios las sustituye sin tocar código.
+- El texto de depuración del bucle se oculta cuando el HUD está en pantalla. `nde.Expedition.DebugText 1` lo vuelve a mostrar (0 = nunca, -1 = automático).
+- `nde.Expedition.Shot` captura la pantalla con la interfaz.
 
 ## Pendiente para la etapa 2
 

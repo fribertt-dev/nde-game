@@ -19,6 +19,7 @@ namespace NDUITopics
 	inline const FLazyName NightClock = TEXT("NightClock");
 	inline const FLazyName Voice = TEXT("Voice");
 	inline const FLazyName Results = TEXT("Results");
+	inline const FLazyName ExpeditionHUD = TEXT("ExpeditionHUD");
 }
 
 /**
@@ -62,6 +63,9 @@ public:
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintPure, Category = "NDE|UI|Data")
 	FNDResultsVM GetLastResults() const;
+
+	UFUNCTION(BlueprintNativeEvent, BlueprintPure, Category = "NDE|UI|Data")
+	FNDExpeditionHUDVM GetExpeditionHUD() const;
 
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "NDE|UI|Commands")
 	void RequestSelectSpecies(ENDDesveladoSpecies Species);

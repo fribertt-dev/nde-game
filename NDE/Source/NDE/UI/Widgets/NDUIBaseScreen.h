@@ -45,6 +45,9 @@ protected:
 	virtual void NativeOnActivated() override;
 	virtual void NativeOnDeactivated() override;
 
+	// Igual que BP_RefreshFromViewModel, para pantallas hechas en C++. Se llama antes.
+	virtual void NativeRefreshFromViewModel() {}
+
 	// Leer del proveedor y pintar. Se llama al activarse, con RequestRefresh y cuando cambia un tema escuchado.
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|UI")
 	void BP_RefreshFromViewModel();

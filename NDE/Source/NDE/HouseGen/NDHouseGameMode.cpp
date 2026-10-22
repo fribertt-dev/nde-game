@@ -35,7 +35,7 @@ namespace NDHouseGameMode
 ANDHouseGameMode::ANDHouseGameMode()
 {
 	// El HUD del jugador local inicializa la UI (reloj, cuota y avisos con datos reales).
-	HUDClass = ANDHUD::StaticClass();
+	HUDClass = ANDExpeditionHUD::StaticClass();
 	DefaultContract = TSoftObjectPtr<UNDContractDefinition>(NDHouseGameMode::ContractPath(TEXT("C01")));
 	for (const TCHAR* LootId : NDHouseGameMode::LootIds)
 	{

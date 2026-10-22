@@ -112,6 +112,14 @@ UNDUIMockDataProvider::UNDUIMockDataProvider()
 		LOCTEXT("Incident1", "Bigotes estornudó dentro del armario"),
 		LOCTEXT("Incident2", "El televisor viajó en el carrito con Pelusa encima"),
 	};
+	Results.OutcomeTitle = LOCTEXT("MockOutcome", "Éxito");
+	Results.LootPoints = 880;
+	Results.Quota = 700;
+
+	ExpeditionHUD.ContractName = LOCTEXT("MockContract", "La casa del relojero");
+	ExpeditionHUD.ObjectiveText = LOCTEXT("MockObjective", "Llevad 700 puntos de botín a la camioneta");
+	ExpeditionHUD.HandsItem = LOCTEXT("MockHands", "Reloj cucú");
+	ExpeditionHUD.PocketCount = 1;
 }
 
 FNDPlayerCardVM UNDUIMockDataProvider::GetLocalPlayer_Implementation() const

@@ -481,7 +481,7 @@ namespace NDExpeditionDebug
 			UWorld* W = FindGameWorld();
 			if (APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr)
 			{
-				PC->ConsoleCommand(TEXT("HighResShot 1280x720"));
+				PC->ConsoleCommand(TEXT("shot showui"));
 			}
 			return false;
 		}), FMath::Max(0.01f, ArgFloat(Args, 0, 0.f)));
@@ -508,7 +508,7 @@ namespace NDExpeditionDebug
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Walk));
 
 	FAutoConsoleCommandWithWorldAndArgs ShotCommand(TEXT("nde.Expedition.Shot"),
-		TEXT("Captura de pantalla 1280x720 tras una espera. Uso: nde.Expedition.Shot [segundos de espera]"),
+		TEXT("Captura de pantalla con la interfaz tras una espera. Uso: nde.Expedition.Shot [segundos de espera]"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Shot));
 
 	FAutoConsoleCommandWithWorldAndArgs StatusCommand(TEXT("nde.Expedition.Status"),

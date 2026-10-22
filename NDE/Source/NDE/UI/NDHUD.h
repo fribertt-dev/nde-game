@@ -29,3 +29,13 @@ class NDE_API ANDFrontEndHUD : public ANDHUD
 public:
 	ANDFrontEndHUD();
 };
+
+// HUD de la expedición: abre UI.Screen.ExpeditionHUD (reloj, cuota, objetivo, carga y avisos).
+UCLASS()
+class NDE_API ANDExpeditionHUD : public ANDHUD
+{
+	GENERATED_BODY()
+
+public:
+	ANDExpeditionHUD();
+};

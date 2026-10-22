@@ -4,7 +4,12 @@
 #include "Engine/World.h"
 #include "Expedition/NDExpeditionComponent.h"
 #include "Expedition/NDExpeditionDirector.h"
+#include "Contracts/NDContractDefinition.h"
 #include "Expedition/NDNightClockComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Loot/NDCarryComponent.h"
+#include "Loot/NDLootActor.h"
+#include "Loot/NDLootDefinition.h"
 #include "GameFramework/GameStateBase.h"
 #include "UI/NDUIFunctionLibrary.h"
 #include "UI/NDUIManagerSubsystem.h"
@@ -47,6 +52,20 @@ ANDExpeditionDirector* UNDUIExpeditionDataProvider::GetDirector() const
 bool UNDUIExpeditionDataProvider::PollDirector(float DeltaTime)
 {
 	ANDExpeditionDirector* Director = GetDirector();
+
+	// Manos y mochila del jugador local: no tienen evento propio, se avisa cuando cambian.
+	if (Director)
+	{
+		const FNDExpeditionHUDVM HUD = GetExpeditionHUD_Implementation();
+		const uint32 CarryHash = HashCombineFast(GetTypeHash(HUD.HandsItem.ToString()),
+			HashCombineFast(GetTypeHash(HUD.PocketCount), GetTypeHash(HUD.bHandsNeedHelp)));
+		if (CarryHash != LastCarryHash)
+		{
+			LastCarryHash = CarryHash;
+			NotifyDataChanged(NDUITopics::ExpeditionHUD);
+		}
+	}
+
 	if (Director == BoundDirector.Get())
 	{
 		return true;
@@ -138,10 +157,83 @@ FNDResultsVM UNDUIExpeditionDataProvider::GetLastResults_Implementation() const
 	const FNDRunSummary& Summary = Director->Expedition->GetRunSummary();
 	FNDResultsVM VM;
 	VM.Outcome = ToUIOutcome(Summary);
+	VM.OutcomeTitle = GetOutcomeTitle(Summary.Outcome);
 	VM.bContractCompleted = Summary.bObjectiveMet;
+	VM.LootPoints = Summary.LootPointsDeposited;
+	VM.Quota = Summary.Quota;
 	if (!Summary.bObjectiveMet)
 	{
 		VM.FailureReason = LOCTEXT("ObjectiveMissed", "No llegó a la camioneta lo que pedía el contrato");
+	}
+	// Recompensa del jugador local.
+	const UNDUIManagerSubsystem* UIManager = Cast<UNDUIManagerSubsystem>(GetOuter());
+	const ULocalPlayer* LocalPlayer = UIManager ? UIManager->GetLocalPlayer() : nullptr;
+	const APlayerController* PC = LocalPlayer ? LocalPlayer->GetPlayerController(GetPlayerWorld()) : nullptr;
+	for (const FNDPlayerSettlement& Player : Summary.Players)
+	{
+		if (PC && Player.PlayerState == PC->PlayerState)
+		{
+			VM.MoneyEarned = Player.Reward.Coins;
+			VM.ReputationEarned = Player.Reward.Reputation;
+		}
+	}
+	return VM;
+}
+
+FText UNDUIExpeditionDataProvider::GetOutcomeTitle(ENDExpeditionOutcome Outcome)
+{
+	switch (Outcome)
+	{
+	case ENDExpeditionOutcome::Perfect: return LOCTEXT("OutcomePerfect", "¡Golpe perfecto!");
+	case ENDExpeditionOutcome::Success: return LOCTEXT("OutcomeSuccess", "Éxito");
+	case ENDExpeditionOutcome::PartialExtraction: return LOCTEXT("OutcomePartial", "Extracción parcial");
+	case ENDExpeditionOutcome::Failure: return LOCTEXT("OutcomeFailure", "Fracaso");
+	default: return FText::GetEmpty();
+	}
+}
+
+FNDExpeditionHUDVM UNDUIExpeditionDataProvider::GetExpeditionHUD_Implementation() const
+{
+	const ANDExpeditionDirector* Director = GetDirector();
+	const UNDContractDefinition* Contract = Director && Director->Expedition ? Director->Expedition->Contract.Get() : nullptr;
+	if (!Contract)
+	{
+		return Super::GetExpeditionHUD_Implementation();
+	}
+
+	FNDExpeditionHUDVM VM;
+	VM.ContractName = Contract->DisplayName;
+	VM.bObjectiveMet = Director->Expedition->IsObjectiveMet();
+	TArray<FString> Required;
+	for (const FName& LootId : Contract->RequiredLootIds)
+	{
+		// El nombre visible sale del Data Asset del botín.
+		const FString Id = LootId.ToString();
+		const FSoftObjectPath Path(FString::Printf(TEXT("/Game/_NDE_/Data/Loot/DA_Loot_%s.DA_Loot_%s"), *Id, *Id));
+		const UNDLootDefinition* Definition = Cast<UNDLootDefinition>(Path.TryLoad());
+		Required.Add(Definition ? Definition->DisplayName.ToString() : Id);
+	}
+	if (!Required.IsEmpty())
+	{
+		VM.ObjectiveText = FText::Format(LOCTEXT("ObjectiveItems", "Llevad a la camioneta: {0}"), FText::FromString(FString::Join(Required, TEXT(", "))));
+	}
+	else
+	{
+		VM.ObjectiveText = FText::Format(LOCTEXT("ObjectiveQuota", "Llevad {0} puntos de botín a la camioneta"), Contract->RequiredQuotaValue);
+	}
+
+	const UWorld* World = GetPlayerWorld();
+	const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+	const UNDCarryComponent* Carry = PC && PC->GetPawn() ? PC->GetPawn()->FindComponentByClass<UNDCarryComponent>() : nullptr;
+	if (Carry)
+	{
+		if (const ANDLootActor* Held = Carry->GetHeldLoot())
+		{
+			VM.HandsItem = Held->GetDefinition() ? Held->GetDefinition()->DisplayName : FText::GetEmpty();
+			VM.bHandsNeedHelp = !Held->HasEnoughCarriers();
+		}
+		VM.PocketCount = Carry->GetPocketLoot().Num();
+		VM.PocketSlots = Carry->PocketSlots;
 	}
 	return VM;
 }
@@ -160,6 +252,7 @@ void UNDUIExpeditionDataProvider::ShowToast(const FText& Message, int32 Priority
 void UNDUIExpeditionDataProvider::HandleExpeditionStateChanged()
 {
 	NotifyDataChanged(NDUITopics::NightClock);
+	NotifyDataChanged(NDUITopics::ExpeditionHUD);
 }
 
 void UNDUIExpeditionDataProvider::HandleNightPhaseChanged(ENDNightPhase NewPhase, ENDNightPhase OldPhase)

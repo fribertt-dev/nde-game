@@ -27,6 +27,10 @@ public:
 	virtual bool IsSimulated_Implementation() const override;
 	virtual FNDNightClockVM GetNightClock_Implementation() const override;
 	virtual FNDResultsVM GetLastResults_Implementation() const override;
+	virtual FNDExpeditionHUDVM GetExpeditionHUD_Implementation() const override;
+
+	/** Título del resultado (Perfecto, Éxito, Extracción parcial, Fracaso). */
+	static FText GetOutcomeTitle(ENDExpeditionOutcome Outcome);
 
 	/** Fase del reloj de la UI a partir de las fases de reglas. */
 	static ENDUINightPhase ToUIPhase(ENDExpeditionPhase ExpeditionPhase, ENDNightPhase NightPhase);
@@ -54,6 +58,9 @@ protected:
 
 	UFUNCTION()
 	void HandleExpeditionSettled(const FNDRunSummary& Summary);
+
+	/** Huella de lo que lleva el jugador local, para avisar solo cuando cambia. */
+	uint32 LastCarryHash = 0;
 
 	TWeakObjectPtr<ANDExpeditionDirector> BoundDirector;
 	FTSTicker::FDelegateHandle PollHandle;

@@ -30,7 +30,7 @@ Comandos de depuración (consola, `~`):
 | `nde.Expedition.ToVan [espera]` | Servidor: lleva a todos a la camioneta. |
 | `nde.Expedition.SkipTime <s> [espera]` | Servidor: adelanta el reloj de la noche. |
 | `nde.Expedition.ToLoot [n] [espera]` | Servidor: pone al jugador mirando el objeto de botín número n. |
-| `nde.Expedition.Shot [espera]` | Captura 1280x720 en `Saved/Screenshots` (también en un cliente que entra después). |
+| `nde.Expedition.Shot [espera]` | Captura con la interfaz en `Saved/Screenshots` (también en un cliente que entra después). |
 | `nde.Expedition.Grab <L16 o n> [jugador] [espera]` | Servidor: el jugador coge el objeto como con E. Dos veces con jugadores distintos = bulto compartido. |
 | `nde.Expedition.Drop [jugador] [lanzar 0/1] [espera]` | Servidor: suelta o lanza. |
 | `nde.Expedition.Walk [jugador] [cm] [espera]` | Servidor: el jugador avanza chocando con las paredes. |

@@ -163,6 +163,37 @@ struct FNDNightClockVM
 	int32 SecuredLootValue = 0;
 };
 
+// Lo que el HUD de expedición enseña además del reloj: objetivo del contrato y carga del jugador local.
+USTRUCT(BlueprintType)
+struct FNDExpeditionHUDVM
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	FText ContractName;
+
+	// Qué hay que llevar a la camioneta, en una frase.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	FText ObjectiveText;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	bool bObjectiveMet = false;
+
+	// Nombre de lo que lleva en las manos. Vacío = nada.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	FText HandsItem;
+
+	// Lo que lleva en las manos necesita otro portador para moverse a velocidad normal.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	bool bHandsNeedHelp = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	int32 PocketCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	int32 PocketSlots = 3;
+};
+
 USTRUCT(BlueprintType)
 struct FNDPlayerVoiceVM
 {
@@ -218,6 +249,16 @@ struct FNDResultsVM
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
 	TArray<FText> FunnyIncidents;
+
+	// Título del resultado: Perfecto, Éxito, Extracción parcial o Fracaso (GDD 7.2).
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	FText OutcomeTitle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	int32 LootPoints = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "UI")
+	int32 Quota = 0;
 };
 
 // Respuesta a un comando de la UI. bSimulated indica que no hubo escritura persistente.

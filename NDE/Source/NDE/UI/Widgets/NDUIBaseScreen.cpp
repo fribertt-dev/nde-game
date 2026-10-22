@@ -49,6 +49,7 @@ void UNDUIBaseScreen::SetLoading(bool bInLoading)
 
 void UNDUIBaseScreen::RequestRefresh()
 {
+	NativeRefreshFromViewModel();
 	BP_RefreshFromViewModel();
 }
 

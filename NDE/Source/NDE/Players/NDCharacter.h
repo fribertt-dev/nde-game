@@ -124,6 +124,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetFirstPerson(bool bFirstPerson);
 
+	/** Texto de depuración del bucle: según nde.Expedition.DebugText (por defecto, solo sin HUD). */
+	bool ShouldDrawDebugText() const;
+
 	void UpdateHeadBob(float DeltaSeconds);
 
 	/** Inclina la nariz con el cabeceo de la vista (replicado): los demás ven hacia dónde mira. */

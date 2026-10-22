@@ -10,6 +10,7 @@ TArray<FNDInventorySlotVM> UNDUIDataProvider::GetLoadout_Implementation() const 
 FNDNightClockVM UNDUIDataProvider::GetNightClock_Implementation() const { return FNDNightClockVM(); }
 TArray<FNDPlayerVoiceVM> UNDUIDataProvider::GetVoiceStates_Implementation() const { return {}; }
 FNDResultsVM UNDUIDataProvider::GetLastResults_Implementation() const { return FNDResultsVM(); }
+FNDExpeditionHUDVM UNDUIDataProvider::GetExpeditionHUD_Implementation() const { return FNDExpeditionHUDVM(); }
 
 void UNDUIDataProvider::RequestSelectSpecies_Implementation(ENDDesveladoSpecies Species)
 {

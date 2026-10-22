@@ -6,6 +6,8 @@
 #include "UI/Data/NDUIThemeData.h"
 #include "UI/NDUISettings.h"
 #include "UI/NDUITags.h"
+#include "UI/Screens/NDUIExpeditionHUD.h"
+#include "UI/Screens/NDUIResultsScreen.h"
 #include "UI/Widgets/NDUIBaseModal.h"
 #include "UI/Widgets/NDUIBaseScreen.h"
 #include "UI/Widgets/NDUIRootLayout.h"
@@ -29,7 +31,14 @@ void UNDUIManagerSubsystem::LoadSettingsAssets()
 	if (!ScreenRegistry)
 	{
 		ScreenRegistry = Settings->ScreenRegistry.LoadSynchronous();
-		UE_CLOG(!ScreenRegistry, LogNDUI, Warning, TEXT("ScreenRegistry is not set in Project Settings > Game > NDE UI"));
+	}
+	if (!ScreenRegistry)
+	{
+		// Sin DA_UIScreenRegistry: las pantallas hechas en C++ (HUD de expedición y resultados).
+		ScreenRegistry = NewObject<UNDUIScreenRegistry>(this, TEXT("NativeScreenRegistry"));
+		ScreenRegistry->Screens.Add(NDUITags::Screen_ExpeditionHUD, FNDUIScreenEntry{ UNDUIExpeditionHUD::StaticClass(), ENDUILayer::Game });
+		ScreenRegistry->Screens.Add(NDUITags::Screen_Results, FNDUIScreenEntry{ UNDUIResultsScreen::StaticClass(), ENDUILayer::GameMenu });
+		UE_LOG(LogNDUI, Log, TEXT("ScreenRegistry is not set in Project Settings > Game > NDE UI: using the native screens"));
 	}
 	if (!Theme)
 	{
