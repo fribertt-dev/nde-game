@@ -8,6 +8,7 @@
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenTypes.h"
 #include "Players/NDScaleSettings.h"
+#include "TimerManager.h"
 
 namespace NDScaleDebug
 {
@@ -64,6 +65,54 @@ namespace NDScaleDebug
 			Scale->EyeHeight, Scale->CapsuleHalfHeight * 2.f, Scale->MaxStepHeight, Scale->GetJumpApex(World->GetGravityZ()),
 			DoorWidth, NDHouseGen::DoorHeight, NDHouseGen::WallHeight);
 	}
+
+	/** nde.Debug.Delay <segundos> <comando...>: lanza un comando de consola más tarde (capturas desde -ExecCmds). */
+	void Delay(const TArray<FString>& Args, UWorld* World)
+	{
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		if (!PC || Args.Num() < 2)
+		{
+			UE_LOG(LogNDNet, Warning, TEXT("nde.Debug.Delay: uso nde.Debug.Delay <segundos> <comando>"));
+			return;
+		}
+		const float Seconds = FCString::Atof(*Args[0]);
+		const FString Command = FString::Join(TArrayView<const FString>(Args).RightChop(1), TEXT(" "));
+		FTimerHandle Handle;
+		TWeakObjectPtr<APlayerController> WeakPC(PC);
+		World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([WeakPC, Command]()
+		{
+			if (WeakPC.IsValid())
+			{
+				WeakPC->ConsoleCommand(Command, true);
+			}
+		}), FMath::Max(Seconds, 0.01f), false);
+	}
+
+	/** nde.Debug.PlacePlayer X Y Z Yaw Pitch: pone al jugador local en un punto mirando a un sitio (pruebas y capturas). */
+	void PlacePlayer(const TArray<FString>& Args, UWorld* World)
+	{
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		if (!Pawn || Args.Num() < 5 || !Pawn->HasAuthority())
+		{
+			UE_LOG(LogNDNet, Warning, TEXT("nde.Debug.PlacePlayer: uso nde.Debug.PlacePlayer X Y Z Yaw Pitch (en el servidor)"));
+			return;
+		}
+		const FVector Location(FCString::Atof(*Args[0]), FCString::Atof(*Args[1]), FCString::Atof(*Args[2]));
+		const FRotator View(FCString::Atof(*Args[4]), FCString::Atof(*Args[3]), 0.f);
+		Pawn->TeleportTo(Location, FRotator(0.f, View.Yaw, 0.f));
+		PC->SetControlRotation(View);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs DelayCommand(
+		TEXT("nde.Debug.Delay"),
+		TEXT("Lanza un comando de consola dentro de unos segundos. Uso: nde.Debug.Delay 5 HighResShot 1280x720"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Delay));
+
+	FAutoConsoleCommandWithWorldAndArgs PlacePlayerCommand(
+		TEXT("nde.Debug.PlacePlayer"),
+		TEXT("Pone al jugador local en X Y Z mirando con Yaw y Pitch (solo servidor). Uso: nde.Debug.PlacePlayer -1400 800 50 -90 10"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&PlacePlayer));
 
 	FAutoConsoleCommandWithWorldAndArgs DebugCommand(
 		TEXT("nde.Scale.Debug"),
