@@ -172,6 +172,50 @@ struct FNDHouseLayoutMarker
 	FTransform LotTransform;
 };
 
+// --- Puntos de juego. Salen del layout (y de la semilla), así que son iguales en todas las máquinas.
+// StableId es el índice en su lista: sirve de StableSpawnId para lo que se cree en ellos.
+
+/** Escondite real: cuántos caben, por dónde se entra y si se ve desde fuera. */
+struct FNDHouseHidingSpot
+{
+	int32 StableId = INDEX_NONE;
+	int32 Room = INDEX_NONE;
+	/** Relativo al centro del lote. */
+	FTransform LotTransform;
+	/** Punto de entrada y salida, en la sala, hacia su centro. */
+	FVector EntryPoint = FVector::ZeroVector;
+	int32 Capacity = 1;
+	ENDHidingSpotKind Kind = ENDHidingSpotKind::BehindFurniture;
+};
+
+/** Peligro fijo de la casa, siempre fuera de la ruta del bulto y lejos de las puertas. */
+struct FNDHouseHazard
+{
+	int32 StableId = INDEX_NONE;
+	int32 Room = INDEX_NONE;
+	ENDHouseHazardType Type = ENDHouseHazardType::CreakyFloor;
+	FTransform LotTransform;
+};
+
+/** Nodo de patrulla de la criatura: uno por sala a la que llega. */
+struct FNDHousePatrolNode
+{
+	int32 StableId = INDEX_NONE;
+	int32 Room = INDEX_NONE;
+	/** Relativo al centro del lote, en el suelo de su piso. */
+	FVector Location = FVector::ZeroVector;
+	/** Nodos vecinos por puertas por las que cabe la criatura. */
+	TArray<int32> Neighbors;
+};
+
+/** Cuánto sonido pasa por una puerta entre dos salas (0 = nada, 1 = todo). */
+struct FNDHouseAudioLink
+{
+	int32 RoomA = INDEX_NONE;
+	int32 RoomB = INDEX_NONE;
+	float Transmission = 1.f;
+};
+
 /**
  * Casa resuelta a partir de un manifiesto y del catálogo. Servidor y clientes la calculan
  * igual, así que todo lo que se construye o se valida sale de aquí.
@@ -186,6 +230,40 @@ struct NDE_API FNDHouseLayout
 	int32 EntryExitSocket = INDEX_NONE;
 	int32 BedroomRoom = INDEX_NONE;
 	int32 ObjectiveRoom = INDEX_NONE;
+	/** Semilla del manifiesto: reparte los peligros. */
+	int64 RunSeed = 0;
+
+	TArray<FNDHouseHidingSpot> HidingSpots;
+	TArray<FNDHouseHazard> Hazards;
+	TArray<FNDHousePatrolNode> PatrolNodes;
+	/** Recorrido de patrulla desde el dormitorio: pasa por todos los nodos y vuelve (índices de PatrolNodes). */
+	TArray<int32> PatrolRoute;
+	TArray<FNDHouseAudioLink> AudioLinks;
+
+	/** Paso del sonido por un hueco abierto, por una puerta cerrada y por una escalera. */
+	static constexpr float DoorOpenTransmission = 0.6f;
+	static constexpr float DoorClosedTransmission = 0.2f;
+	static constexpr float StairsTransmission = 0.7f;
+	/** Pasos anchos (salas abiertas, 300 cm o más) casi no frenan el sonido. */
+	static constexpr float WideOpeningTransmission = 0.85f;
+	/** Distancia mínima de un peligro a una puerta abierta, en cm. */
+	static constexpr float HazardDoorClearance = 140.f;
+
+	/** Rellena escondites, peligros, patrulla y grafo de sonido. Lo llama FromManifest. */
+	void BuildGameplayPoints();
+
+	/** Sala que contiene un punto (relativo al centro del lote), o INDEX_NONE. */
+	int32 FindRoomAt(const FVector& LotPosition) const;
+
+	/**
+	 * Fracción del sonido (0-1) que llega de A a B por las puertas, sin contar la distancia:
+	 * 1 en la misma sala; el mejor camino multiplica el paso de cada puerta. 0 si no hay camino o
+	 * algún punto está fuera de la casa.
+	 */
+	float GetSoundTransmission(const FVector& LotA, const FVector& LotB) const;
+
+	/** Salas por las que va el bulto (entrada → objetivo); ahí no puede haber peligros. */
+	void GetCarryRouteRooms(float CarryEnvelopeWidth, TSet<int32>& OutRooms) const;
 
 	/** false (con motivo) si el manifiesto pide módulos o huecos que no existen. */
 	static bool FromManifest(const FNDHouseGenerationManifest& Manifest, FNDHouseLayout& OutLayout, FString& OutError);

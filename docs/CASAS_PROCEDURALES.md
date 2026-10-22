@@ -25,6 +25,16 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 - Mínimo 6 huecos de botín, 4 spawns en la Entrada, anchor de criatura en el dormitorio, extracción en el jardín delantero.
 - El bucle de expedición usa estas marcas (`ANDHouseGameMode`, ver `docs/BUCLE_EXPEDICION.md`): el botín sale en los huecos según el contrato y la semilla (`HouseGen/NDHouseLoot`, prueba `NDE.HouseGen.LootPlan`), lo que pide el contrato va a la sala objetivo, y en la extracción va la zona de depósito con la camioneta greybox de lado.
 
+## Puntos de juego (escondites, peligros, patrulla y sonido)
+Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así que servidor y clientes tienen los mismos sin replicar nada más. Cada uno tiene `StableId` (su índice), que sirve de StableSpawnId.
+- **Escondites** (`HidingSpots`): las marcas azules de cada módulo. Tipo según la sala: debajo de un mueble (dormitorios y sala de estar; caben 2), dentro de un armario (cocina, baño, almacén, despensa, lavadero; cabe 1) o detrás de un mueble (resto; cabe 1, se le ve de lado). Cada uno tiene su punto de entrada y salida hacia el centro de la sala.
+- **Peligros** (`Hazards`): suelo que cruje, objeto frágil y trampa de ratón. Más o menos en una de cada dos salas libres, nunca en la ruta del bulto (entrada → objetivo), ni en escaleras, ni a menos de 140 cm de una puerta.
+- **Patrulla** (`PatrolNodes`, `PatrolRoute`): un nodo por sala (en las escaleras, en el umbral de su puerta), unidos por las puertas por las que cabe la criatura. El recorrido sale del dormitorio, pasa por todas las salas y vuelve. En partida, el servidor comprueba con el NavMesh que se llega a cada nodo (`PatrolNodesStuck` y el log).
+- **Sonido** (`AudioLinks`): una arista por puerta con cuánto sonido pasa: hueco o puerta abierta 0,6, paso ancho 0,85, escalera 0,7 (y 0,2 para una puerta cerrada, cuando las haya). `ANDHouseLot::GetSoundTransmission(A, B)` da la fracción que llega de un punto a otro por el mejor camino, sin contar la distancia.
+- El validador pide al menos 2 escondites con entrada accesible, que la patrulla cubra todas las salas sin nodos aislados y que ningún peligro esté en la ruta del bulto ni tape una puerta. Prueba: `NDE.HouseGen.GameplayPoints` (600 casas, 9,8 escondites y 2 peligros de media).
+- `nde.HouseGen.DebugPoints [segundos] [espera]` los dibuja encima de todo: escondites en azul (con capacidad y entrada), peligros en naranja, patrulla en rojo y el paso del sonido en cian.
+- Cambió la versión de generación a `housegen-0.2` (el validador nuevo puede descartar casas que antes valían).
+
 ## Pisos y sótano
 - Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).
 - Opciones del lote: `UpperFloor` y `Basement` (Auto según el tamaño, Never, Always). Con Auto: Small 10 % / 15 %, Medium 50 % / 30 %, Large 75 % / 40 %.

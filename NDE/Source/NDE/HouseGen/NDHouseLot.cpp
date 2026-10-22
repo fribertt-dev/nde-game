@@ -11,6 +11,8 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Containers/Ticker.h"
+#include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenDebug.h"
 #include "HouseGen/NDHouseGenerator.h"
@@ -77,6 +79,48 @@ namespace NDHouseLot
 		}), Delay, false);
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.Regenerate: semilla %lld dentro de %.0f s"), Seed, Delay);
 	}
+
+	void DrawPointsNow(UWorld* World, float Duration)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		if (!Lot || !Lot->IsHouseBuilt())
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.DebugPoints: no hay casa construida"));
+			return;
+		}
+		const FNDHouseLayout& Layout = Lot->GetLayout();
+		NDHouseGenDebug::DrawGameplayPoints(World, Lot->GetLotToWorld(), Layout, Duration);
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: %d escondites, %d peligros, %d nodos de patrulla (recorrido de %d pasos), %d puertas en el grafo de sonido"),
+			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
+	}
+
+	void DebugPoints(const TArray<FString>& Args, UWorld* World)
+	{
+		const float Duration = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 30.f;
+		const float Delay = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
+		if (Delay <= 0.f)
+		{
+			DrawPointsNow(World, Duration);
+			return;
+		}
+		// Con espera, por el ticker del motor: sirve en un cliente que se conecta después (cambia de mundo).
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Duration](float)
+		{
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				if (Context.World() && (Context.WorldType == EWorldType::Game || Context.WorldType == EWorldType::PIE))
+				{
+					DrawPointsNow(Context.World(), Duration);
+				}
+			}
+			return false;
+		}), Delay);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs DebugPointsCommand(
+		TEXT("nde.HouseGen.DebugPoints"),
+		TEXT("Dibuja escondites (azul), peligros (naranja), patrulla (rojo) y paso del sonido por puerta (cian). Uso: nde.HouseGen.DebugPoints [segundos] [espera]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DebugPoints));
 
 	FAutoConsoleCommandWithWorldAndArgs RegenerateCommand(
 		TEXT("nde.HouseGen.Regenerate"),
@@ -462,6 +506,43 @@ void ANDHouseLot::CheckNavigationPath()
 				bProjected ? TEXT("sin camino completo") : TEXT("fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
 		}
 	}
+
+	// Patrulla: desde el dormitorio a cada nodo. Un nodo sin camino dejaría a la criatura atascada.
+	PatrolNodesStuck = 0;
+	FNavLocation BedroomOnNav;
+	if (Layout.PatrolNodes.IsValidIndex(Layout.BedroomRoom)
+		&& NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.PatrolNodes[Layout.BedroomRoom].Location), BedroomOnNav, Extent))
+	{
+		for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
+		{
+			if (Node.Room == Layout.BedroomRoom)
+			{
+				continue;
+			}
+			FNavLocation NodeOnNav;
+			const bool bProjected = NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Node.Location), NodeOnNav, Extent);
+			UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, NodeOnNav.Location) : nullptr;
+			if (!Path || !Path->IsValid() || Path->IsPartial())
+			{
+				++PatrolNodesStuck;
+				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s"),
+					*LotInfo.LotId.ToString(), Node.StableId, Node.Room, *NDHouseGen::GetRoomTypeName(Layout.Rooms[Node.Room].Def->RoomType),
+					Layout.Rooms[Node.Room].Floor, bProjected ? TEXT("") : TEXT(" (fuera del NavMesh)"));
+			}
+		}
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: patrulla %d nodos, %d sin camino; recorrido de %d pasos"),
+			*LotInfo.LotId.ToString(), Layout.PatrolNodes.Num(), PatrolNodesStuck, Layout.PatrolRoute.Num());
+	}
+}
+
+float ANDHouseLot::GetSoundTransmission(const FVector& WorldA, const FVector& WorldB) const
+{
+	if (!bHouseBuilt)
+	{
+		return 1.f;
+	}
+	const FTransform LotToWorld = GetLotToWorld();
+	return Layout.GetSoundTransmission(LotToWorld.InverseTransformPosition(WorldA), LotToWorld.InverseTransformPosition(WorldB));
 }
 
 FTransform ANDHouseLot::GetPlayerSpawnTransform(int32 Index) const

@@ -447,4 +447,90 @@ bool FNDHouseGenLootPlanTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenGameplayPointsTest, "NDE.HouseGen.GameplayPoints", NDHouseGenTests::Flags)
+
+bool FNDHouseGenGameplayPointsTest::RunTest(const FString& Parameters)
+{
+	int32 Houses = 0;
+	int32 TotalHiding = 0;
+	int32 TotalHazards = 0;
+	for (int64 Seed = 1; Seed <= 600; ++Seed)
+	{
+		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
+		// Un tercio con piso superior y sótano, para probar escaleras en la patrulla y el sonido.
+		if (Seed % 3 == 0)
+		{
+			Params.ApplyFloorOptions(ENDFloorOption::Always, ENDFloorOption::Always);
+		}
+		FNDHouseGenerationManifest Manifest;
+		FNDHouseLayout Layout;
+		if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+		{
+			return false;
+		}
+		++Houses;
+		TotalHiding += Layout.HidingSpots.Num();
+		TotalHazards += Layout.Hazards.Num();
+
+		// Mismo manifiesto, mismos puntos (lo que construye un cliente).
+		FNDHouseLayout Again;
+		FString Error;
+		FNDHouseLayout::FromManifest(Manifest, Again, Error);
+		const bool bSame = Again.HidingSpots.Num() == Layout.HidingSpots.Num() && Again.Hazards.Num() == Layout.Hazards.Num()
+			&& Again.PatrolRoute == Layout.PatrolRoute
+			&& (Layout.Hazards.IsEmpty() || Again.Hazards.Last().LotTransform.Equals(Layout.Hazards.Last().LotTransform));
+		if (!bSame)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: los puntos de juego no salen iguales del mismo manifiesto"), Seed));
+			return false;
+		}
+
+		// Escondites con entrada dentro de su sala.
+		if (Layout.HidingSpots.Num() < 2)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: %d escondites"), Seed, Layout.HidingSpots.Num()));
+		}
+		for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+		{
+			if (Layout.FindRoomAt(Spot.EntryPoint) != Spot.Room || Spot.Capacity < 1 || Spot.Capacity > 2)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: escondite %d mal colocado"), Seed, Spot.StableId));
+			}
+		}
+
+		// Patrulla: todas las salas, empieza y acaba en el dormitorio.
+		TSet<int32> Visited(Layout.PatrolRoute);
+		if (Visited.Num() != Layout.Rooms.Num() || Layout.PatrolRoute.IsEmpty()
+			|| Layout.PatrolRoute[0] != Layout.BedroomRoom || Layout.PatrolRoute.Last() != Layout.BedroomRoom)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: la patrulla recorre %d de %d salas"), Seed, Visited.Num(), Layout.Rooms.Num()));
+		}
+
+		// Peligros fuera de la ruta del bulto.
+		TSet<int32> RouteRooms;
+		Layout.GetCarryRouteRooms(Params.CarryEnvelopeWidth, RouteRooms);
+		for (const FNDHouseHazard& Hazard : Layout.Hazards)
+		{
+			if (RouteRooms.Contains(Hazard.Room))
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: peligro en la ruta del bulto"), Seed));
+			}
+		}
+
+		// Sonido: 1 en la misma sala, simétrico, y entre 0 y 1 hacia el dormitorio.
+		const FVector Entry = Layout.PatrolNodes[Layout.EntryRoom].Location + FVector(0.f, 0.f, 50.f);
+		const FVector Bedroom = Layout.PatrolNodes[Layout.BedroomRoom].Location + FVector(0.f, 0.f, 50.f);
+		const float Same = Layout.GetSoundTransmission(Entry, Entry);
+		const float There = Layout.GetSoundTransmission(Entry, Bedroom);
+		const float Back = Layout.GetSoundTransmission(Bedroom, Entry);
+		if (!FMath::IsNearlyEqual(Same, 1.f, 1e-4f) || There <= 0.f || There >= 1.f || !FMath::IsNearlyEqual(There, Back, 1e-4f))
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: sonido entrada-dormitorio %.3f / %.3f (misma sala %.3f)"), Seed, There, Back, Same));
+		}
+	}
+	AddInfo(FString::Printf(TEXT("%d casas: %.1f escondites y %.1f peligros de media"), Houses,
+		TotalHiding / static_cast<float>(Houses), TotalHazards / static_cast<float>(Houses)));
+	return true;
+}
+
 #endif

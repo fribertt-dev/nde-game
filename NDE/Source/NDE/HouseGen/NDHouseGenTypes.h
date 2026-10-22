@@ -26,7 +26,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.1");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.2");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */
@@ -116,6 +116,24 @@ enum class ENDRoomMarkerType : uint8
 	LootSocket UMETA(ToolTip = "Hueco donde puede aparecer botín."),
 	MonsterAnchor UMETA(ToolTip = "Donde duerme o vuelve la criatura gigante."),
 	HideSpot UMETA(ToolTip = "Escondite para un Desvelado.")
+};
+
+/** Cómo se esconde un Desvelado; decide cuántos caben y si se le ve desde fuera. */
+UENUM(BlueprintType)
+enum class ENDHidingSpotKind : uint8
+{
+	UnderFurniture UMETA(ToolTip = "Debajo de un mueble (cama, sofá): caben dos, no se les ve de pie."),
+	InsideCabinet UMETA(ToolTip = "Dentro de un armario o mueble con puerta: cabe uno, no se le ve."),
+	BehindFurniture UMETA(ToolTip = "Detrás de un mueble: cabe uno, se le ve desde un lado.")
+};
+
+/** Peligro fijo de la casa que hace ruido o atrapa. */
+UENUM(BlueprintType)
+enum class ENDHouseHazardType : uint8
+{
+	CreakyFloor UMETA(ToolTip = "Suelo que cruje al pisarlo."),
+	FragileItem UMETA(ToolTip = "Objeto frágil en un mueble: se cae y suena si se roza."),
+	MouseTrap UMETA(ToolTip = "Trampa de ratón: atrapa un momento y hace ruido.")
 };
 
 /** Hueco de puerta en el borde de un módulo, en coordenadas del módulo sin rotar. */

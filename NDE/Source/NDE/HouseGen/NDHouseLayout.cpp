@@ -261,6 +261,9 @@ bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FN
 		Marker.Room = 0;
 		Marker.LotTransform = FTransform(FRotator(0.f, static_cast<int32>(Exit.LotDirection) * 90.f, 0.f), OutLayout.Lot.GetCellCenter(Exit.GetOutsideCell()));
 	}
+
+	OutLayout.RunSeed = Manifest.RunSeed;
+	OutLayout.BuildGameplayPoints();
 	return true;
 }
 
@@ -561,6 +564,54 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 	if (Layout.ObjectiveRoom != INDEX_NONE && !Layout.FindRoute(Layout.EntryRoom, Layout.ObjectiveRoom, Params.CarryEnvelopeWidth))
 	{
 		OutErrors.Add(FString::Printf(TEXT("No hay ruta de bulto de %.0f cm entre la entrada y el objetivo"), Params.CarryEnvelopeWidth));
+	}
+
+	// Escondites: al menos dos, en salas a las que se llega y con la entrada dentro de su sala.
+	constexpr int32 MinHidingSpots = 2;
+	if (Layout.HidingSpots.Num() < MinHidingSpots)
+	{
+		OutErrors.Add(FString::Printf(TEXT("Solo %d escondites; se piden %d"), Layout.HidingSpots.Num(), MinHidingSpots));
+	}
+	for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+	{
+		if (Depths[Spot.Room] == INDEX_NONE || Layout.FindRoomAt(Spot.EntryPoint) != Spot.Room)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Escondite %d (sala %d) sin entrada accesible"), Spot.StableId, Spot.Room));
+		}
+	}
+
+	// Patrulla: un nodo por sala, ninguno aislado, y el recorrido pasa por todos.
+	TSet<int32> Patrolled(Layout.PatrolRoute);
+	if (Layout.PatrolNodes.Num() != Layout.Rooms.Num() || Patrolled.Num() != Layout.PatrolNodes.Num())
+	{
+		OutErrors.Add(FString::Printf(TEXT("La patrulla recorre %d de %d salas"), Patrolled.Num(), Layout.Rooms.Num()));
+	}
+	for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
+	{
+		if (Layout.PatrolNodes.Num() > 1 && Node.Neighbors.IsEmpty())
+		{
+			OutErrors.Add(FString::Printf(TEXT("Nodo de patrulla %d aislado (sala %d)"), Node.StableId, Node.Room));
+		}
+	}
+
+	// Peligros: nunca en la ruta del bulto ni pegados a una puerta.
+	TSet<int32> RouteRooms;
+	Layout.GetCarryRouteRooms(Params.CarryEnvelopeWidth, RouteRooms);
+	for (const FNDHouseHazard& Hazard : Layout.Hazards)
+	{
+		if (RouteRooms.Contains(Hazard.Room))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Peligro %d en la ruta del bulto (sala %d)"), Hazard.StableId, Hazard.Room));
+		}
+		const FNDHouseLayoutRoom& Room = Layout.Rooms[Hazard.Room];
+		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+		{
+			if (Room.Sockets[SocketIndex].IsOpen()
+				&& FVector::Dist2D(Layout.GetSocketLocation(Hazard.Room, SocketIndex), Hazard.LotTransform.GetLocation()) < FNDHouseLayout::HazardDoorClearance)
+			{
+				OutErrors.Add(FString::Printf(TEXT("Peligro %d tapa una puerta (sala %d)"), Hazard.StableId, Hazard.Room));
+			}
+		}
 	}
 
 	// La criatura tiene que poder llegar a toda la casa (sótano y piso de arriba incluidos) sin pasos bajos.
