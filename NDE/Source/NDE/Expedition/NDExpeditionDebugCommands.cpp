@@ -207,13 +207,87 @@ namespace NDExpeditionDebug
 				if (APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr)
 				{
 					const FVector Offset(0.f, (Index++ - 1) * 80.f, 100.f);
-					Pawn->TeleportTo(Van->GetActorLocation() + Van->GetActorRotation().RotateVector(Offset), Pawn->GetActorRotation());
+					const FVector Location = Van->GetActorLocation() + Van->GetActorRotation().RotateVector(Offset);
+					// Mirando a la puerta de la casa (el director está en la entrada).
+					const ANDExpeditionDirector* Director = ANDExpeditionDirector::Get(W);
+					const FRotator Look = Director ? (Director->GetActorLocation() - Location).GetSafeNormal2D().Rotation() : Pawn->GetActorRotation();
+					Pawn->TeleportTo(Location, Look);
+					It->Get()->ClientSetRotation(Look);
 				}
 			}
 			UE_LOG(LogNDExpeditionDebug, Log, TEXT("%d jugadores llevados a la camioneta"), Index);
 			return false;
 		});
 	}
+
+	void ToLoot(const TArray<FString>& Args, UWorld* World)
+	{
+		const int32 LootIndex = Args.IsValidIndex(0) ? FCString::Atoi(*Args[0]) : 0;
+		RunLater(World, ArgFloat(Args, 1, 0.f), false, [LootIndex](UWorld* W)
+		{
+			TArray<ANDLootActor*> Loot;
+			for (TActorIterator<ANDLootActor> It(W); It; ++It)
+			{
+				Loot.Add(*It);
+			}
+			APawn* Pawn = FirstPawn(W);
+			if (Loot.IsEmpty() || !Pawn || !Pawn->HasAuthority())
+			{
+				return false;
+			}
+			const ANDLootActor* Target = Loot[FMath::Abs(LootIndex) % Loot.Num()];
+			const FVector LootLocation = Target->GetActorLocation();
+			// Más lejos cuanto más grande es el objeto.
+			const float Distance = FMath::Max(170.f, Target->GetComponentsBoundingBox().GetExtent().Size2D() * 3.f);
+			// El lado más despejado (la cámara va detrás del jugador y también necesita sitio).
+			const FVector Start = LootLocation + FVector(0.f, 0.f, 60.f);
+			FCollisionQueryParams Params(NAME_None, false, Target);
+			Params.AddIgnoredActor(Pawn);
+			FVector BestDir = FVector::BackwardVector;
+			float BestFree = -1.f;
+			for (int32 Step = 0; Step < 16; ++Step)
+			{
+				const FVector Dir = FRotator(0.f, Step * 22.5f, 0.f).Vector();
+				FHitResult Hit;
+				const float Free = W->LineTraceSingleByChannel(Hit, Start, Start + Dir * 800.f, ECC_Visibility, Params) ? Hit.Distance : 800.f;
+				if (Free > BestFree)
+				{
+					BestFree = Free;
+					BestDir = Dir;
+				}
+			}
+			const FVector Spot = Start + BestDir * FMath::Clamp(BestFree - 220.f, 120.f, Distance);
+			const FRotator Look = (LootLocation - Spot).Rotation();
+			Pawn->TeleportTo(Spot, FRotator(0.f, Look.Yaw, 0.f));
+			if (AController* Controller = Pawn->GetController())
+			{
+				Controller->SetControlRotation(Look);
+			}
+			UE_LOG(LogNDExpeditionDebug, Log, TEXT("Jugador junto a %s"), Target->GetDefinition() ? *Target->GetDefinition()->LootId.ToString() : TEXT("?"));
+			return false;
+		});
+	}
+
+	void Shot(const TArray<FString>& Args, UWorld* World)
+	{
+		RunLater(World, ArgFloat(Args, 0, 0.f), false, [](UWorld* W)
+		{
+			// Por el jugador local, para que lo atienda su viewport.
+			if (APlayerController* PC = W->GetFirstPlayerController())
+			{
+				PC->ConsoleCommand(TEXT("HighResShot 1280x720"));
+			}
+			return false;
+		});
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs ToLootCommand(TEXT("nde.Expedition.ToLoot"),
+		TEXT("Solo servidor: pone al jugador mirando un objeto de botin. Uso: nde.Expedition.ToLoot [indice] [segundos de espera]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ToLoot));
+
+	FAutoConsoleCommandWithWorldAndArgs ShotCommand(TEXT("nde.Expedition.Shot"),
+		TEXT("Captura de pantalla 1280x720 tras una espera. Uso: nde.Expedition.Shot [segundos de espera]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Shot));
 
 	FAutoConsoleCommandWithWorldAndArgs StatusCommand(TEXT("nde.Expedition.Status"),
 		TEXT("Escribe en el log el estado de la expedicion. Uso: nde.Expedition.Status [cada cuantos segundos, 0 = una vez]"),

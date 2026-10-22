@@ -29,6 +29,8 @@ Comandos de depuración (consola, `~`):
 | `nde.Expedition.DepositLoot [cuántos] [espera]` | Servidor: deposita botín suelto en la camioneta. |
 | `nde.Expedition.ToVan [espera]` | Servidor: lleva a todos a la camioneta. |
 | `nde.Expedition.SkipTime <s> [espera]` | Servidor: adelanta el reloj de la noche. |
+| `nde.Expedition.ToLoot [n] [espera]` | Servidor: pone al jugador mirando el objeto de botín número n. |
+| `nde.Expedition.Shot [espera]` | Captura 1280x720 en `Saved/Screenshots`. |
 
 ## Controles del personaje provisional
 
