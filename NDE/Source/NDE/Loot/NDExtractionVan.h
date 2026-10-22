@@ -7,6 +7,7 @@
 #include "NDExtractionVan.generated.h"
 
 class UBoxComponent;
+class UMaterialInterface;
 class UStaticMeshComponent;
 class ANDLootActor;
 class APawn;
@@ -28,6 +29,29 @@ public:
 	/** Volumen seguro: deposita botín y define quién está "en la camioneta". */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
 	TObjectPtr<UBoxComponent> SafeZone;
+
+	// --- Placeholder greybox con formas básicas del motor, hasta tener el modelo de arte. ---
+	// La camioneta va de lado junto a la zona de depósito, con las puertas traseras hacia ella:
+	// así no tapa la puerta de la casa. Body es la caja de carga.
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	TObjectPtr<UStaticMeshComponent> Cab;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
+
+	/** Aro en el suelo que marca la zona de depósito. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	TObjectPtr<UStaticMeshComponent> DepositRing;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	TObjectPtr<class UPointLightComponent> DepositLight;
+
+	/** Muestra la camioneta greybox. Desactívalo si el nivel ya pone otra malla. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	bool bShowGreybox = true;
+
+	virtual void OnConstruction(const FTransform& Transform) override;
 
 	UFUNCTION(BlueprintPure, Category = "NDE|Van")
 	bool IsPawnInside(const APawn* Pawn) const;
@@ -56,4 +80,7 @@ protected:
 	TArray<TObjectPtr<APawn>> Occupants;
 
 	FTimerHandle SweepTimer;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> BaseMaterial;
 };

@@ -15,7 +15,7 @@ Primer corte jugable del bucle central: entrar en la casa, coger botín, llevarl
 
 ### En la casa generada (L_CasaPrueba)
 
-`ANDHouseGameMode` monta el bucle solo: crea el director de expedición, reparte el botín en los huecos amarillos de la casa y pone la camioneta en la marca verde del jardín delantero. Cruzar la puerta de la entrada arranca el reloj.
+`ANDHouseGameMode` monta el bucle solo: crea el director de expedición, reparte el botín en los huecos amarillos de la casa y pone la camioneta en el jardín delantero: la zona de depósito (aro verde con luz) queda delante de la puerta y la camioneta, de lado junto a ella, con las puertas traseras hacia el aro. Cruzar la puerta de la entrada arranca el reloj.
 
 - Contrato: `?Contract=C07` en la URL (por defecto C01). Ejemplo: `L_CasaPrueba?listen?Seed=42?Contract=C07`.
 - Los objetos que pide el contrato (L16 en C07, L32 en C03) salen en la sala objetivo, que ya tiene ruta validada para el bulto. El resto se reparte al azar hasta pasar la cuota con un 50 % de margen; los pesados extra solo van en la planta baja.
@@ -62,7 +62,7 @@ El estado de la expedición se ve como texto de depuración arriba a la izquierd
 - **Inserción (7.1):** el reloj empieza cuando el primero cruza la gatera o a los 20 s.
 - **Reloj nocturno (7.6 y 24.9):** autoritativo con el tiempo del servidor. Fases: noche profunda (0 a 50 %), madrugada (50 a 80 %), pre-amanecer (80 a 100 %) con avisos a 120, 60, 30 y 10 s, amanecer y fin del día a los +45 s. La luz direccional del nivel sube al amanecer.
 - **Botín (8.1 a 8.4):** cada objeto tiene un LootGuid. Los de bolsillo van a la mochila (3 huecos); los ligeros y medianos se llevan en las manos; los pesados necesitan 2 jugadores o el carrito (T07), y sin ayuda se arrastran muy despacio. Si los dos portadores se separan, el objeto se suelta. Los golpes dañan (65 % del valor) o rompen (20 %) según la fragilidad, y hacen ruido con `MakeNoise`. Si un objeto cae fuera del mapa vuelve a su último punto seguro, dañado.
-- **Camioneta (5.7 y 7.9):** deposita automáticamente lo que llevas al entrar y lo que se lanza dentro. Cada LootGuid se deposita una sola vez.
+- **Camioneta (5.7 y 7.9):** deposita automáticamente lo que llevas al entrar y lo que se lanza dentro. Cada LootGuid se deposita una sola vez. La camioneta es un placeholder greybox con formas básicas del motor (caja de carga, cabina y 4 ruedas, unos 5 x 2 x 2,4 m); `bShowGreybox` la oculta si el nivel pone su propia malla.
 - **Objetivo (12):** la cuota se mide en puntos válidos; los objetos requeridos tienen que llegar sin romperse.
 - **Votación de escape (7.3):** desde la camioneta, 12 s, mayoría de supervivientes. Las abstenciones no bloquean y existe una opción de unanimidad. Un superviviente solo sale con una cuenta atrás de 5 s.
 - **Amanecer (7.2 y 7.7):** se cancelan las votaciones; el primero que llega a la camioneta evacúa en 5 s sin votar. Al fin del día escapa quien esté en la camioneta y los demás se quedan atrás.

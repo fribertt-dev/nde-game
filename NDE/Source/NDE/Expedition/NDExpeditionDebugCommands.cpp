@@ -218,11 +218,30 @@ namespace NDExpeditionDebug
 
 	void ToVan(const TArray<FString>& Args, UWorld* World)
 	{
-		RunLater(World, ArgFloat(Args, 0, 0.f), false, [](UWorld* W)
+		const bool bLookAtVan = Args.IsValidIndex(1) && FCString::Atoi(*Args[1]) != 0;
+		RunLater(World, ArgFloat(Args, 0, 0.f), false, [bLookAtVan](UWorld* W)
 		{
 			ANDExtractionVan* Van = FindVan(W);
 			if (!Van || !Van->HasAuthority())
 			{
+				return false;
+			}
+			const ANDExpeditionDirector* Director = ANDExpeditionDirector::Get(W);
+			if (bLookAtVan && Director)
+			{
+				// Desde la calle, mirando a la camioneta, la zona de depósito y la puerta de la casa.
+				APawn* Pawn = FirstPawn(W);
+				const FVector Target = (Van->GetActorLocation() + Van->Body->GetComponentLocation()) * 0.5f;
+				const FVector Door = Director->GetActorLocation();
+				const FVector Spot = Target + (Van->GetActorLocation() - Door).GetSafeNormal2D() * 900.f + FVector(0.f, 0.f, 60.f);
+				if (Pawn)
+				{
+					MovePawn(Pawn, Spot, (Target - Spot).GetSafeNormal2D().Rotation());
+					if (AController* Controller = Pawn->GetController())
+					{
+						Controller->SetControlRotation((Target - Spot).Rotation());
+					}
+				}
 				return false;
 			}
 			int32 Index = 0;
@@ -233,7 +252,6 @@ namespace NDExpeditionDebug
 					const FVector Offset(0.f, (Index++ - 1) * 80.f, 100.f);
 					const FVector Location = Van->GetActorLocation() + Van->GetActorRotation().RotateVector(Offset);
 					// Mirando a la puerta de la casa (el director está en la entrada).
-					const ANDExpeditionDirector* Director = ANDExpeditionDirector::Get(W);
 					const FRotator Look = Director ? (Director->GetActorLocation() - Location).GetSafeNormal2D().Rotation() : Pawn->GetActorRotation();
 					MovePawn(Pawn, Location, Look);
 					It->Get()->ClientSetRotation(Look);
@@ -506,6 +524,6 @@ namespace NDExpeditionDebug
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&SkipTime));
 
 	FAutoConsoleCommandWithWorldAndArgs ToVanCommand(TEXT("nde.Expedition.ToVan"),
-		TEXT("Solo servidor: lleva a todos los jugadores a la camioneta. Uso: nde.Expedition.ToVan [segundos de espera]"),
+		TEXT("Solo servidor: lleva a todos los jugadores a la camioneta. Uso: nde.Expedition.ToVan [segundos de espera] [1 = solo el jugador 0, desde la calle mirando a la camioneta]"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ToVan));
 }

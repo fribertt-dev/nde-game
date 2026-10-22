@@ -171,14 +171,23 @@ void ANDHouseGameMode::SetupHouseExpedition(ANDHouseLot* Lot)
 		TActorIterator<ANDExtractionVan> It(GetWorld());
 		Van = It ? *It : nullptr;
 	}
-	const FTransform VanTransform = Extractions.IsEmpty() ? Lot->GetActorTransform() : Extractions[0];
+	const FVector VanLocation = Extractions.IsEmpty() ? Lot->GetActorLocation() : Extractions[0].GetLocation();
+	// La camioneta va de lado, paralela a la fachada (su eje Y), con la caja hacia el centro del lote:
+	// la zona de depósito queda delante de la puerta y la carrocería no tapa la entrada.
+	const FIntPoint Front = NDHouseGen::DirectionToOffset(Lot->LotInfo.FrontDirection);
+	const FVector ToStreet = Lot->GetActorRotation().RotateVector(FVector(Front.X, Front.Y, 0.f));
+	FRotator VanRotation = ToStreet.Rotation();
+	if (FVector::DotProduct(Lot->GetActorLocation() - VanLocation, FRotationMatrix(VanRotation).GetUnitAxis(EAxis::Y)) < 0.f)
+	{
+		VanRotation.Yaw += 180.f;
+	}
 	if (!Van)
 	{
-		Van = GetWorld()->SpawnActor<ANDExtractionVan>(ANDExtractionVan::StaticClass(), FTransform(VanTransform.Rotator(), VanTransform.GetLocation()));
+		Van = GetWorld()->SpawnActor<ANDExtractionVan>(ANDExtractionVan::StaticClass(), FTransform(VanRotation, VanLocation));
 	}
 	else
 	{
-		Van->SetActorLocationAndRotation(VanTransform.GetLocation(), VanTransform.Rotator());
+		Van->SetActorLocationAndRotation(VanLocation, VanRotation);
 	}
 	if (Van && Director && Director->Expedition)
 	{
