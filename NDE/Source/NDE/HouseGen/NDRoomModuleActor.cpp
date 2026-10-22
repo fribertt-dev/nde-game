@@ -175,35 +175,34 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	SetColor(WallMeshes, NDRoomModuleActor::WallColor);
 	SetColor(CeilingMeshes, NDRoomModuleActor::CeilingColor);
 
-	// Suelo con la cara de arriba en Z = 0.
-	AddBox(FloorMeshes, FVector(0.f, 0.f, -WallThickness * 0.5f), FVector(Extent.X, Extent.Y, WallThickness));
-	if (bBuildCeiling)
+	// Por celda (las salas en L no llenan su rectángulo): suelo con la cara de arriba en Z = 0,
+	// techo opcional y paredes en cada borde que no da a otra celda de la sala.
+	TArray<FIntPoint> Cells;
+	Definition.GetLocalCells(Cells);
+	for (const FIntPoint& Cell : Cells)
 	{
-		AddBox(CeilingMeshes, FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(Extent.X, Extent.Y, WallThickness));
-	}
-
-	// Paredes en cada borde exterior de celda; con hueco si la casa abrió ese socket.
-	for (int32 X = 0; X < Size.X; ++X)
-	{
-		for (int32 Y = 0; Y < Size.Y; ++Y)
+		const FVector CellCenter((Cell.X + 0.5f) * CellSize - Extent.X * 0.5f, (Cell.Y + 0.5f) * CellSize - Extent.Y * 0.5f, 0.f);
+		AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+		if (bBuildCeiling)
 		{
-			const FVector CellCenter((X + 0.5f) * CellSize - Extent.X * 0.5f, (Y + 0.5f) * CellSize - Extent.Y * 0.5f, 0.f);
-			for (int32 DirIndex = 0; DirIndex < 4; ++DirIndex)
+			AddBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+		}
+
+		for (int32 DirIndex = 0; DirIndex < 4; ++DirIndex)
+		{
+			const ENDCellDirection Direction = static_cast<ENDCellDirection>(DirIndex);
+			if (Definition.ContainsCell(Cell + DirectionToOffset(Direction)))
 			{
-				const ENDCellDirection Direction = static_cast<ENDCellDirection>(DirIndex);
-				const FIntPoint Neighbor = FIntPoint(X, Y) + DirectionToOffset(Direction);
-				if (Neighbor.X >= 0 && Neighbor.Y >= 0 && Neighbor.X < Size.X && Neighbor.Y < Size.Y)
-				{
-					continue;
-				}
-				const int32 SocketIndex = Definition.DoorSockets.IndexOfByPredicate([X, Y, Direction](const FNDRoomDoorSocket& S)
-				{
-					return S.Cell == FIntPoint(X, Y) && S.Direction == Direction;
-				});
-				const float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
-				const FIntPoint Offset = DirectionToOffset(Direction);
-				BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
+				continue;
 			}
+			// Con hueco si la casa abrió ese socket.
+			const int32 SocketIndex = Definition.DoorSockets.IndexOfByPredicate([&Cell, Direction](const FNDRoomDoorSocket& S)
+			{
+				return S.Cell == Cell && S.Direction == Direction;
+			});
+			const float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
+			const FIntPoint Offset = DirectionToOffset(Direction);
+			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
 		}
 	}
 

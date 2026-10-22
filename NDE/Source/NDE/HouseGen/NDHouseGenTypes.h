@@ -54,11 +54,20 @@ enum class ENDRoomType : uint8
 	R11_Study UMETA(ToolTip = "Despacho."),
 	R12_Pantry UMETA(ToolTip = "Despensa."),
 	R13_Laundry UMETA(ToolTip = "Lavadero."),
-	R14_Garage UMETA(ToolTip = "Garaje."),
-	R15_Basement UMETA(ToolTip = "Sótano (otra planta)."),
+	R14_Library UMETA(ToolTip = "Biblioteca."),
+	R15_Playroom UMETA(ToolTip = "Habitación de juguetes."),
 	R16_Attic UMETA(ToolTip = "Desván (otra planta)."),
 	R17_Stairwell UMETA(ToolTip = "Escalera entre plantas."),
 	R18_Garden UMETA(ToolTip = "Jardín o patio.")
+};
+
+/** Tamaño de casa (GDD 15.2): fija cuántas salas tiene y el lote mínimo. */
+UENUM(BlueprintType)
+enum class ENDHouseSize : uint8
+{
+	Small UMETA(ToolTip = "Casa pequeña: 5-8 salas."),
+	Medium UMETA(ToolTip = "Casa mediana: 7-11 salas."),
+	Large UMETA(ToolTip = "Casa grande: 10-17 salas, con 1-2 bucles y casi siempre una segunda salida.")
 };
 
 /** Lado de una celda. North = +X, East = +Y (ejes de Unreal). */
@@ -146,6 +155,10 @@ struct FNDRoomModuleDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
 	FIntPoint FootprintCells = FIntPoint(1, 1);
 
+	/** Celdas del rectángulo que NO son de la sala (salas en L). Vacío = rectángulo completo. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	TArray<FIntPoint> BlockedCells;
+
 	/** Huecos posibles. Los que no use el generador se tapan con pared. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	TArray<FNDRoomDoorSocket> DoorSockets;
@@ -175,6 +188,27 @@ struct FNDRoomModuleDefinition
 	bool IsAllowedIn(FName District) const
 	{
 		return AllowedDistricts.IsEmpty() || District.IsNone() || AllowedDistricts.Contains(District);
+	}
+
+	/** true si la celda (sin rotar) es parte de la sala. */
+	bool ContainsCell(const FIntPoint& Cell) const
+	{
+		return Cell.X >= 0 && Cell.Y >= 0 && Cell.X < FootprintCells.X && Cell.Y < FootprintCells.Y && !BlockedCells.Contains(Cell);
+	}
+
+	/** Celdas de la sala sin rotar, en orden estable. */
+	void GetLocalCells(TArray<FIntPoint>& OutCells) const
+	{
+		for (int32 X = 0; X < FootprintCells.X; ++X)
+		{
+			for (int32 Y = 0; Y < FootprintCells.Y; ++Y)
+			{
+				if (ContainsCell(FIntPoint(X, Y)))
+				{
+					OutCells.Add(FIntPoint(X, Y));
+				}
+			}
+		}
 	}
 };
 
@@ -313,6 +347,10 @@ struct NDE_API FNDHouseGenerationManifest
 	/** Distrito (D01...). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	FName District;
+
+	/** Tamaño de casa pedido. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	ENDHouseSize HouseSize = ENDHouseSize::Small;
 
 	/** Lote donde se construye: id, transform, tamaño y fachada. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")

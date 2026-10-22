@@ -4,9 +4,9 @@
 
 FString FNDHouseGenerationManifest::ToDebugString() const
 {
-	FString Out = FString::Printf(TEXT("schema=%d gen=%s seed=%lld contract=%s house=%s district=%s attempts=%d fallback=%d\n"),
-		SchemaVersion, *GenerationVersion, RunSeed, *ContractId.ToString(), *HouseArchetype.ToString(), *District.ToString(),
-		Attempts, bUsedFallback ? 1 : 0);
+	FString Out = FString::Printf(TEXT("schema=%d gen=%s seed=%lld contract=%s house=%s size=%d district=%s attempts=%d fallback=%d\n"),
+		SchemaVersion, *GenerationVersion, RunSeed, *ContractId.ToString(), *HouseArchetype.ToString(), static_cast<int32>(HouseSize),
+		*District.ToString(), Attempts, bUsedFallback ? 1 : 0);
 	Out += FString::Printf(TEXT("  lot %s size=(%d,%d) front=%d yard=%d exit2=%d.%s\n"),
 		*Lot.LotId.ToString(), Lot.SizeCells.X, Lot.SizeCells.Y, static_cast<int32>(Lot.FrontDirection), Lot.FrontYardCells,
 		SecondaryExitRoom, *SecondaryExitSocket.ToString());
@@ -111,6 +111,12 @@ namespace NDHouseGen
 		case ENDRoomType::R07_Bathroom: return FColor(90, 220, 220);
 		case ENDRoomType::R08_Storage: return FColor(140, 110, 80);
 		case ENDRoomType::R09_Objective: return FColor(250, 220, 40);
+		case ENDRoomType::R10_KidsBedroom: return FColor(240, 130, 200);
+		case ENDRoomType::R11_Study: return FColor(70, 90, 200);
+		case ENDRoomType::R12_Pantry: return FColor(190, 160, 60);
+		case ENDRoomType::R13_Laundry: return FColor(150, 210, 250);
+		case ENDRoomType::R14_Library: return FColor(110, 60, 30);
+		case ENDRoomType::R15_Playroom: return FColor(160, 230, 60);
 		default: return FColor(180, 100, 220);
 		}
 	}

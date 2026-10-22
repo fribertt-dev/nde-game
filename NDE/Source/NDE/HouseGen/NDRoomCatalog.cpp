@@ -152,6 +152,99 @@ namespace NDRoomCatalog
 			AddMarker(Def, EMark::HideSpot, 0, 0, -120.f, 120.f);
 			Modules.Add(Def);
 		}
+
+		// Piezas de la segunda tanda (GDD 14.4).
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Entry_B"), ENDRoomType::R01_Entry, 2, 1);
+			AddSocket(Def, TEXT("Exit"), 0, 0, EDir::South, ESock::Outdoor);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddSocket(Def, TEXT("W0"), 0, 0, EDir::West);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddSocket(Def, TEXT("W1"), 1, 0, EDir::West);
+			AddMarker(Def, EMark::PlayerSpawn, 0, 0, -60.f, -80.f, SpawnZ);
+			AddMarker(Def, EMark::PlayerSpawn, 0, 0, -60.f, 80.f, SpawnZ);
+			AddMarker(Def, EMark::PlayerSpawn, 0, 0, 80.f, -80.f, SpawnZ);
+			AddMarker(Def, EMark::PlayerSpawn, 0, 0, 80.f, 80.f, SpawnZ);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Corridor_T"), ENDRoomType::R02_Corridor, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E"), 0, 0, EDir::East);
+			AddSocket(Def, TEXT("W"), 0, 0, EDir::West);
+			AddMarker(Def, EMark::HideSpot, 0, 0, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			// Sala grande en L: rectángulo 3x2 sin la celda (2,1).
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_LivingRoom_L"), ENDRoomType::R03_LivingRoom, 3, 2, 1.5f);
+			Def.BlockedCells = { FIntPoint(2, 1) };
+			AddSocket(Def, TEXT("S00"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("S01"), 0, 1, EDir::South);
+			AddSocket(Def, TEXT("W00"), 0, 0, EDir::West);
+			AddSocket(Def, TEXT("E01"), 0, 1, EDir::East);
+			AddSocket(Def, TEXT("E11"), 1, 1, EDir::East);
+			AddSocket(Def, TEXT("N11"), 1, 1, EDir::North);
+			AddSocket(Def, TEXT("N20"), 2, 0, EDir::North);
+			AddSocket(Def, TEXT("W20"), 2, 0, EDir::West);
+			AddSocket(Def, TEXT("E20"), 2, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, 0.f);
+			AddMarker(Def, EMark::LootSocket, 1, 1, 100.f, 100.f);
+			AddMarker(Def, EMark::LootSocket, 2, 0, 100.f, -100.f);
+			AddMarker(Def, EMark::HideSpot, 0, 1, -130.f, 130.f);
+			AddMarker(Def, EMark::HideSpot, 2, 0, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Study_A"), ENDRoomType::R11_Study, 1, 1, 1.2f);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, 0.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -130.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -120.f, 120.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Laundry_A"), ENDRoomType::R13_Laundry, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("W"), 0, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, 120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, 120.f, -120.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Library_A"), ENDRoomType::R14_Library, 2, 1, 1.2f);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Playroom_A"), ENDRoomType::R15_Playroom, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("W1"), 1, 0, EDir::West);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 100.f, 100.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 100.f, -100.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 120.f, 120.f);
+			Modules.Add(Def);
+		}
+		{
+			// Despensa: variante pequeña del almacén, con puerta estrecha.
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Pantry_A"), ENDRoomType::R12_Pantry, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South, ESock::Door_S);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, 120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, 0.f, 130.f);
+			Modules.Add(Def);
+		}
 		return Modules;
 	}
 }

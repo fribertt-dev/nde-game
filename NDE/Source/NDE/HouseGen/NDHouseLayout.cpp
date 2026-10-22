@@ -5,16 +5,79 @@
 #include "Core/NDLog.h"
 #include "HouseGen/NDRoomCatalog.h"
 
-FNDHouseGenParams FNDHouseGenParams::ForArchetype(FName Archetype)
+FNDHouseGenParams FNDHouseGenParams::ForArchetype(FName Archetype, ENDHouseSize Size)
 {
 	FNDHouseGenParams Params;
 	if (Archetype != TEXT("H01"))
 	{
 		UE_LOG(LogNDHouseGen, Warning, TEXT("Arquetipo %s desconocido; se usan las reglas de H01"), *Archetype.ToString());
 	}
-	// H01: casa pequeña de una planta, 5-8 salas (GDD 14).
+	// H01: casa de una planta (GDD 14). El tamaño fija salas, bucles y segunda salida (GDD 15.2).
 	Params.HouseArchetype = TEXT("H01");
+	Params.HouseSize = Size;
+	switch (Size)
+	{
+	case ENDHouseSize::Medium:
+		Params.MinRooms = 7;
+		Params.MaxRooms = 11;
+		Params.SecondaryExitChance = 0.6f;
+		break;
+	case ENDHouseSize::Large:
+		// Casa grande: siempre algún bucle y casi siempre dos caminos a la salida.
+		Params.MinRooms = 10;
+		Params.MaxRooms = 17;
+		Params.MinLoops = 1;
+		Params.SecondaryExitChance = 0.9f;
+		break;
+	default:
+		break;
+	}
+	Params.GrowLotToFit();
 	return Params;
+}
+
+FIntPoint FNDHouseGenParams::GetMinLotSize(ENDHouseSize Size)
+{
+	switch (Size)
+	{
+	case ENDHouseSize::Medium: return FIntPoint(12, 12);
+	case ENDHouseSize::Large: return FIntPoint(14, 14);
+	default: return FIntPoint(10, 10);
+	}
+}
+
+bool FNDHouseGenParams::GrowLotToFit()
+{
+	const FIntPoint MinSize = GetMinLotSize(HouseSize);
+	const FIntPoint OldSize = Lot.SizeCells;
+	Lot.SizeCells = FIntPoint(FMath::Max(OldSize.X, MinSize.X), FMath::Max(OldSize.Y, MinSize.Y));
+	return Lot.SizeCells != OldSize;
+}
+
+void FNDHouseGenParams::SetLot(const FNDHouseLotInfo& InLot)
+{
+	Lot = InLot;
+	if (GrowLotToFit())
+	{
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: %dx%d celdas no basta para una casa %s; se usa %dx%d"),
+			*Lot.LotId.ToString(), InLot.SizeCells.X, InLot.SizeCells.Y,
+			*StaticEnum<ENDHouseSize>()->GetNameStringByValue(static_cast<int64>(HouseSize)), Lot.SizeCells.X, Lot.SizeCells.Y);
+	}
+}
+
+void FNDHouseGenParams::OverrideRoomRange(int32 InMinRooms, int32 InMaxRooms)
+{
+	constexpr int32 Lowest = 5;
+	constexpr int32 Highest = 17;
+	if (InMinRooms > 0)
+	{
+		MinRooms = FMath::Clamp(InMinRooms, Lowest, Highest);
+	}
+	if (InMaxRooms > 0)
+	{
+		MaxRooms = FMath::Clamp(InMaxRooms, Lowest, Highest);
+	}
+	MaxRooms = FMath::Max(MinRooms, MaxRooms);
 }
 
 bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FNDHouseLayout& OutLayout, FString& OutError)
@@ -170,12 +233,11 @@ FVector FNDHouseLayout::GetSocketLocation(int32 RoomIndex, int32 SocketIndex) co
 void FNDHouseLayout::GetRoomCells(int32 RoomIndex, TArray<FIntPoint>& OutCells) const
 {
 	const FNDHouseLayoutRoom& Room = Rooms[RoomIndex];
-	for (int32 X = 0; X < Room.Size.X; ++X)
+	TArray<FIntPoint> LocalCells;
+	Room.Def->GetLocalCells(LocalCells);
+	for (const FIntPoint& Local : LocalCells)
 	{
-		for (int32 Y = 0; Y < Room.Size.Y; ++Y)
-		{
-			OutCells.Add(Room.Grid + FIntPoint(X, Y));
-		}
+		OutCells.Add(Room.Grid + NDHouseGen::RotateCell(Local, Room.Def->FootprintCells, Room.YawSteps));
 	}
 }
 
