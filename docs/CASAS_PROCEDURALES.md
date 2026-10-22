@@ -47,13 +47,15 @@ Cada contrato (`UNDContractDefinition`) trae `HouseRequirements`: salas obligato
 
 | Id | Nombre | Qué pide | Casa |
 | --- | --- | --- | --- |
-| C01 | La Primera Siesta | Cuota de 700 | Sala segura (escondite sin peligros), 6 huecos de botín |
-| C02 | Oro de Cocina | Cuchara (L04) y azucarero (L05) de plata, cuota 500 | Cocina obligatoria; 2 quesos señuelo (L20) |
-| C03 | El Reloj Perdido | Reloj cucú (L32) | 3 candidatas; 2 relojes señuelo (L33, L34) |
-| C04 | Cuidado con la Vajilla | Tetera (L09), plato (L10) y jarrón (L11) intactos | Ruta de 160 cm; secundario: todos fuera antes del amanecer |
-| C05 | La Hora del Ronquido | Medalla de oro (L41) | En la cabecera de la cama de la criatura, en el borde accesible |
-| C06 | Rescate del Calcetín | Trasto (L50) | Dentro de un tarro (`ANDRescueContainer`) en una sala con 2 accesos; se abre quedándose 2 s al lado |
-| C07 | El Televisor Prestado | Televisor (L16) | Ruta de bulto de 120 cm |
+| C01 | La Primera Siesta | Cuota de 700; secundario: ningún jarrón roto | Sala segura (escondite sin peligros), 6 huecos de botín |
+| C02 | Oro de Cocina | Cuchara (L04) y azucarero (L05) de plata, cuota 800 | Cocina obligatoria; 2 quesos señuelo (L20) |
+| C03 | El Reloj Perdido | Reloj cucú (L32) y cuota 850; secundario: sin tocar los otros relojes (pendiente) | 3 candidatas; 2 relojes señuelo (L33, L34) |
+| C04 | Cuidado con la Vajilla | Tetera (L09), plato (L10) y jarrón (L11) intactos y cuota 950 | Ruta de 160 cm; secundario: tiempo récord (todos fuera antes del amanecer) |
+| C05 | La Hora del Ronquido | Medalla de oro (L41) y cuota 1.050; secundario: como mucho 2 alertas (pendiente) | En la cabecera de la cama de la criatura, en el borde accesible |
+| C06 | Rescate del Calcetín | Trasto (L50) y cuota 1.150; secundario: sin despertar a nadie (pendiente) | Dentro de un tarro (`ANDRescueContainer`) en una sala con 2 accesos; se abre quedándose 2 s al lado |
+| C07 | El Televisor Prestado | Televisor (L16) y cuota 1.400; secundario: sin golpes fuertes | Ruta de bulto de 120 cm |
+
+Valores del GDD (12 y 16.2): C01-C06 son tier I (pago 120-170 por jugador, reputación 35-55, noche de 9-10 min) y C07 tier II (pago 220, reputación 65, 11 min); suben con la dificultad. Los secundarios marcados "pendiente" necesitan la criatura y el sistema de alertas; de momento no se evalúan. El bono por botín extra (tope 35 % del pago), el secundario (15 %), el rescate (7,5 %) y la devolución parcial (0,2) están en `FNDEconomyTuning`, dentro de los rangos del GDD.
 
 - Datos: `Scripts/nde_setup_contratos_d01.py` crea o actualiza los contratos y el botín nuevo (placeholder con formas del motor). Se ejecuta sin el editor abierto: `UnrealEditor-Cmd.exe NDE.uproject -run=pythonscript -script="<ruta>"`.
 - Los señuelos y el botín de menos de 50 puntos no se usan de relleno, y lo que pide el contrato no se repite.

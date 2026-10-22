@@ -86,30 +86,31 @@ def house(anchor=A.OBJECTIVE_ROOM, rooms=(), candidates=2, routes=1, width=0.0, 
     return req
 
 
+# Valores del GDD (12, 16.2): tier I (C01-C06) cuota 700-1.200, pago 120-170, reputación 35-55,
+# 8-10 min; tier II (C07) cuota 1.100-2.000, pago 180-270, reputación 55-80, 9-12 min. Suben con la dificultad.
+# Secundarios que aún no se pueden medir (sin criatura ni alertas) van con None y su texto.
 CONTRACTS = [
-    # id, nombre, descripción, nivel, tipo, cuota, requeridos, intactos, señuelos, casa,
-    # secundario, texto secundario, pago, reputación, noche
     ("C01", "La Primera Siesta", "Extrae botín hasta cubrir la cuota. Hay una sala segura para esconderse.", 1, O.QUOTA, 700,
      [], False, [], house(safe_room=True),
-     S.NO_FRAGILE_BROKEN, "Ningún objeto frágil roto", 150, 45, 600.0),
-    ("C02", "Oro de Cocina", "Saca de la cocina la cuchara y el azucarero de plata. Cuidado con la comida que hace de cebo.", 1, O.QUOTA, 500,
+     S.NO_FRAGILE_BROKEN, "Ningún jarrón roto", 120, 35, 600.0),
+    ("C02", "Oro de Cocina", "Saca de la cocina la cuchara y el azucarero de plata. Cuidado con la comida que hace de cebo.", 1, O.QUOTA, 800,
      ["L04", "L05"], False, ["L20", "L20"], house(anchor=A.REQUIRED_ROOM, rooms=[R.R04_KITCHEN], candidates=4),
-     S.NO_FRAGILE_BROKEN, "Ningún objeto frágil roto", 160, 45, 600.0),
-    ("C03", "El Reloj Perdido", "Recupera el reloj cucú. Hay relojes parecidos que no valen nada.", 1, O.UNIQUE_ITEM, 0,
+     S.NO_FRAGILE_BROKEN, "Ningún objeto frágil roto", 130, 40, 540.0),
+    ("C03", "El Reloj Perdido", "Recupera el reloj cucú. Hay relojes parecidos que no valen nada.", 1, O.UNIQUE_ITEM, 850,
      ["L32"], False, ["L33", "L34"], house(candidates=3),
-     S.ALL_EXTRACTED_BEFORE_DAWN, "Todos fuera antes del amanecer", 140, 40, 480.0),
-    ("C04", "Cuidado con la Vajilla", "Lleva la tetera, el plato y el jarrón a la camioneta sin un solo golpe.", 2, O.UNIQUE_ITEM, 0,
+     S.NONE, "Sin tocar los otros relojes", 140, 45, 540.0),
+    ("C04", "Cuidado con la Vajilla", "Lleva la tetera, el plato y el jarrón a la camioneta sin un solo golpe.", 1, O.UNIQUE_ITEM, 950,
      ["L09", "L10", "L11"], True, [], house(candidates=3, width=160.0),
-     S.ALL_EXTRACTED_BEFORE_DAWN, "Todos fuera antes del amanecer", 200, 55, 540.0),
-    ("C05", "La Hora del Ronquido", "La medalla de oro está en la cabecera de la cama. El dueño duerme al lado.", 2, O.UNIQUE_ITEM, 0,
+     S.ALL_EXTRACTED_BEFORE_DAWN, "Tiempo récord: todos fuera antes del amanecer", 150, 45, 570.0),
+    ("C05", "La Hora del Ronquido", "La medalla de oro está en la cabecera de la cama. El dueño duerme al lado.", 1, O.UNIQUE_ITEM, 1050,
      ["L41"], False, [], house(anchor=A.BED_HEADBOARD, candidates=2),
-     S.ALL_EXTRACTED_BEFORE_DAWN, "Todos fuera antes del amanecer", 210, 60, 600.0),
-    ("C06", "Rescate del Calcetín", "Trasto se quedó encerrado en un tarro. Ábrelo y llévalo a la camioneta.", 2, O.UNIQUE_ITEM, 0,
+     S.NONE, "Como mucho 2 alertas por encima de ligero", 160, 50, 600.0),
+    ("C06", "Rescate del Calcetín", "Trasto se quedó encerrado en un tarro. Ábrelo y llévalo a la camioneta.", 1, O.UNIQUE_ITEM, 1150,
      ["L50"], False, [], house(anchor=A.RESCUE_CONTAINER, routes=2, candidates=2),
-     S.REQUIRED_LOOT_INTACT, "Trasto llega sin golpes", 200, 60, 600.0),
-    ("C07", "El Televisor Prestado", "Lleva el televisor viejo hasta la camioneta.", 2, O.HEAVY_ITEM, 0,
+     S.NONE, "Sin despertar a nadie", 170, 55, 600.0),
+    ("C07", "El Televisor Prestado", "Lleva el televisor viejo hasta la camioneta.", 2, O.HEAVY_ITEM, 1400,
      ["L16"], False, [], house(width=120.0),
-     S.REQUIRED_LOOT_INTACT, "El televisor llega sin golpes fuertes", 220, 65, 600.0),
+     S.REQUIRED_LOOT_INTACT, "El televisor llega sin golpes fuertes", 220, 65, 660.0),
 ]
 
 for (cid, name, desc, tier, objective, quota, required, intact, decoys, house_req,
