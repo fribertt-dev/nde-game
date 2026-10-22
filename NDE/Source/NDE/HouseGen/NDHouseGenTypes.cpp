@@ -129,4 +129,27 @@ namespace NDHouseGen
 	{
 		return StaticEnum<ENDRoomType>()->GetNameStringByValue(static_cast<int64>(Type));
 	}
+
+	FName MakeAutoSocketId(const FIntPoint& LocalCell, ENDCellDirection LocalDirection)
+	{
+		return FName(*FString::Printf(TEXT("Auto_%d_%d_%d"), LocalCell.X, LocalCell.Y, static_cast<int32>(LocalDirection)));
+	}
+
+	bool ParseAutoSocketId(FName SocketId, FIntPoint& OutLocalCell, ENDCellDirection& OutLocalDirection)
+	{
+		TArray<FString> Parts;
+		SocketId.ToString().ParseIntoArray(Parts, TEXT("_"));
+		if (Parts.Num() != 4 || Parts[0] != TEXT("Auto") || !Parts[1].IsNumeric() || !Parts[2].IsNumeric() || !Parts[3].IsNumeric())
+		{
+			return false;
+		}
+		const int32 Direction = FCString::Atoi(*Parts[3]);
+		if (Direction < 0 || Direction > 3)
+		{
+			return false;
+		}
+		OutLocalCell = FIntPoint(FCString::Atoi(*Parts[1]), FCString::Atoi(*Parts[2]));
+		OutLocalDirection = static_cast<ENDCellDirection>(Direction);
+		return true;
+	}
 }

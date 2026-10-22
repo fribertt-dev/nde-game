@@ -32,7 +32,8 @@ public:
 	 * GetLocalCells) quita el techo donde hay otra sala encima; sin él, techo en todas las celdas.
 	 */
 	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
-		bool bAddRoomLight = false, const TArray<bool>* CeilingPerCell = nullptr, const TArray<float>* OpeningOffsets = nullptr);
+		bool bAddRoomLight = false, const TArray<bool>* CeilingPerCell = nullptr, const TArray<float>* OpeningOffsets = nullptr,
+		const TArray<FNDRoomDoorSocket>* ExtraOpenings = nullptr);
 
 	/** Módulo del catálogo que muestra este actor al colocarlo a mano en el editor. */
 	UPROPERTY(EditAnywhere, Category = "NDE|HouseGen")

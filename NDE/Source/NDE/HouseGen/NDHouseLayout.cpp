@@ -164,7 +164,26 @@ bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FN
 		{
 			return INDEX_NONE;
 		}
-		return OutLayout.Rooms[RoomIndex].Sockets.IndexOfByPredicate([SocketId](const FNDHouseLayoutSocket& S) { return S.SocketId == SocketId; });
+		FNDHouseLayoutRoom& Room = OutLayout.Rooms[RoomIndex];
+		const int32 Existing = Room.Sockets.IndexOfByPredicate([SocketId](const FNDHouseLayoutSocket& S) { return S.SocketId == SocketId; });
+		FIntPoint LocalCell;
+		ENDCellDirection LocalDirection;
+		if (Existing != INDEX_NONE || !NDHouseGen::ParseAutoSocketId(SocketId, LocalCell, LocalDirection)
+			|| !Room.Def->ContainsCell(LocalCell) || Room.Def->ContainsCell(LocalCell + NDHouseGen::DirectionToOffset(LocalDirection)))
+		{
+			return Existing;
+		}
+		// Puerta "Auto": una Door_M en un borde exterior del módulo que no tenía hueco.
+		FNDHouseLayoutSocket& Socket = Room.Sockets.AddDefaulted_GetRef();
+		Socket.SocketId = SocketId;
+		Socket.Type = ENDRoomSocketType::Door_M;
+		Socket.Width = NDHouseGen::GetDefaultSocketWidth(ENDRoomSocketType::Door_M);
+		Socket.bAuto = true;
+		Socket.LocalCell = LocalCell;
+		Socket.LocalDirection = LocalDirection;
+		Socket.LotCell = Room.Grid + NDHouseGen::RotateCell(LocalCell, Room.Def->FootprintCells, Room.YawSteps);
+		Socket.LotDirection = NDHouseGen::RotateDirection(LocalDirection, Room.YawSteps);
+		return Room.Sockets.Num() - 1;
 	};
 
 	for (const FNDHouseManifestConnection& Source : Manifest.Connections)

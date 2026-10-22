@@ -172,7 +172,7 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 }
 
 void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
-	bool bAddRoomLight, const TArray<bool>* CeilingPerCell, const TArray<float>* OpeningOffsets)
+	bool bAddRoomLight, const TArray<bool>* CeilingPerCell, const TArray<float>* OpeningOffsets, const TArray<FNDRoomDoorSocket>* ExtraOpenings)
 {
 	using namespace NDHouseGen;
 	ClearGreybox();
@@ -214,7 +214,7 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			{
 				return S.Cell == Cell && S.Direction == Direction;
 			});
-			const float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
+			float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
 			float HoleOffset = 0.f;
 			if (OpeningOffsets && OpeningOffsets->IsValidIndex(SocketIndex))
 			{
@@ -223,6 +223,15 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			else if (Definition.DoorSockets.IsValidIndex(SocketIndex))
 			{
 				HoleOffset = Definition.DoorSockets[SocketIndex].Offset;
+			}
+			// Puerta "Auto" en un borde sin hueco en el módulo.
+			const FNDRoomDoorSocket* Extra = ExtraOpenings
+				? ExtraOpenings->FindByPredicate([&Cell, Direction](const FNDRoomDoorSocket& S) { return S.Cell == Cell && S.Direction == Direction; })
+				: nullptr;
+			if (SocketIndex == INDEX_NONE && Extra)
+			{
+				Opening = Extra->Width;
+				HoleOffset = Extra->Offset;
 			}
 			const FIntPoint Offset = DirectionToOffset(Direction);
 			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening, HoleOffset);

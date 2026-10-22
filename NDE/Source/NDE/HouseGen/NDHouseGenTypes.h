@@ -479,4 +479,10 @@ namespace NDHouseGen
 	NDE_API FColor GetRoomTypeColor(ENDRoomType Type);
 	/** "R06_MasterBedroom" */
 	NDE_API FString GetRoomTypeName(ENDRoomType Type);
+	/**
+	 * Puerta abierta en una pared sin hueco previsto en el módulo (para unir la segunda escalera).
+	 * Su id en el manifiesto es "Auto_X_Y_D" con la celda y el lado del módulo sin girar.
+	 */
+	NDE_API FName MakeAutoSocketId(const FIntPoint& LocalCell, ENDCellDirection LocalDirection);
+	NDE_API bool ParseAutoSocketId(FName SocketId, FIntPoint& OutLocalCell, ENDCellDirection& OutLocalDirection);
 }

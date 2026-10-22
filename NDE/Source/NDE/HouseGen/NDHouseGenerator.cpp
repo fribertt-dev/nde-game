@@ -22,6 +22,8 @@ namespace NDHouseGenerator
 		int32 Floor = NDHouseGen::GroundFloor;
 		int32 YawSteps = 0;
 		TArray<bool> SocketUsed;
+		/** Puertas "Auto" abiertas en esta sala (celda y lado del módulo sin girar). */
+		TArray<TPair<FIntPoint, ENDCellDirection>> AutoSockets;
 	};
 
 	int32 FindStairsSocket(const FNDRoomModuleDefinition& Def)
@@ -450,8 +452,64 @@ namespace NDHouseGenerator
 		 * Segunda escalera al piso de arriba unida allí al resto (bucle entre pisos): su llegada da directamente
 		 * a una sala de arriba o a una sala nueva que se une a otra. true si lo consigue; si no, deja todo igual.
 		 */
-		bool AddConnectedSecondStairs(TFunctionRef<const FNDRoomModuleDefinition*()> PickUpperRoom)
+		bool AddConnectedSecondStairs(TFunctionRef<const FNDRoomModuleDefinition*()> PickUpperRoom, TFunctionRef<const FNDRoomModuleDefinition*()> PickGroundRoom,
+			bool bAllowExtraRoom)
 		{
+			// Une la puerta libre de una mitad de escalera al resto de su piso: directamente con una sala vecina,
+			// o con una sala nueva (antes los pasillos, que tienen muchas puertas) que se une a otra.
+			auto TryJoin = [this, bAllowExtraRoom](int32 StairIndex, FName RequiredSocket, TFunctionRef<const FNDRoomModuleDefinition*()> PickRoom)
+			{
+				if (AddLoops(1, StairIndex) > 0 || AddAutoLoop(StairIndex))
+				{
+					return true;
+				}
+				if (!bAllowExtraRoom)
+				{
+					return false;
+				}
+				const FNDRoomModuleDefinition* Connectors[] = {
+					FNDRoomCatalog::Find(HubModuleId),
+					FNDRoomCatalog::Find(TEXT("D01_Corridor_T")),
+					FNDRoomCatalog::Find(TEXT("D01_Corridor_Corner")),
+					PickRoom(),
+				};
+				for (const FNDRoomModuleDefinition* Connector : Connectors)
+				{
+					if (!Connector)
+					{
+						continue;
+					}
+					const FState Saved = SaveState();
+					const int32 RoomIndex = Attach(StairIndex, *Connector, nullptr, 0, NAME_None, RequiredSocket);
+					if (RoomIndex != INDEX_NONE && (AddLoops(1, RoomIndex) > 0 || AddAutoLoop(RoomIndex)))
+					{
+						return true;
+					}
+					RestoreState(Saved);
+				}
+				return false;
+			};
+
+			// Primero colgada de una sala de arriba (ya unida al resto del piso): basta con unir abajo su pie
+			// a la planta baja, que tiene muchas salas.
+			for (const int32 Parent : GetParents(NDHouseGen::UpperFloor))
+			{
+				if (Rooms[Parent].Def->StairPart != ENDStairPart::None)
+				{
+					continue;
+				}
+				for (const FNDRoomModuleDefinition* Bottom : GetStairBottoms())
+				{
+					const FState Saved = SaveState();
+					const int32 BottomIndex = AttachStairs(Parent, false, *Bottom);
+					if (BottomIndex != INDEX_NONE && TryJoin(BottomIndex, StairsFootSocket, PickGroundRoom))
+					{
+						return true;
+					}
+					RestoreState(Saved);
+				}
+			}
+			// Si no, desde la planta baja: la llegada da a una sala de arriba o a una sala nueva que se une a otra.
 			for (const int32 Parent : GetParents(NDHouseGen::GroundFloor))
 			{
 				if (Rooms[Parent].Def->StairPart != ENDStairPart::None)
@@ -462,18 +520,9 @@ namespace NDHouseGenerator
 				{
 					const FState Saved = SaveState();
 					const int32 TopIndex = AttachStairs(Parent, true, *Bottom);
-					if (TopIndex != INDEX_NONE)
+					if (TopIndex != INDEX_NONE && TryJoin(TopIndex, NAME_None, PickUpperRoom))
 					{
-						if (AddLoops(1, TopIndex) > 0)
-						{
-							return true;
-						}
-						const FNDRoomModuleDefinition* Room = PickUpperRoom();
-						const int32 RoomIndex = Room ? Attach(TopIndex, *Room) : INDEX_NONE;
-						if (RoomIndex != INDEX_NONE && AddLoops(1, RoomIndex) > 0)
-						{
-							return true;
-						}
+						return true;
 					}
 					RestoreState(Saved);
 				}
@@ -625,6 +674,57 @@ namespace NDHouseGenerator
 			return Added;
 		}
 
+		/**
+		 * Une RoomIndex con una sala vecina abriendo en esta una puerta "Auto" frente a un hueco libre de RoomIndex,
+		 * aunque su módulo no tuviera hueco en esa pared (nunca en la entrada ni en otra escalera). true si lo hace.
+		 */
+		bool AddAutoLoop(int32 RoomIndex)
+		{
+			const FWorkRoom& Room = Rooms[RoomIndex];
+			for (int32 SocketIndex = 0; SocketIndex < Room.Def->DoorSockets.Num(); ++SocketIndex)
+			{
+				if (!IsSocketFree(RoomIndex, SocketIndex) || Room.Def->DoorSockets[SocketIndex].Type == ENDRoomSocketType::Vent || Room.Def->DoorSockets[SocketIndex].bLowClearance
+					|| !NDHouseGen::IsConnectableSocket(Room.Def->DoorSockets[SocketIndex].Type))
+				{
+					continue;
+				}
+				const ENDCellDirection Direction = GetSocketDirection(RoomIndex, SocketIndex);
+				const FIntPoint Outside = GetSocketCell(RoomIndex, SocketIndex) + NDHouseGen::DirectionToOffset(Direction);
+				const int32* OtherPtr = Occupancy.Find(FIntVector(Outside.X, Outside.Y, Room.Floor));
+				if (!OtherPtr || *OtherPtr == 0 || *OtherPtr == RoomIndex || Rooms[*OtherPtr].Def->StairPart != ENDStairPart::None
+					|| AreConnected(RoomIndex, *OtherPtr))
+				{
+					continue;
+				}
+				FWorkRoom& Other = Rooms[*OtherPtr];
+				TArray<FIntPoint> LocalCells;
+				Other.Def->GetLocalCells(LocalCells);
+				const FIntPoint* LocalCell = LocalCells.FindByPredicate([&](const FIntPoint& Local)
+				{
+					return Other.Grid + NDHouseGen::RotateCell(Local, Other.Def->FootprintCells, Other.YawSteps) == Outside;
+				});
+				const ENDCellDirection LocalDirection = NDHouseGen::RotateDirection(NDHouseGen::OppositeDirection(Direction), 4 - Other.YawSteps);
+				const bool bModuleHasSocket = LocalCell && Other.Def->DoorSockets.ContainsByPredicate([&](const FNDRoomDoorSocket& S)
+				{
+					return S.Cell == *LocalCell && S.Direction == LocalDirection;
+				});
+				if (!LocalCell || bModuleHasSocket || Other.AutoSockets.Contains(TPair<FIntPoint, ENDCellDirection>(*LocalCell, LocalDirection)))
+				{
+					continue;
+				}
+				Other.AutoSockets.Add(TPair<FIntPoint, ENDCellDirection>(*LocalCell, LocalDirection));
+				Rooms[RoomIndex].SocketUsed[SocketIndex] = true;
+				FNDHouseManifestConnection& Link = Links.AddDefaulted_GetRef();
+				Link.RoomA = RoomIndex;
+				Link.SocketA = Room.Def->DoorSockets[SocketIndex].SocketId;
+				Link.RoomB = *OtherPtr;
+				Link.SocketB = NDHouseGen::MakeAutoSocketId(*LocalCell, LocalDirection);
+				Link.bIsLoop = true;
+				return true;
+			}
+			return false;
+		}
+
 		/** Acceso secundario: un hueco libre de la planta baja que da a patio trasero o lateral dentro del lote. */
 		void PickSecondaryExit()
 		{
@@ -771,13 +871,15 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	// Pisos extra: cada uno cuesta una escalera (dos salas, una por piso) y al menos una sala más.
 	// Las casas grandes con piso superior guardan sitio para una segunda escalera unida arriba.
 	constexpr int32 RoomsPerExtraFloor = 3;
+	// Segunda escalera: sus dos mitades y una sala más por si hace falta para unirla arriba o abajo.
+	constexpr int32 SecondStairsRooms = 3;
 	bool bUpper = Stream.FRand() < Params.UpperFloorChance;
 	bool bBasement = Stream.FRand() < Params.BasementChance;
 	bool bBedroomUpstairs = bUpper && Stream.FRand() < Params.UpstairsBedroomChance;
 	bool bSecondStairs = false;
 	auto GroundBudget = [&]()
 	{
-		return RoomCount - (bUpper ? RoomsPerExtraFloor : 0) - (bBasement ? RoomsPerExtraFloor : 0) - (bSecondStairs ? RoomsPerExtraFloor : 0);
+		return RoomCount - (bUpper ? RoomsPerExtraFloor : 0) - (bBasement ? RoomsPerExtraFloor : 0) - (bSecondStairs ? SecondStairsRooms : 0);
 	};
 	// Planta baja mínima: entrada, distribuidor, objetivo y el dormitorio si no está arriba.
 	auto GroundMinimum = [&]() { return bBedroomUpstairs ? 3 : 4; };
@@ -791,7 +893,7 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		bBedroomUpstairs = false;
 	}
 	// Segunda escalera solo si a la planta baja le siguen quedando salas de sobra.
-	bSecondStairs = bUpper && Params.HouseSize == ENDHouseSize::Large && GroundBudget() - RoomsPerExtraFloor >= GroundMinimum() + 2;
+	bSecondStairs = bUpper && Params.HouseSize == ENDHouseSize::Large && GroundBudget() - SecondStairsRooms >= GroundMinimum();
 	// Salas de más para los pisos extra (además de la primera de cada uno), sin dejar la planta baja pelada.
 	int32 ExtraFloorRooms = 0;
 	if (bUpper || bBasement)
@@ -913,7 +1015,7 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	}
 	// Resto de salas: repartidas entre los pisos extra y, si no caben, en planta baja. Con sitio guardado
 	// para la segunda escalera, primero se llena hasta ese hueco, luego va la escalera y después lo que quede.
-	const int32 RoomsBeforeSecondStairs = RoomCount - (bSecondStairs ? RoomsPerExtraFloor : 0);
+	const int32 RoomsBeforeSecondStairs = RoomCount - (bSecondStairs ? SecondStairsRooms : 0);
 	bool bSecondStairsTried = !bSecondStairs;
 	while (Builder.Rooms.Num() < RoomCount)
 	{
@@ -921,7 +1023,8 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		{
 			// Casa grande: segunda escalera al piso de arriba, unida allí al resto (bucle entre pisos).
 			bSecondStairsTried = true;
-			Builder.AddConnectedSecondStairs([&Builder, &UpperRooms]() { return Builder.Pick(UpperRooms); });
+			Builder.AddConnectedSecondStairs([&Builder, &UpperRooms]() { return Builder.Pick(UpperRooms); },
+				[&Builder, &Fillers]() { return Builder.Pick(Fillers); }, RoomCount - Builder.Rooms.Num() >= SecondStairsRooms);
 			continue;
 		}
 		const float Roll = Stream.FRand();
@@ -945,8 +1048,23 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	}
 
 	// Casas grandes piden algún bucle: si no hay sitio para él, se prueba otra semilla.
+	// Cuentan los bucles que ya hay (p. ej. la segunda escalera unida arriba).
 	const int32 MinLoops = FMath::Min(Params.MinLoops, Params.MaxLoops);
-	if (Builder.AddLoops(Builder.Rand(MinLoops, Params.MaxLoops)) < MinLoops)
+	const int32 ExistingLoops = Builder.Links.FilterByPredicate([](const FNDHouseManifestConnection& L) { return L.bIsLoop; }).Num();
+	int32 Loops = ExistingLoops + Builder.AddLoops(FMath::Max(0, Builder.Rand(MinLoops, Params.MaxLoops) - ExistingLoops));
+	// Sin huecos enfrentados: una puerta "Auto" entre dos salas vecinas.
+	for (const int32 RoomIndex : Builder.GetParents(GroundFloor))
+	{
+		if (Loops >= MinLoops)
+		{
+			break;
+		}
+		if (Builder.Rooms[RoomIndex].Def->StairPart == ENDStairPart::None && Builder.AddAutoLoop(RoomIndex))
+		{
+			++Loops;
+		}
+	}
+	if (Loops < MinLoops)
 	{
 		return Fail(TEXT("faltan bucles"));
 	}

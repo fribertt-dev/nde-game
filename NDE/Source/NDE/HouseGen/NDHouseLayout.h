@@ -130,6 +130,10 @@ struct FNDHouseLayoutSocket
 	int32 Connection = INDEX_NONE;
 	/** true si se abre al exterior (entrada principal o acceso secundario). */
 	bool bExit = false;
+	/** Puerta "Auto": no está en el módulo; se abrió para unir una escalera. Celda y lado del módulo sin girar. */
+	bool bAuto = false;
+	FIntPoint LocalCell = FIntPoint::ZeroValue;
+	ENDCellDirection LocalDirection = ENDCellDirection::North;
 
 	bool IsOpen() const { return Connection != INDEX_NONE || bExit; }
 	/** Celda vecina al otro lado del hueco. */
