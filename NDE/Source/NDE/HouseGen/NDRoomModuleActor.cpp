@@ -132,7 +132,7 @@ UInstancedStaticMeshComponent* ANDRoomModuleActor::GetMarkerMeshes(ENDRoomMarker
 	return MarkerMeshes[Index];
 }
 
-void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth)
+void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset)
 {
 	using namespace NDHouseGen;
 	const FIntPoint Offset = DirectionToOffset(Direction);
@@ -154,18 +154,25 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 		return;
 	}
 
+	// Hueco de [Center - Door/2, Center + Door/2] a lo largo de la pared, que va de -CellSize/2 a +CellSize/2.
 	const float Door = FMath::Min(OpeningWidth, CellSize - 2.f * WallThickness);
-	const float Side = (CellSize - Door) * 0.5f;
-	for (const float Sign : { -1.f, 1.f })
+	const float Center = FMath::Clamp(OpeningOffset, -CellSize * 0.5f + Door * 0.5f, CellSize * 0.5f - Door * 0.5f);
+	const float Starts[] = { -CellSize * 0.5f, Center + Door * 0.5f };
+	const float Ends[] = { Center - Door * 0.5f, CellSize * 0.5f };
+	for (int32 Piece = 0; Piece < 2; ++Piece)
 	{
-		AddBox(WallMeshes, WallCenter + Tangent * (Sign * (Door + Side) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Side, WallHeight));
+		const float Length = Ends[Piece] - Starts[Piece];
+		if (Length > 1.f)
+		{
+			AddBox(WallMeshes, WallCenter + Tangent * ((Starts[Piece] + Ends[Piece]) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Length, WallHeight));
+		}
 	}
 	const float LintelHeight = WallHeight - DoorHeight;
-	AddBox(WallMeshes, WallCenter + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
+	AddBox(WallMeshes, WallCenter + Tangent * Center + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
 }
 
 void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
-	bool bAddRoomLight, const TArray<bool>* CeilingPerCell)
+	bool bAddRoomLight, const TArray<bool>* CeilingPerCell, const TArray<float>* OpeningOffsets)
 {
 	using namespace NDHouseGen;
 	ClearGreybox();
@@ -208,22 +215,38 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 				return S.Cell == Cell && S.Direction == Direction;
 			});
 			const float Opening = OpeningWidths.IsValidIndex(SocketIndex) ? OpeningWidths[SocketIndex] : 0.f;
+			float HoleOffset = 0.f;
+			if (OpeningOffsets && OpeningOffsets->IsValidIndex(SocketIndex))
+			{
+				HoleOffset = (*OpeningOffsets)[SocketIndex];
+			}
+			else if (Definition.DoorSockets.IsValidIndex(SocketIndex))
+			{
+				HoleOffset = Definition.DoorSockets[SocketIndex].Offset;
+			}
 			const FIntPoint Offset = DirectionToOffset(Direction);
-			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
+			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening, HoleOffset);
 		}
 	}
 
-	// Arranque de escalera: rampa a lo largo de X que sube un piso entero, de la puerta S0 (X mínima)
-	// a la llegada del piso de arriba (X máxima). Ancho = celda menos paredes.
-	if (Definition.StairPart == ENDStairPart::Bottom)
+	// Arranque de escalera: rampas y rellanos (losas cuya cara de arriba va de Start a End) y muretes.
+	for (const FNDStairSegment& Segment : Definition.StairSegments)
 	{
-		const float Run = Extent.X;
-		const float Rise = FloorHeight;
-		const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Rise, Run));
-		const FVector Up(-FMath::Sin(FMath::DegreesToRadians(Angle)), 0.f, FMath::Cos(FMath::DegreesToRadians(Angle)));
-		// La cara de arriba pasa por (-Run/2, 0) y (Run/2, Rise).
-		const FVector Center = FVector(0.f, 0.f, Rise * 0.5f) - Up * (WallThickness * 0.5f);
-		AddBox(FloorMeshes, Center, FVector(FMath::Sqrt(Run * Run + Rise * Rise), Extent.Y - 2.f * WallThickness, WallThickness), FRotator(Angle, 0.f, 0.f));
+		const FVector Delta = Segment.End - Segment.Start;
+		const float Horizontal = FVector2D(Delta.X, Delta.Y).Size();
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(Delta.Y, Delta.X));
+		const FVector Middle = (Segment.Start + Segment.End) * 0.5f;
+		if (Segment.Height > 0.f)
+		{
+			const float Bottom = FMath::Min(Segment.Start.Z, Segment.End.Z);
+			AddBox(FloorMeshes, FVector(Middle.X, Middle.Y, Bottom + Segment.Height * 0.5f), FVector(Horizontal, Segment.Width, Segment.Height), FRotator(0.f, Yaw, 0.f));
+		}
+		else
+		{
+			const FRotator Rotation(FMath::RadiansToDegrees(FMath::Atan2(Delta.Z, Horizontal)), Yaw, 0.f);
+			const FVector Center = Middle - Rotation.RotateVector(FVector::UpVector) * (WallThickness * 0.5f);
+			AddBox(FloorMeshes, Center, FVector(Delta.Size(), Segment.Width, WallThickness), Rotation);
+		}
 	}
 
 	if (bAddRoomLight)

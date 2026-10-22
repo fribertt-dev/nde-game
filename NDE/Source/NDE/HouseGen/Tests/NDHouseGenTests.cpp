@@ -32,6 +32,26 @@ namespace NDHouseGenTests
 		return MakeParams(Seed, AllSizes[static_cast<int32>(FMath::Abs(Seed) % 3)]);
 	}
 
+	/** true si A y B se unen sin salir del piso Floor. */
+	bool AreConnectedOnFloor(const FNDHouseLayout& Layout, int32 A, int32 B, int32 Floor)
+	{
+		TArray<int32> Queue = { A };
+		TSet<int32> Seen = { A };
+		for (int32 Head = 0; Head < Queue.Num(); ++Head)
+		{
+			for (const FNDHouseLayoutConnection& Link : Layout.Connections)
+			{
+				const int32 Other = Link.RoomA == Queue[Head] ? Link.RoomB : (Link.RoomB == Queue[Head] ? Link.RoomA : INDEX_NONE);
+				if (Other != INDEX_NONE && Layout.Rooms[Other].Floor == Floor && !Seen.Contains(Other))
+				{
+					Seen.Add(Other);
+					Queue.Add(Other);
+				}
+			}
+		}
+		return Seen.Contains(B);
+	}
+
 	bool GenerateLayout(FAutomationTestBase& Test, const FNDHouseGenParams& Params, FNDHouseGenerationManifest& OutManifest, FNDHouseLayout& OutLayout)
 	{
 		TArray<FString> Errors;
@@ -268,6 +288,8 @@ bool FNDHouseGenFloorsTest::RunTest(const FString& Parameters)
 		int32 WithBasement = 0;
 		int32 BedroomUpstairs = 0;
 		int32 TwoStairs = 0;
+		int32 TwoStairsConnected = 0;
+		int32 BasementForCreature = 0;
 		for (int64 Seed = 1; Seed <= SeedCount; ++Seed)
 		{
 			FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed, Size);
@@ -292,19 +314,36 @@ bool FNDHouseGenFloorsTest::RunTest(const FString& Parameters)
 			WithUpper += Highest > 0 ? 1 : 0;
 			WithBasement += Lowest < 0 ? 1 : 0;
 			BedroomUpstairs += Layout.Rooms.IsValidIndex(Layout.BedroomRoom) && Layout.Rooms[Layout.BedroomRoom].Floor > 0 ? 1 : 0;
-			const int32 StairsUp = Layout.Rooms.FilterByPredicate([](const FNDHouseLayoutRoom& R)
+			TArray<int32> UpperTops;
+			for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 			{
-				return R.Def->StairPart == ENDStairPart::Top && R.Floor == NDHouseGen::UpperFloor;
-			}).Num();
-			TwoStairs += StairsUp >= 2 ? 1 : 0;
+				if (Layout.Rooms[RoomIndex].Def->StairPart == ENDStairPart::Top && Layout.Rooms[RoomIndex].Floor == NDHouseGen::UpperFloor)
+				{
+					UpperTops.Add(RoomIndex);
+				}
+			}
+			TwoStairs += UpperTops.Num() >= 2 ? 1 : 0;
+			TwoStairsConnected += UpperTops.Num() >= 2 && NDHouseGenTests::AreConnectedOnFloor(Layout, UpperTops[0], UpperTops[1], NDHouseGen::UpperFloor) ? 1 : 0;
+			// Sótano alcanzable por la criatura: todas sus salas sin pasos bajos.
+			if (Lowest < 0)
+			{
+				bool bAllReachable = true;
+				for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
+				{
+					bAllReachable &= Layout.Rooms[RoomIndex].Floor >= 0 || Layout.FindRoute(Layout.EntryRoom, RoomIndex, 0.f, nullptr, true);
+				}
+				BasementForCreature += bAllReachable ? 1 : 0;
+			}
 			if (FailureCount > 20)
 			{
 				AddError(TEXT("Demasiados fallos; se para la prueba"));
 				break;
 			}
 		}
-		AddInfo(FString::Printf(TEXT("%s con pisos, %d semillas: %d con piso superior, %d con sotano, %d con dormitorio arriba, %d con dos escaleras, %d casas de respaldo (%.2f %%)"),
-			*NDHouseGenTests::SizeName(Size), SeedCount, WithUpper, WithBasement, BedroomUpstairs, TwoStairs, FallbackCount, FallbackCount * 100.f / SeedCount));
+		auto Percent = [](int32 Part, int32 Whole) { return Whole > 0 ? Part * 100.f / Whole : 0.f; };
+		AddInfo(FString::Printf(TEXT("%s con pisos, %d semillas: %d con piso superior, %d con sotano | dormitorio arriba %.1f %% | dos escaleras %d, unidas arriba %.1f %% de las casas con piso superior | sotano alcanzable por la criatura %.1f %% | casas de respaldo %.2f %%"),
+			*NDHouseGenTests::SizeName(Size), SeedCount, WithUpper, WithBasement, Percent(BedroomUpstairs, WithUpper), TwoStairs,
+			Percent(TwoStairsConnected, WithUpper), Percent(BasementForCreature, WithBasement), Percent(FallbackCount, SeedCount)));
 		TestTrue(FString::Printf(TEXT("%s con pisos: casa de respaldo en menos del 1%% de semillas"), *NDHouseGenTests::SizeName(Size)), FallbackCount * 100 < SeedCount);
 	}
 

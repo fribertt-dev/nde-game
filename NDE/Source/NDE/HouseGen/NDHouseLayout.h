@@ -82,7 +82,7 @@ struct NDE_API FNDHouseGenParams
 
 	/** Con piso superior, probabilidad (0-1) de que el dormitorio principal esté arriba. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
-	float UpstairsBedroomChance = 0.6f;
+	float UpstairsBedroomChance = 0.8f;
 
 	/** Probabilidad (0-1) de abrir un acceso secundario al patio. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
@@ -120,6 +120,10 @@ struct FNDHouseLayoutSocket
 	FName SocketId;
 	ENDRoomSocketType Type = ENDRoomSocketType::Door_M;
 	float Width = 0.f;
+	/** Desplazamiento del hueco a lo largo de la pared (ver FNDRoomDoorSocket::Offset). */
+	float Offset = 0.f;
+	/** Paso bajo: la criatura no cabe. */
+	bool bLowClearance = false;
 	FIntPoint LotCell = FIntPoint::ZeroValue;
 	ENDCellDirection LotDirection = ENDCellDirection::North;
 	/** Índice en FNDHouseLayout::Connections, o INDEX_NONE. */
@@ -202,7 +206,10 @@ struct NDE_API FNDHouseLayout
 	 * Camino de salas From → To cruzando solo puertas y salas de al menos MinWidth cm.
 	 * Con MinWidth = 0 es la conectividad normal.
 	 */
-	bool FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms = nullptr) const;
+	bool FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms = nullptr, bool bCreature = false) const;
+
+	/** true si la puerta es un paso bajo (no pasa la criatura). */
+	bool IsLowClearance(const FNDHouseLayoutConnection& Link) const;
 
 	int32 CountMarkers(ENDRoomMarkerType Type) const;
 };

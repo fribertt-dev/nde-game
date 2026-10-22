@@ -302,11 +302,23 @@ void ANDHouseLot::BuildFromManifest()
 
 		// Los huecos del layout van en el mismo orden que en la definición.
 		TArray<float> Openings;
-		for (const FNDHouseLayoutSocket& Socket : Room.Sockets)
+		TArray<float> OpeningOffsets;
+		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
 		{
+			const FNDHouseLayoutSocket& Socket = Room.Sockets[SocketIndex];
 			// La unión vertical de una escalera no abre hueco en la pared.
 			const bool bWallOpening = Socket.Type != ENDRoomSocketType::Stairs;
 			Openings.Add(!bWallOpening ? 0.f : (Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f)));
+			// Hueco desplazado (escaleras en U): la pared vecina abre el suyo en el mismo sitio. Las paredes
+			// enfrentadas recorren el borde en sentidos opuestos, así que el desplazamiento cambia de signo.
+			float HoleOffset = Socket.Offset;
+			if (Socket.Connection != INDEX_NONE && FMath::IsNearlyZero(HoleOffset))
+			{
+				const FNDHouseLayoutConnection& Link = Layout.Connections[Socket.Connection];
+				const bool bIsA = Link.RoomA == RoomIndex && Link.SocketA == SocketIndex;
+				HoleOffset = -Layout.Rooms[bIsA ? Link.RoomB : Link.RoomA].Sockets[bIsA ? Link.SocketB : Link.SocketA].Offset;
+			}
+			OpeningOffsets.Add(HoleOffset);
 		}
 		// Techo solo donde no hay otra sala encima: allí el suelo de arriba hace de techo.
 		TArray<bool> CeilingPerCell;
@@ -315,7 +327,7 @@ void ANDHouseLot::BuildFromManifest()
 			CeilingPerCell.Add(!Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Room.Floor + 1)));
 		}
 		RoomActor->RoomInstanceId = RoomIndex;
-		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell);
+		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets);
 		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
 		if (Room.Floor > MaxVisibleFloor)

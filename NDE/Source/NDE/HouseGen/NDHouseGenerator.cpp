@@ -12,12 +12,8 @@ namespace NDHouseGenerator
 	const FName HubModuleId(TEXT("D01_Corridor_Straight"));
 	const FName FallbackLivingModuleId(TEXT("D01_LivingRoom_A"));
 	const FName FallbackKitchenModuleId(TEXT("D01_Kitchen_A"));
-	const FName StairsBottomModuleId(TEXT("D01_Stairs_Bottom"));
-	const FName StairsTopModuleId(TEXT("D01_Stairs_Top"));
 	/** Huecos de las escaleras (ver NDRoomCatalog.cpp). */
 	const FName StairsFootSocket(TEXT("S0"));
-	const FName StairsUnderRampSocket(TEXT("N1"));
-	const FName StairsTopExitSocket(TEXT("N1"));
 
 	struct FWorkRoom
 	{
@@ -313,69 +309,96 @@ namespace NDHouseGenerator
 			return Depths.IsValidIndex(RoomIndex) ? Depths[RoomIndex] : INDEX_NONE;
 		}
 
+		/** Arranques de escalera del catálogo para el distrito (recta, en U, en L...), en orden al azar. */
+		TArray<const FNDRoomModuleDefinition*> GetStairBottoms() const
+		{
+			TArray<const FNDRoomModuleDefinition*> Bottoms;
+			for (const FNDRoomModuleDefinition& Def : FNDRoomCatalog::GetModules())
+			{
+				if (Def.StairPart == ENDStairPart::Bottom && Def.IsAllowedIn(Params.District) && FNDRoomCatalog::Find(Def.StairPairModuleId))
+				{
+					Bottoms.Add(&Def);
+				}
+			}
+			Shuffle(Bottoms);
+			return Bottoms;
+		}
+
+		/** La única puerta de la llegada de una escalera. */
+		static FName GetTopExitSocket(const FNDRoomModuleDefinition& Top)
+		{
+			const FNDRoomDoorSocket* Exit = Top.DoorSockets.FindByPredicate([](const FNDRoomDoorSocket& S) { return NDHouseGen::IsConnectableSocket(S.Type); });
+			return Exit ? Exit->SocketId : NAME_None;
+		}
+
+		/** Prueba unas cuantas salas de PickRoom colgadas de Parent (por RequiredParentSocket si se da). */
+		bool TryAttachSome(int32 ParentIndex, TFunctionRef<const FNDRoomModuleDefinition*()> PickRoom, FName RequiredParentSocket = NAME_None)
+		{
+			constexpr int32 RoomTries = 3;
+			for (int32 Try = 0; Try < RoomTries; ++Try)
+			{
+				const FNDRoomModuleDefinition* Room = PickRoom();
+				if (Room && Attach(ParentIndex, *Room, nullptr, 0, NAME_None, RequiredParentSocket) != INDEX_NONE)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
+
 		/**
 		 * Escalera desde alguna sala de la planta baja (con profundidad <= MaxParentDepth) y, al otro lado,
-		 * la primera sala del otro piso elegida por PickFarRoom. Hacia arriba, si la llegada no tiene planta
-		 * baja debajo, pone antes una sala de planta baja (PickSupportRoom) por la puerta bajo la rampa.
-		 * Prueba sala por sala y deshace si no cabe. Devuelve la mitad de escalera del otro piso, o INDEX_NONE.
+		 * la primera sala del otro piso elegida por PickFarRoom. Prueba sala por sala y tipo de escalera por
+		 * tipo (la que quepa), deshaciendo si no cabe. Devuelve la mitad de escalera del otro piso, o INDEX_NONE.
 		 */
 		int32 AddFloorAccess(bool bGoingUp, int32 MaxParentDepth, TFunctionRef<const FNDRoomModuleDefinition*()> PickFarRoom,
 			TFunctionRef<const FNDRoomModuleDefinition*()> PickSupportRoom)
 		{
-			constexpr int32 RoomTries = 3;
 			for (const int32 Parent : GetParents(NDHouseGen::GroundFloor))
 			{
 				if (Rooms[Parent].Def->StairPart != ENDStairPart::None || GetDepth(Parent) > MaxParentDepth)
 				{
 					continue;
 				}
-				const FState Saved = SaveState();
-				const int32 FarIndex = AttachStairs(Parent, bGoingUp);
-				if (FarIndex == INDEX_NONE)
+				for (const FNDRoomModuleDefinition* Bottom : GetStairBottoms())
 				{
-					RestoreState(Saved);
-					continue;
-				}
-				const int32 BottomIndex = bGoingUp ? FarIndex - 1 : FarIndex;
-				if (!bGoingUp)
-				{
-					// Sótano: la primera sala sale del pie de la rampa (por debajo de la rampa no cabe la criatura).
-					// Si sobre esa celda no hay planta baja, se pone antes una sala de planta baja que la cubra.
-					if (AttachBelowFoot(BottomIndex, PickFarRoom, PickSupportRoom))
+					const FState Saved = SaveState();
+					const int32 FarIndex = AttachStairs(Parent, bGoingUp, *Bottom);
+					if (FarIndex == INDEX_NONE)
+					{
+						RestoreState(Saved);
+						continue;
+					}
+					const int32 BottomIndex = bGoingUp ? FarIndex - 1 : FarIndex;
+					const bool bPlaced = bGoingUp
+						? (TryAttachSome(FarIndex, PickFarRoom) || AttachWithSupportBelowArrival(BottomIndex, FarIndex, PickFarRoom, PickSupportRoom))
+						: AttachBelowFoot(BottomIndex, PickFarRoom, PickSupportRoom);
+					if (bPlaced)
 					{
 						return FarIndex;
 					}
 					RestoreState(Saved);
-					continue;
 				}
-				for (int32 Try = 0; Try < RoomTries; ++Try)
-				{
-					if (const FNDRoomModuleDefinition* FarRoom = PickFarRoom())
-					{
-						if (Attach(FarIndex, *FarRoom) != INDEX_NONE)
-						{
-							return FarIndex;
-						}
-					}
-				}
-				// Sala de apoyo bajo la llegada: entra por la puerta del final de la rampa y sostiene el piso de arriba.
-				const FNDRoomModuleDefinition* SupportRoom = bGoingUp ? PickSupportRoom() : nullptr;
-				if (SupportRoom && Attach(BottomIndex, *SupportRoom, nullptr, 0, NAME_None, StairsUnderRampSocket) != INDEX_NONE)
-				{
-					for (int32 Try = 0; Try < RoomTries; ++Try)
-					{
-						if (const FNDRoomModuleDefinition* FarRoom = PickFarRoom())
-						{
-							if (Attach(FarIndex, *FarRoom) != INDEX_NONE)
-							{
-								return FarIndex;
-							}
-						}
-					}
-				}
-				RestoreState(Saved);
 			}
 			return INDEX_NONE;
+		}
+
+		/**
+		 * Escalera recta: si a la llegada de arriba no le queda planta baja debajo, pone una sala de planta baja
+		 * por el paso bajo el final de la rampa. Esa sala tiene que unirse además a otra sala de planta baja
+		 * (la criatura no cabe bajo la rampa); luego cuelga la sala de arriba.
+		 */
+		bool AttachWithSupportBelowArrival(int32 BottomIndex, int32 TopIndex, TFunctionRef<const FNDRoomModuleDefinition*()> PickFarRoom,
+			TFunctionRef<const FNDRoomModuleDefinition*()> PickSupportRoom)
+		{
+			const int32 UnderRamp = Rooms[BottomIndex].Def->DoorSockets.IndexOfByPredicate([](const FNDRoomDoorSocket& S) { return S.bLowClearance; });
+			const FNDRoomModuleDefinition* SupportRoom = UnderRamp != INDEX_NONE ? PickSupportRoom() : nullptr;
+			if (!SupportRoom)
+			{
+				return false;
+			}
+			const int32 SupportIndex = Attach(BottomIndex, *SupportRoom, nullptr, 0, NAME_None, Rooms[BottomIndex].Def->DoorSockets[UnderRamp].SocketId);
+			return SupportIndex != INDEX_NONE && AddLoops(1, SupportIndex) > 0 && TryAttachSome(TopIndex, PickFarRoom);
 		}
 
 		/** Pega un módulo a alguna sala de planta baja de forma que ocupe Cell (por una puerta que dé a esa celda). */
@@ -403,55 +426,65 @@ namespace NDHouseGenerator
 			return INDEX_NONE;
 		}
 
-		/** Primera sala del sótano por el pie de la rampa, con sala de apoyo en planta baja si hace falta. */
+		/**
+		 * Primera sala del sótano por el pie de la rampa (la criatura tiene que poder bajar). Si sobre esa celda
+		 * no hay planta baja, antes pone una sala de planta baja que la cubra.
+		 */
 		bool AttachBelowFoot(int32 BottomIndex, TFunctionRef<const FNDRoomModuleDefinition*()> PickRoom, TFunctionRef<const FNDRoomModuleDefinition*()> PickSupportRoom)
 		{
-			constexpr int32 RoomTries = 3;
 			const int32 FootSocket = Rooms[BottomIndex].Def->DoorSockets.IndexOfByPredicate([](const FNDRoomDoorSocket& S) { return S.SocketId == StairsFootSocket; });
 			if (FootSocket == INDEX_NONE)
 			{
 				return false;
 			}
-			auto TryRooms = [&]()
-			{
-				for (int32 Try = 0; Try < RoomTries; ++Try)
-				{
-					const FNDRoomModuleDefinition* Room = PickRoom();
-					if (Room && Attach(BottomIndex, *Room, nullptr, 0, NAME_None, StairsFootSocket) != INDEX_NONE)
-					{
-						return true;
-					}
-				}
-				return false;
-			};
-			if (TryRooms())
+			if (TryAttachSome(BottomIndex, PickRoom, StairsFootSocket))
 			{
 				return true;
 			}
 			const FIntPoint Outside = GetSocketCell(BottomIndex, FootSocket) + NDHouseGen::DirectionToOffset(GetSocketDirection(BottomIndex, FootSocket));
-			const FState Saved = SaveState();
 			const FNDRoomModuleDefinition* SupportRoom = PickSupportRoom();
-			if (SupportRoom && AttachCoveringCell(Outside, *SupportRoom) != INDEX_NONE && TryRooms())
+			return SupportRoom && AttachCoveringCell(Outside, *SupportRoom) != INDEX_NONE && TryAttachSome(BottomIndex, PickRoom, StairsFootSocket);
+		}
+
+		/**
+		 * Segunda escalera al piso de arriba unida allí al resto (bucle entre pisos): su llegada da directamente
+		 * a una sala de arriba o a una sala nueva que se une a otra. true si lo consigue; si no, deja todo igual.
+		 */
+		bool AddConnectedSecondStairs(TFunctionRef<const FNDRoomModuleDefinition*()> PickUpperRoom)
+		{
+			for (const int32 Parent : GetParents(NDHouseGen::GroundFloor))
 			{
-				return true;
-			}
-			RestoreState(Saved);
-			// Último recurso: por la puerta bajo el final de la rampa. Los Desvelados pasan; la criatura no.
-			for (int32 Try = 0; Try < RoomTries; ++Try)
-			{
-				const FNDRoomModuleDefinition* Room = PickRoom();
-				if (Room && Attach(BottomIndex, *Room) != INDEX_NONE)
+				if (Rooms[Parent].Def->StairPart != ENDStairPart::None)
 				{
-					return true;
+					continue;
+				}
+				for (const FNDRoomModuleDefinition* Bottom : GetStairBottoms())
+				{
+					const FState Saved = SaveState();
+					const int32 TopIndex = AttachStairs(Parent, true, *Bottom);
+					if (TopIndex != INDEX_NONE)
+					{
+						if (AddLoops(1, TopIndex) > 0)
+						{
+							return true;
+						}
+						const FNDRoomModuleDefinition* Room = PickUpperRoom();
+						const int32 RoomIndex = Room ? Attach(TopIndex, *Room) : INDEX_NONE;
+						if (RoomIndex != INDEX_NONE && AddLoops(1, RoomIndex) > 0)
+						{
+							return true;
+						}
+					}
+					RestoreState(Saved);
 				}
 			}
 			return false;
 		}
 
-		/** Pega el módulo a alguna sala de planta baja con profundidad entre MinDepth y MaxDepth. */
-		int32 AttachAtDepth(const FNDRoomModuleDefinition& Def, int32 MinDepth, int32 MaxDepth)
+		/** Pega el módulo a alguna sala de ese piso con profundidad entre MinDepth y MaxDepth. */
+		int32 AttachAtDepth(const FNDRoomModuleDefinition& Def, int32 MinDepth, int32 MaxDepth, int32 Floor = NDHouseGen::GroundFloor)
 		{
-			for (const int32 Parent : GetParents(NDHouseGen::GroundFloor))
+			for (const int32 Parent : GetParents(Floor))
 			{
 				const int32 Depth = GetDepth(Parent);
 				if (Depth >= MinDepth && Depth <= MaxDepth)
@@ -496,23 +529,21 @@ namespace NDHouseGenerator
 		}
 
 		/**
-		 * Escalera colgada de Parent: hacia arriba (arranque en el piso de Parent) o hacia abajo
-		 * (llegada en el piso de Parent, arranque en el de abajo). Devuelve la mitad del otro piso,
-		 * de donde se cuelgan las salas de ese piso; INDEX_NONE si no cabe.
+		 * Escalera Bottom (con su pareja) colgada de Parent: hacia arriba (arranque en el piso de Parent, se entra
+		 * por el pie S0) o hacia abajo (llegada en el piso de Parent, se entra por su puerta). Devuelve la mitad
+		 * del otro piso, de donde se cuelgan las salas de ese piso; INDEX_NONE si no cabe.
 		 */
-		int32 AttachStairs(int32 ParentIndex, bool bGoingUp)
+		int32 AttachStairs(int32 ParentIndex, bool bGoingUp, const FNDRoomModuleDefinition& Bottom)
 		{
-			const FNDRoomModuleDefinition* Bottom = FNDRoomCatalog::Find(StairsBottomModuleId);
-			const FNDRoomModuleDefinition* Top = FNDRoomCatalog::Find(StairsTopModuleId);
-			if (!Bottom || !Top || !Rooms.IsValidIndex(ParentIndex))
+			const FNDRoomModuleDefinition* Top = FNDRoomCatalog::Find(Bottom.StairPairModuleId);
+			if (!Top || !Rooms.IsValidIndex(ParentIndex))
 			{
 				return INDEX_NONE;
 			}
-			const FNDRoomModuleDefinition& Near = bGoingUp ? *Bottom : *Top;
-			const FNDRoomModuleDefinition& Far = bGoingUp ? *Top : *Bottom;
+			const FNDRoomModuleDefinition& Near = bGoingUp ? Bottom : *Top;
+			const FNDRoomModuleDefinition& Far = bGoingUp ? *Top : Bottom;
 			const int32 FarFloor = Rooms[ParentIndex].Floor + (bGoingUp ? 1 : -1);
-			// Hacia arriba se entra por el pie de la rampa; hacia abajo, por lo alto de la rampa.
-			const int32 NearIndex = Attach(ParentIndex, Near, &Far, FarFloor, bGoingUp ? StairsFootSocket : StairsTopExitSocket);
+			const int32 NearIndex = Attach(ParentIndex, Near, &Far, FarFloor, bGoingUp ? StairsFootSocket : GetTopExitSocket(*Top));
 			if (NearIndex == INDEX_NONE)
 			{
 				return INDEX_NONE;
@@ -520,26 +551,8 @@ namespace NDHouseGenerator
 			const int32 FarIndex = AddRoom(Far, Rooms[NearIndex].Grid, Rooms[NearIndex].YawSteps, FarFloor);
 			const int32 BottomIndex = bGoingUp ? NearIndex : FarIndex;
 			const int32 TopIndex = bGoingUp ? FarIndex : NearIndex;
-			Connect(BottomIndex, FindStairsSocket(*Bottom), TopIndex, FindStairsSocket(*Top), false);
+			Connect(BottomIndex, FindStairsSocket(Bottom), TopIndex, FindStairsSocket(*Top), false);
 			return FarIndex;
-		}
-
-		/** Escalera desde cualquier sala de ese piso. */
-		int32 AttachStairsAnywhere(int32 Floor, bool bGoingUp)
-		{
-			for (const int32 Parent : GetParents(Floor))
-			{
-				if (Rooms[Parent].Def->StairPart != ENDStairPart::None)
-				{
-					continue;
-				}
-				const int32 FarIndex = AttachStairs(Parent, bGoingUp);
-				if (FarIndex != INDEX_NONE)
-				{
-					return FarIndex;
-				}
-			}
-			return INDEX_NONE;
 		}
 
 		int32 CountRoomsOnFloor(int32 Floor) const
@@ -756,11 +769,16 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	const FNDRoomModuleDefinition* Entry = Entries[Builder.Rand(0, Entries.Num() - 1)];
 
 	// Pisos extra: cada uno cuesta una escalera (dos salas, una por piso) y al menos una sala más.
-	// Cada uno: arranque, llegada, primera sala y quizá una sala de apoyo en planta baja.
+	// Las casas grandes con piso superior guardan sitio para una segunda escalera unida arriba.
+	constexpr int32 RoomsPerExtraFloor = 3;
 	bool bUpper = Stream.FRand() < Params.UpperFloorChance;
 	bool bBasement = Stream.FRand() < Params.BasementChance;
 	bool bBedroomUpstairs = bUpper && Stream.FRand() < Params.UpstairsBedroomChance;
-	auto GroundBudget = [&]() { return RoomCount - (bUpper ? 4 : 0) - (bBasement ? 4 : 0); };
+	bool bSecondStairs = false;
+	auto GroundBudget = [&]()
+	{
+		return RoomCount - (bUpper ? RoomsPerExtraFloor : 0) - (bBasement ? RoomsPerExtraFloor : 0) - (bSecondStairs ? RoomsPerExtraFloor : 0);
+	};
 	// Planta baja mínima: entrada, distribuidor, objetivo y el dormitorio si no está arriba.
 	auto GroundMinimum = [&]() { return bBedroomUpstairs ? 3 : 4; };
 	if (bBasement && GroundBudget() < GroundMinimum())
@@ -772,6 +790,8 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		bUpper = false;
 		bBedroomUpstairs = false;
 	}
+	// Segunda escalera solo si a la planta baja le siguen quedando salas de sobra.
+	bSecondStairs = bUpper && Params.HouseSize == ENDHouseSize::Large && GroundBudget() - RoomsPerExtraFloor >= GroundMinimum() + 2;
 	// Salas de más para los pisos extra (además de la primera de cada uno), sin dejar la planta baja pelada.
 	int32 ExtraFloorRooms = 0;
 	if (bUpper || bBasement)
@@ -863,10 +883,20 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		bool bUpperPlaced = false;
 		if (bBedroomUpstairs)
 		{
-			bUpperPlaced = Builder.AddFloorAccess(true, Params.MaxBedroomDepth - StairsToBedroomDoors,
-				[&Builder, &Bedrooms]() { return Builder.Pick(Bedrooms); }, PickSupport) != INDEX_NONE;
-			// El dormitorio no cabe arriba: se queda en planta baja a su profundidad y arriba va otra sala.
-			if (!bUpperPlaced && Builder.AttachAtDepth(*Builder.Pick(Bedrooms), Params.MinBedroomDepth - 1, Params.MaxBedroomDepth - 1) == INDEX_NONE)
+			auto PickBedroom = [&Builder, &Bedrooms]() { return Builder.Pick(Bedrooms); };
+			// Dormitorio justo al llegar arriba...
+			bUpperPlaced = Builder.AddFloorAccess(true, Params.MaxBedroomDepth - StairsToBedroomDoors, PickBedroom, PickSupport) != INDEX_NONE;
+			bool bBedroomPlaced = bUpperPlaced;
+			// ...o una sala más allá: escalera desde el distribuidor, una sala arriba y el dormitorio pegado a ella.
+			if (!bUpperPlaced)
+			{
+				bUpperPlaced = Builder.AddFloorAccess(true, Params.MaxBedroomDepth - StairsToBedroomDoors - 1,
+					[&Builder, &UpperRooms]() { return Builder.Pick(UpperRooms); }, PickSupport) != INDEX_NONE;
+				bBedroomPlaced = bUpperPlaced
+					&& Builder.AttachAtDepth(*Builder.Pick(Bedrooms), Params.MinBedroomDepth - 1, Params.MaxBedroomDepth - 1, UpperFloor) != INDEX_NONE;
+			}
+			// El dormitorio no cabe arriba: se queda en planta baja a su profundidad.
+			if (!bBedroomPlaced && Builder.AttachAtDepth(*Builder.Pick(Bedrooms), Params.MinBedroomDepth - 1, Params.MaxBedroomDepth - 1) == INDEX_NONE)
 			{
 				return Fail(TEXT("el dormitorio no cabe ni arriba ni abajo"));
 			}
@@ -881,20 +911,19 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	{
 		return Fail(TEXT("el sotano no cabe"));
 	}
-	// Casa grande con piso superior: segunda escalera, unida arriba a otra sala para cerrar un bucle entre pisos.
-	if (bUpper && Params.HouseSize == ENDHouseSize::Large && Builder.Rooms.Num() + 2 <= RoomCount)
-	{
-		const NDHouseGenerator::FBuilder::FState Saved = Builder.SaveState();
-		const int32 SecondTop = Builder.AttachStairsAnywhere(GroundFloor, true);
-		if (SecondTop == INDEX_NONE || Builder.AddLoops(1, SecondTop) == 0)
-		{
-			Builder.RestoreState(Saved);
-		}
-	}
-
-	// Resto de salas: repartidas entre los pisos extra y, si no caben, en planta baja.
+	// Resto de salas: repartidas entre los pisos extra y, si no caben, en planta baja. Con sitio guardado
+	// para la segunda escalera, primero se llena hasta ese hueco, luego va la escalera y después lo que quede.
+	const int32 RoomsBeforeSecondStairs = RoomCount - (bSecondStairs ? RoomsPerExtraFloor : 0);
+	bool bSecondStairsTried = !bSecondStairs;
 	while (Builder.Rooms.Num() < RoomCount)
 	{
+		if (!bSecondStairsTried && Builder.Rooms.Num() >= RoomsBeforeSecondStairs)
+		{
+			// Casa grande: segunda escalera al piso de arriba, unida allí al resto (bucle entre pisos).
+			bSecondStairsTried = true;
+			Builder.AddConnectedSecondStairs([&Builder, &UpperRooms]() { return Builder.Pick(UpperRooms); });
+			continue;
+		}
 		const float Roll = Stream.FRand();
 		int32 Floor = GroundFloor;
 		if (bUpper && bBasement)

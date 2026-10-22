@@ -95,6 +95,17 @@ void FNDHouseGenParams::ApplyFloorOptions(ENDFloorOption UpperFloor, ENDFloorOpt
 	};
 	Apply(UpperFloor, UpperFloorChance);
 	Apply(Basement, BasementChance);
+
+	// Piso superior y sótano a la vez piden al menos 10 salas (planta baja mínima + escalera y sala en cada piso).
+	constexpr int32 RoomsForBothFloors = 10;
+	if (UpperFloor == ENDFloorOption::Always && Basement == ENDFloorOption::Always && MaxRooms < RoomsForBothFloors)
+	{
+		UE_LOG(LogNDHouseGen, Display, TEXT("Casa %s con piso superior y sotano: %d-%d salas no bastan; se usan %d-%d"),
+			*StaticEnum<ENDHouseSize>()->GetNameStringByValue(static_cast<int64>(HouseSize)), MinRooms, MaxRooms,
+			FMath::Max(MinRooms, RoomsForBothFloors), FMath::Max(MaxRooms, RoomsForBothFloors));
+		MinRooms = FMath::Max(MinRooms, RoomsForBothFloors);
+		MaxRooms = FMath::Max(MaxRooms, MinRooms);
+	}
 }
 
 bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FNDHouseLayout& OutLayout, FString& OutError)
@@ -131,6 +142,8 @@ bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FN
 			Socket.SocketId = DefSocket.SocketId;
 			Socket.Type = DefSocket.Type;
 			Socket.Width = DefSocket.Width;
+			Socket.Offset = DefSocket.Offset;
+			Socket.bLowClearance = DefSocket.bLowClearance;
 			Socket.LotCell = Room.Grid + NDHouseGen::RotateCell(DefSocket.Cell, Def->FootprintCells, Room.YawSteps);
 			Socket.LotDirection = NDHouseGen::RotateDirection(DefSocket.Direction, Room.YawSteps);
 		}
@@ -308,7 +321,7 @@ void FNDHouseLayout::ComputeDepths(TArray<int32>& OutDepths) const
 	}
 }
 
-bool FNDHouseLayout::FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms) const
+bool FNDHouseLayout::FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TArray<int32>* OutRooms, bool bCreature) const
 {
 	if (!Rooms.IsValidIndex(FromRoom) || !Rooms.IsValidIndex(ToRoom))
 	{
@@ -330,7 +343,7 @@ bool FNDHouseLayout::FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TAr
 		for (const FNDHouseLayoutConnection& Link : Connections)
 		{
 			const int32 Other = Link.RoomA == Current ? Link.RoomB : (Link.RoomB == Current ? Link.RoomA : INDEX_NONE);
-			if (Other != INDEX_NONE && Parent[Other] == INDEX_NONE && Link.OpeningWidth >= MinWidth && RoomFits(Other))
+			if (Other != INDEX_NONE && Parent[Other] == INDEX_NONE && Link.OpeningWidth >= MinWidth && RoomFits(Other) && !(bCreature && IsLowClearance(Link)))
 			{
 				Parent[Other] = Current;
 				Queue.Add(Other);
@@ -351,6 +364,11 @@ bool FNDHouseLayout::FindRoute(int32 FromRoom, int32 ToRoom, float MinWidth, TAr
 		OutRooms->Insert(FromRoom, 0);
 	}
 	return true;
+}
+
+bool FNDHouseLayout::IsLowClearance(const FNDHouseLayoutConnection& Link) const
+{
+	return Rooms[Link.RoomA].Sockets[Link.SocketA].bLowClearance || Rooms[Link.RoomB].Sockets[Link.SocketB].bLowClearance;
 }
 
 int32 FNDHouseLayout::CountMarkers(ENDRoomMarkerType Type) const
@@ -524,6 +542,16 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 	if (Layout.ObjectiveRoom != INDEX_NONE && !Layout.FindRoute(Layout.EntryRoom, Layout.ObjectiveRoom, Params.CarryEnvelopeWidth))
 	{
 		OutErrors.Add(FString::Printf(TEXT("No hay ruta de bulto de %.0f cm entre la entrada y el objetivo"), Params.CarryEnvelopeWidth));
+	}
+
+	// La criatura tiene que poder llegar a toda la casa (sótano y piso de arriba incluidos) sin pasos bajos.
+	for (int32 RoomIndex = 1; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
+	{
+		if (Depths[RoomIndex] != INDEX_NONE && !Layout.FindRoute(Layout.EntryRoom, RoomIndex, 0.f, nullptr, true))
+		{
+			OutErrors.Add(FString::Printf(TEXT("La criatura no llega a la sala %d (piso %d)"), RoomIndex, Layout.Rooms[RoomIndex].Floor));
+			break;
+		}
 	}
 	return OutErrors.Num() == ErrorsBefore;
 }

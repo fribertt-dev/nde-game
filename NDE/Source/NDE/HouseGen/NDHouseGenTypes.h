@@ -143,6 +143,39 @@ struct FNDRoomDoorSocket
 	/** Ancho libre del hueco en cm. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
 	float Width = 160.f;
+
+	/** Desplazamiento del hueco a lo largo de la pared, en cm (0 = centrado). La sala vecina lo copia. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	float Offset = 0.f;
+
+	/** Paso bajo (p. ej. bajo una rampa): caben los Desvelados, no la criatura. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	bool bLowClearance = false;
+};
+
+/**
+ * Pieza de la geometría de una escalera, en cm respecto al centro del módulo sin rotar (Z = suelo).
+ * Sin altura es una losa de 20 cm cuya cara de arriba va de Start a End (rampa o rellano);
+ * con altura es un murete vertical de Start a End.
+ */
+USTRUCT(BlueprintType)
+struct FNDStairSegment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FVector Start = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FVector End = FVector::ZeroVector;
+
+	/** Ancho de la rampa o grosor del murete. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float Width = 360.f;
+
+	/** 0 = losa (rampa o rellano); > 0 = murete de esta altura. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float Height = 0.f;
 };
 
 /** Punto marcado de un módulo, relativo al centro del módulo sin rotar. */
@@ -185,6 +218,14 @@ struct FNDRoomModuleDefinition
 	/** Si es una escalera, qué mitad es. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	ENDStairPart StairPart = ENDStairPart::None;
+
+	/** Escalera: el módulo de la otra mitad (la llegada si este es el arranque, y al revés). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	FName StairPairModuleId;
+
+	/** Arranque de escalera: rampas, rellanos y muretes. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	TArray<FNDStairSegment> StairSegments;
 
 	/** Celdas del rectángulo que NO son de la sala (salas en L). Vacío = rectángulo completo. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
