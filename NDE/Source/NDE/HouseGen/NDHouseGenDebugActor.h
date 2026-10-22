@@ -45,9 +45,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
 	FName Archetype = TEXT("H01");
 
-	/** Número de salas. 0 = al azar según el arquetipo. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "8"))
-	int32 RoomCount = 0;
+	/** Tamaño de casa: Small 5-8 salas, Medium 7-11, Large 10-17. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDHouseSize HouseSize = ENDHouseSize::Small;
+
+	/** Mínimo de salas. 0 = el del tamaño de casa. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "17"))
+	int32 MinRooms = 0;
+
+	/** Máximo de salas. 0 = el del tamaño de casa. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "17"))
+	int32 MaxRooms = 0;
 
 	/** Lote de prueba (tamaño y fachada). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")

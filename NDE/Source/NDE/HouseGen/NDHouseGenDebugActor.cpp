@@ -53,11 +53,12 @@ void ANDHouseGenDebugActor::Generate()
 	}
 	Clear();
 
-	FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(Archetype);
+	FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(Archetype, HouseSize);
 	Params.Seed = Seed;
-	Params.RoomCount = RoomCount;
-	Params.Lot = LotInfo;
-	Params.Lot.LotTransform = GetActorTransform();
+	Params.OverrideRoomRange(MinRooms, MaxRooms);
+	FNDHouseLotInfo Lot = LotInfo;
+	Lot.LotTransform = GetActorTransform();
+	Params.SetLot(Lot);
 
 	TArray<FString> Errors;
 	FNDHouseLayout Layout;

@@ -32,17 +32,21 @@ struct NDE_API FNDHouseGenParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
 	FNDHouseLotInfo Lot;
 
-	/** Número de salas pedido. 0 = al azar entre MinRooms y MaxRooms. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
-	int32 RoomCount = 0;
+	/** Tamaño de casa; fija los valores por defecto de salas, bucles y lote mínimo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDHouseSize HouseSize = ENDHouseSize::Small;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "5"))
+	/** Salas mínimas y máximas (se elige al azar entre ambas). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "5", ClampMax = "17"))
 	int32 MinRooms = 5;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "5"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "5", ClampMax = "17"))
 	int32 MaxRooms = 8;
 
-	/** Bucles opcionales como máximo (puertas extra entre salas vecinas). */
+	/** Bucles (puertas extra entre salas vecinas) mínimos y máximos. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	int32 MinLoops = 0;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
 	int32 MaxLoops = 2;
 
@@ -76,8 +80,23 @@ struct NDE_API FNDHouseGenParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
 	int32 MaxAttempts = 24;
 
-	/** Reglas por defecto de un arquetipo. Si no se conoce, avisa y usa H01. */
-	static FNDHouseGenParams ForArchetype(FName Archetype);
+	/**
+	 * Reglas por defecto de un arquetipo y tamaño. Si no se conoce el arquetipo, avisa y usa H01.
+	 * Agranda el lote si es menor que el mínimo del tamaño.
+	 */
+	static FNDHouseGenParams ForArchetype(FName Archetype, ENDHouseSize Size = ENDHouseSize::Small);
+
+	/** Lote mínimo (en celdas) para que quepa una casa de ese tamaño. */
+	static FIntPoint GetMinLotSize(ENDHouseSize Size);
+
+	/** Agranda Lot.SizeCells hasta el mínimo del tamaño. true si tuvo que agrandarlo. */
+	bool GrowLotToFit();
+
+	/** Usa este lote, agrandándolo (con aviso en el log) si la casa no cabe. */
+	void SetLot(const FNDHouseLotInfo& InLot);
+
+	/** Cambia el rango de salas; 0 deja el del tamaño. Se limita a 5-17. */
+	void OverrideRoomRange(int32 InMinRooms, int32 InMaxRooms);
 };
 
 /** Hueco de una sala ya colocada, en celdas del lote. */

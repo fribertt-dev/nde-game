@@ -140,7 +140,10 @@ void ANDHouseLot::OnConstruction(const FTransform& Transform)
 
 void ANDHouseLot::UpdateEditorBounds()
 {
-	const FVector Extent(LotInfo.SizeCells.X * NDHouseGen::CellSize * 0.5f, LotInfo.SizeCells.Y * NDHouseGen::CellSize * 0.5f, 50.f);
+	// Muestra el lote ya agrandado para el tamaño de casa elegido.
+	const FIntPoint MinSize = FNDHouseGenParams::GetMinLotSize(HouseSize);
+	const FIntPoint Size(FMath::Max(LotInfo.SizeCells.X, MinSize.X), FMath::Max(LotInfo.SizeCells.Y, MinSize.Y));
+	const FVector Extent(Size.X * NDHouseGen::CellSize * 0.5f, Size.Y * NDHouseGen::CellSize * 0.5f, 50.f);
 	LotBounds->SetBoxExtent(Extent);
 	LotBounds->SetRelativeLocation(FVector(0.f, 0.f, Extent.Z));
 
@@ -198,12 +201,13 @@ void ANDHouseLot::GenerateOnStart()
 
 FNDHouseGenParams ANDHouseLot::MakeParams(int64 Seed) const
 {
-	FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(HouseArchetype);
+	FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(HouseArchetype, HouseSize);
 	Params.Seed = Seed;
 	Params.District = District;
-	Params.RoomCount = RoomCount;
-	Params.Lot = LotInfo;
-	Params.Lot.LotTransform = GetActorTransform();
+	Params.OverrideRoomRange(MinRooms, MaxRooms);
+	FNDHouseLotInfo Lot = LotInfo;
+	Lot.LotTransform = GetActorTransform();
+	Params.SetLot(Lot);
 	if (const ANDExpeditionGameState* ExpState = GetWorld() ? GetWorld()->GetGameState<ANDExpeditionGameState>() : nullptr)
 	{
 		Params.ContractId = ExpState->GetContractId();

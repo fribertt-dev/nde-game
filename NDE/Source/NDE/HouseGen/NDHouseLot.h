@@ -93,17 +93,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (EditCondition = "bUseFixedSeed"))
 	int64 FixedSeed = 1;
 
-	/** Número de salas. 0 = al azar según el arquetipo. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "8"))
-	int32 RoomCount = 0;
+	/** Tamaño de casa: Small 5-8 salas, Medium 7-11, Large 10-17. El lote crece si no cabe. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	ENDHouseSize HouseSize = ENDHouseSize::Small;
+
+	/** Mínimo de salas. 0 = el del tamaño de casa. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "17"))
+	int32 MinRooms = 0;
+
+	/** Máximo de salas. 0 = el del tamaño de casa. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "17"))
+	int32 MaxRooms = 0;
 
 	/** Genera la casa al empezar la partida (en el servidor). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	bool bGenerateOnBeginPlay = true;
 
-	/** Pone techo a las salas. Desactivado se ve mejor desde arriba mientras probamos. */
+	/** Pone techo a las salas. Desactívalo para ver la casa desde arriba mientras pruebas. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
-	bool bBuildCeiling = false;
+	bool bBuildCeiling = true;
 
 	/** Pinta en el suelo botín (amarillo), escondites (azul), criatura (rojo) y extracción (verde). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")

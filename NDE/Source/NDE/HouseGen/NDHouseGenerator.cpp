@@ -78,17 +78,26 @@ namespace NDHouseGenerator
 			return !Rooms[RoomIndex].SocketUsed[SocketIndex];
 		}
 
-		bool IsAreaFree(const FIntPoint& Grid, const FIntPoint& Size) const
+		/** Celdas del lote que ocuparía el módulo colocado en Grid con ese giro. */
+		static void GetPlacedCells(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps, TArray<FIntPoint>& OutCells)
 		{
-			for (int32 X = 0; X < Size.X; ++X)
+			TArray<FIntPoint> LocalCells;
+			Def.GetLocalCells(LocalCells);
+			for (const FIntPoint& Local : LocalCells)
 			{
-				for (int32 Y = 0; Y < Size.Y; ++Y)
+				OutCells.Add(Grid + NDHouseGen::RotateCell(Local, Def.FootprintCells, YawSteps));
+			}
+		}
+
+		bool IsAreaFree(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps) const
+		{
+			TArray<FIntPoint> Cells;
+			GetPlacedCells(Def, Grid, YawSteps, Cells);
+			for (const FIntPoint& Cell : Cells)
+			{
+				if (!Params.Lot.IsBuildable(Cell) || Occupancy.Contains(Cell))
 				{
-					const FIntPoint Cell = Grid + FIntPoint(X, Y);
-					if (!Params.Lot.IsBuildable(Cell) || Occupancy.Contains(Cell))
-					{
-						return false;
-					}
+					return false;
 				}
 			}
 			return true;
@@ -110,13 +119,11 @@ namespace NDHouseGenerator
 			Room.Grid = Grid;
 			Room.YawSteps = YawSteps;
 			Room.SocketUsed.Init(false, Def.DoorSockets.Num());
-			const FIntPoint Size = NDHouseGen::RotateSize(Def.FootprintCells, YawSteps);
-			for (int32 X = 0; X < Size.X; ++X)
+			TArray<FIntPoint> Cells;
+			GetPlacedCells(Def, Grid, YawSteps, Cells);
+			for (const FIntPoint& Cell : Cells)
 			{
-				for (int32 Y = 0; Y < Size.Y; ++Y)
-				{
-					Occupancy.Add(Grid + FIntPoint(X, Y), Index);
-				}
+				Occupancy.Add(Cell, Index);
 			}
 			return Index;
 		}
@@ -170,7 +177,7 @@ namespace NDHouseGenerator
 				default: ExitCell = FIntPoint(T, Lot.FrontYardCells); break;
 				}
 				const FIntPoint Grid = ExitCell - NDHouseGen::RotateCell(Exit.Cell, Def.FootprintCells, YawSteps);
-				if (IsAreaFree(Grid, NDHouseGen::RotateSize(Def.FootprintCells, YawSteps)))
+				if (IsAreaFree(Def, Grid, YawSteps))
 				{
 					const int32 Index = AddRoom(Def, Grid, YawSteps);
 					Rooms[Index].SocketUsed[ExitSocket] = true;
@@ -213,7 +220,7 @@ namespace NDHouseGenerator
 				const FNDRoomDoorSocket& NewSocket = Def.DoorSockets[Candidate.Y];
 				const int32 YawSteps = (static_cast<int32>(NeededDir) - static_cast<int32>(NewSocket.Direction) + 4) % 4;
 				const FIntPoint Grid = TargetCell - NDHouseGen::RotateCell(NewSocket.Cell, Def.FootprintCells, YawSteps);
-				if (!IsAreaFree(Grid, NDHouseGen::RotateSize(Def.FootprintCells, YawSteps)))
+				if (!IsAreaFree(Def, Grid, YawSteps))
 				{
 					continue;
 				}
@@ -257,7 +264,7 @@ namespace NDHouseGenerator
 		}
 
 		/** Bucles: abre huecos enfrentados entre salas vecinas aún no unidas (nunca la entrada). */
-		void AddLoops(int32 Count)
+		int32 AddLoops(int32 Count)
 		{
 			struct FLoopCandidate { int32 RoomA, SocketA, RoomB, SocketB; };
 			TArray<FLoopCandidate> Candidates;
@@ -303,6 +310,7 @@ namespace NDHouseGenerator
 					++Added;
 				}
 			}
+			return Added;
 		}
 
 		/** Acceso secundario: un hueco libre que da a patio trasero o lateral dentro del lote. */
@@ -342,6 +350,7 @@ namespace NDHouseGenerator
 			Out.ContractId = Params.ContractId;
 			Out.HouseArchetype = Params.HouseArchetype;
 			Out.District = Params.District;
+			Out.HouseSize = Params.HouseSize;
 			Out.Lot = Params.Lot;
 			Out.Connections = Links;
 			Out.SecondaryExitRoom = SecondaryExitRoom;
@@ -401,16 +410,19 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 {
 	using namespace NDHouseGenerator;
 
-	const FNDRoomModuleDefinition* Entry = FNDRoomCatalog::Find(EntryModuleId);
+	const TArray<const FNDRoomModuleDefinition*> Entries = MakePool(Params.District, { ENDRoomType::R01_Entry }, 1);
 	const FNDRoomModuleDefinition* Hub = FNDRoomCatalog::Find(HubModuleId);
 	const TArray<const FNDRoomModuleDefinition*> Bedrooms = MakePool(Params.District, { ENDRoomType::R06_MasterBedroom }, 1);
 	const TArray<const FNDRoomModuleDefinition*> Objectives = MakePool(Params.District, { ENDRoomType::R09_Objective }, 1);
 	// Salas de paso: necesitan otro hueco para seguir el camino.
 	const TArray<const FNDRoomModuleDefinition*> Intermediates = MakePool(Params.District,
-		{ ENDRoomType::R02_Corridor, ENDRoomType::R03_LivingRoom, ENDRoomType::R04_Kitchen, ENDRoomType::R05_DiningRoom, ENDRoomType::R08_Storage }, 2);
+		{ ENDRoomType::R02_Corridor, ENDRoomType::R03_LivingRoom, ENDRoomType::R04_Kitchen, ENDRoomType::R05_DiningRoom, ENDRoomType::R08_Storage,
+		  ENDRoomType::R11_Study, ENDRoomType::R13_Laundry, ENDRoomType::R14_Library, ENDRoomType::R15_Playroom }, 2);
 	const TArray<const FNDRoomModuleDefinition*> Fillers = MakePool(Params.District,
-		{ ENDRoomType::R02_Corridor, ENDRoomType::R03_LivingRoom, ENDRoomType::R04_Kitchen, ENDRoomType::R05_DiningRoom, ENDRoomType::R07_Bathroom, ENDRoomType::R08_Storage }, 1);
-	if (!Entry || !Hub || Bedrooms.IsEmpty() || Objectives.IsEmpty() || Intermediates.IsEmpty() || Fillers.IsEmpty())
+		{ ENDRoomType::R02_Corridor, ENDRoomType::R03_LivingRoom, ENDRoomType::R04_Kitchen, ENDRoomType::R05_DiningRoom, ENDRoomType::R07_Bathroom,
+		  ENDRoomType::R08_Storage, ENDRoomType::R11_Study, ENDRoomType::R12_Pantry, ENDRoomType::R13_Laundry, ENDRoomType::R14_Library,
+		  ENDRoomType::R15_Playroom }, 1);
+	if (Entries.IsEmpty() || !Hub || Bedrooms.IsEmpty() || Objectives.IsEmpty() || Intermediates.IsEmpty() || Fillers.IsEmpty())
 	{
 		UE_LOG(LogNDHouseGen, Error, TEXT("Faltan modulos en el catalogo para el distrito %s"), *Params.District.ToString());
 		return false;
@@ -419,7 +431,8 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	FRandomStream Stream(AttemptSeed);
 	FBuilder Builder(Params, &Stream);
 
-	const int32 RoomCount = Params.RoomCount > 0 ? FMath::Clamp(Params.RoomCount, Params.MinRooms, Params.MaxRooms) : Builder.Rand(Params.MinRooms, Params.MaxRooms);
+	const int32 RoomCount = Builder.Rand(Params.MinRooms, FMath::Max(Params.MinRooms, Params.MaxRooms));
+	const FNDRoomModuleDefinition* Entry = Entries[Builder.Rand(0, Entries.Num() - 1)];
 	// Entrada + camino de BedroomDepth salas hasta el dormitorio + al menos una sala más (objetivo).
 	const int32 MaxBedroomDepth = FMath::Min(Params.MaxBedroomDepth, RoomCount - 2);
 	if (MaxBedroomDepth < Params.MinBedroomDepth)
@@ -470,7 +483,12 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		}
 	}
 
-	Builder.AddLoops(Builder.Rand(0, Params.MaxLoops));
+	// Casas grandes piden algún bucle: si no hay sitio para él, se prueba otra semilla.
+	const int32 MinLoops = FMath::Min(Params.MinLoops, Params.MaxLoops);
+	if (Builder.AddLoops(Builder.Rand(MinLoops, Params.MaxLoops)) < MinLoops)
+	{
+		return false;
+	}
 	if (Stream.FRand() < Params.SecondaryExitChance)
 	{
 		Builder.PickSecondaryExit();
@@ -500,6 +518,19 @@ bool FNDHouseGenerator::BuildFallback(const FNDHouseGenParams& Params, FNDHouseG
 	for (int32 Index = 0; Index < Modules.Num(); ++Index)
 	{
 		if (!Modules[Index] || Builder.Attach(Index == 0 ? 0 : 1, *Modules[Index]) == INDEX_NONE)
+		{
+			return false;
+		}
+	}
+	// Casas medianas y grandes: pasillos y almacenes donde quepan hasta llegar al mínimo de salas.
+	const TArray<const FNDRoomModuleDefinition*> Fillers = {
+		FNDRoomCatalog::Find(HubModuleId),
+		FNDRoomCatalog::Find(TEXT("D01_Storage_A")),
+	};
+	for (int32 Index = 0; Builder.Rooms.Num() < Params.MinRooms; ++Index)
+	{
+		const FNDRoomModuleDefinition* Filler = Fillers[Index % Fillers.Num()];
+		if (!Filler || Builder.AttachAnywhere(*Filler) == INDEX_NONE)
 		{
 			return false;
 		}
