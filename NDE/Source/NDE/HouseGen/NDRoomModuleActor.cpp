@@ -3,6 +3,7 @@
 #include "HouseGen/NDRoomModuleActor.h"
 
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "HouseGen/NDRoomCatalog.h"
@@ -163,7 +164,7 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 	AddBox(WallMeshes, WallCenter + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
 }
 
-void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers)
+void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers, bool bAddRoomLight)
 {
 	using namespace NDHouseGen;
 	ClearGreybox();
@@ -204,6 +205,27 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 				BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
 			}
 		}
+	}
+
+	if (bAddRoomLight)
+	{
+		if (!RoomLight)
+		{
+			RoomLight = NewObject<UPointLightComponent>(this, TEXT("RoomLight"), RF_Transient);
+			RoomLight->SetupAttachment(Root);
+			RoomLight->SetMobility(EComponentMobility::Movable);
+			RoomLight->SetCastShadows(false);
+			RoomLight->SetIntensityUnits(ELightUnits::Candelas);
+			RoomLight->SetLightColor(FLinearColor(1.f, 0.85f, 0.68f));
+			RoomLight->RegisterComponent();
+		}
+		RoomLight->SetRelativeLocation(FVector(0.f, 0.f, WallHeight - 60.f));
+		RoomLight->SetIntensity(8.f * FMath::Max(Size.X, Size.Y));
+		RoomLight->SetAttenuationRadius(FMath::Max(Extent.X, Extent.Y) * 0.9f);
+	}
+	if (RoomLight)
+	{
+		RoomLight->SetVisibility(bAddRoomLight);
 	}
 
 	if (bShowMarkers)

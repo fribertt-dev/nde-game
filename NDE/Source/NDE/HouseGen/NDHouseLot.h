@@ -109,6 +109,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	bool bShowMarkers = true;
 
+	/** Pone una luz tenue y cálida en cada sala, para que el interior no quede negro con techo. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
+	bool bLightRooms = true;
+
 	/** Dibuja en el servidor el grafo de salas, puertas y la ruta del bulto. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
 	bool bDrawDebugGraph = false;

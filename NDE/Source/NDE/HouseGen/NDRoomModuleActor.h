@@ -9,6 +9,7 @@
 
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UPointLightComponent;
 
 /**
  * Sala greybox: suelo, paredes con huecos de puerta y techo opcional, hechos con el cubo
@@ -29,7 +30,7 @@ public:
 	 * Construye el módulo. OpeningWidths tiene un valor por hueco de la definición:
 	 * ancho del hueco abierto en cm, o 0 si se tapa con pared.
 	 */
-	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers);
+	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers, bool bAddRoomLight = false);
 
 	/** Módulo del catálogo que muestra este actor al colocarlo a mano en el editor. */
 	UPROPERTY(EditAnywhere, Category = "NDE|HouseGen")
@@ -59,6 +60,10 @@ protected:
 	/** Marcas de suelo por tipo de punto (botín, escondite...); sin colisión. Se crean al construir. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> MarkerMeshes;
+
+	/** Luz interior tenue del greybox (se crea al construir si el lote la pide). */
+	UPROPERTY(Transient)
+	TObjectPtr<UPointLightComponent> RoomLight;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;

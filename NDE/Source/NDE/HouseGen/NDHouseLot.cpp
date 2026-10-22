@@ -298,7 +298,7 @@ void ANDHouseLot::BuildFromManifest()
 			Openings.Add(Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f));
 		}
 		RoomActor->RoomInstanceId = RoomIndex;
-		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers);
+		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms);
 		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 #if WITH_EDITOR
 		RoomActor->SetActorLabel(FString::Printf(TEXT("Room%02d_%s"), RoomIndex, *Room.Def->RoomModuleId.ToString()));
