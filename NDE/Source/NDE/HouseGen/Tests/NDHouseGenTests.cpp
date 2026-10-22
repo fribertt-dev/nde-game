@@ -10,13 +10,26 @@ namespace NDHouseGenTests
 {
 	constexpr EAutomationTestFlags Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter;
 
-	/** Reglas de H01 con la fachada girando según la semilla, para probar las cuatro orientaciones. */
-	FNDHouseGenParams MakeParams(int64 Seed)
+	const ENDHouseSize AllSizes[] = { ENDHouseSize::Small, ENDHouseSize::Medium, ENDHouseSize::Large };
+
+	FString SizeName(ENDHouseSize Size)
 	{
-		FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(TEXT("H01"));
+		return StaticEnum<ENDHouseSize>()->GetNameStringByValue(static_cast<int64>(Size));
+	}
+
+	/** Reglas de H01 con la fachada girando según la semilla, para probar las cuatro orientaciones. */
+	FNDHouseGenParams MakeParams(int64 Seed, ENDHouseSize Size = ENDHouseSize::Small)
+	{
+		FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(TEXT("H01"), Size);
 		Params.Seed = Seed;
 		Params.Lot.FrontDirection = static_cast<ENDCellDirection>(Seed % 4);
 		return Params;
+	}
+
+	/** Igual, pero el tamaño también va rotando con la semilla. */
+	FNDHouseGenParams MakeMixedParams(int64 Seed)
+	{
+		return MakeParams(Seed, AllSizes[static_cast<int32>(FMath::Abs(Seed) % 3)]);
 	}
 
 	bool GenerateLayout(FAutomationTestBase& Test, const FNDHouseGenParams& Params, FNDHouseGenerationManifest& OutManifest, FNDHouseLayout& OutLayout)
@@ -48,63 +61,77 @@ bool FNDHouseGenConnectivityTest::RunTest(const FString& Parameters)
 		for (const FNDRoomDoorSocket& Socket : Def.DoorSockets)
 		{
 			const FIntPoint Outside = Socket.Cell + NDHouseGen::DirectionToOffset(Socket.Direction);
-			const bool bInside = Outside.X >= 0 && Outside.Y >= 0 && Outside.X < Def.FootprintCells.X && Outside.Y < Def.FootprintCells.Y;
-			TestFalse(FString::Printf(TEXT("%s.%s mira hacia fuera"), *Def.RoomModuleId.ToString(), *Socket.SocketId.ToString()), bInside);
+			TestTrue(FString::Printf(TEXT("%s.%s esta en una celda de la sala"), *Def.RoomModuleId.ToString(), *Socket.SocketId.ToString()), Def.ContainsCell(Socket.Cell));
+			TestFalse(FString::Printf(TEXT("%s.%s mira hacia fuera"), *Def.RoomModuleId.ToString(), *Socket.SocketId.ToString()), Def.ContainsCell(Outside));
 			bool bDuplicate = false;
 			Ids.Add(Socket.SocketId, &bDuplicate);
 			TestFalse(FString::Printf(TEXT("%s.%s id unico"), *Def.RoomModuleId.ToString(), *Socket.SocketId.ToString()), bDuplicate);
 		}
 	}
 
-	// La casa de respaldo también tiene que ser válida, en las cuatro orientaciones.
-	for (int32 Front = 0; Front < 4; ++Front)
+	// La casa de respaldo también tiene que ser válida, en cada tamaño y en las cuatro orientaciones.
+	for (const ENDHouseSize Size : NDHouseGenTests::AllSizes)
 	{
-		const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Front);
-		FNDHouseGenerationManifest Fallback;
-		FNDHouseLayout Layout;
-		FString Error;
-		TArray<FString> Errors;
-		if (!TestTrue(TEXT("Casa de respaldo se construye"), FNDHouseGenerator::BuildFallback(Params, Fallback) && FNDHouseLayout::FromManifest(Fallback, Layout, Error)))
+		for (int32 Front = 0; Front < 4; ++Front)
 		{
-			continue;
+			const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Front, Size);
+			FNDHouseGenerationManifest Fallback;
+			FNDHouseLayout Layout;
+			FString Error;
+			TArray<FString> Errors;
+			if (!TestTrue(FString::Printf(TEXT("Casa de respaldo %s se construye"), *NDHouseGenTests::SizeName(Size)),
+				FNDHouseGenerator::BuildFallback(Params, Fallback) && FNDHouseLayout::FromManifest(Fallback, Layout, Error)))
+			{
+				continue;
+			}
+			const bool bValid = FNDHouseValidator::Validate(Layout, Params, Errors);
+			TestTrue(FString::Printf(TEXT("Casa de respaldo %s valida (fachada %d): %s"), *NDHouseGenTests::SizeName(Size), Front, *FString::Join(Errors, TEXT("; "))), bValid);
 		}
-		const bool bValid = FNDHouseValidator::Validate(Layout, Params, Errors);
-		TestTrue(FString::Printf(TEXT("Casa de respaldo valida (fachada %d): %s"), Front, *FString::Join(Errors, TEXT("; "))), bValid);
 	}
 
+	// 10.000 semillas por tamaño: conexa desde la entrada, dormitorio y objetivo a su profundidad,
+	// sin solapes y dentro del lote (lo comprueba el validador).
 	constexpr int32 SeedCount = 10000;
-	int32 FallbackCount = 0;
-	int32 FailureCount = 0;
-	int32 LoopCount = 0;
-	int32 SecondaryExitCount = 0;
-	for (int64 Seed = 1; Seed <= SeedCount; ++Seed)
+	for (const ENDHouseSize Size : NDHouseGenTests::AllSizes)
 	{
-		const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed);
-		FNDHouseGenerationManifest Manifest;
-		FNDHouseLayout Layout;
-		if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+		int32 FallbackCount = 0;
+		int32 FailureCount = 0;
+		int32 LoopCount = 0;
+		int32 SecondaryExitCount = 0;
+		int32 MinRoomsSeen = MAX_int32;
+		int32 MaxRoomsSeen = 0;
+		for (int64 Seed = 1; Seed <= SeedCount; ++Seed)
 		{
-			++FailureCount;
-			continue;
+			const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed, Size);
+			FNDHouseGenerationManifest Manifest;
+			FNDHouseLayout Layout;
+			if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+			{
+				++FailureCount;
+				continue;
+			}
+			TArray<FString> Errors;
+			if (!FNDHouseValidator::Validate(Layout, Params, Errors))
+			{
+				AddError(FString::Printf(TEXT("%s semilla %lld: %s"), *NDHouseGenTests::SizeName(Size), Seed, *FString::Join(Errors, TEXT("; "))));
+				++FailureCount;
+			}
+			FallbackCount += Manifest.bUsedFallback ? 1 : 0;
+			LoopCount += Manifest.Connections.FilterByPredicate([](const FNDHouseManifestConnection& L) { return L.bIsLoop; }).Num();
+			SecondaryExitCount += Manifest.SecondaryExitRoom != INDEX_NONE ? 1 : 0;
+			MinRoomsSeen = FMath::Min(MinRoomsSeen, Manifest.Rooms.Num());
+			MaxRoomsSeen = FMath::Max(MaxRoomsSeen, Manifest.Rooms.Num());
+			if (FailureCount > 20)
+			{
+				AddError(TEXT("Demasiados fallos; se para la prueba"));
+				break;
+			}
 		}
-		// Conexo desde la entrada, dormitorio y objetivo a su profundidad, sin solapes, dentro del lote.
-		TArray<FString> Errors;
-		if (!FNDHouseValidator::Validate(Layout, Params, Errors))
-		{
-			AddError(FString::Printf(TEXT("Semilla %lld: %s"), Seed, *FString::Join(Errors, TEXT("; "))));
-			++FailureCount;
-		}
-		FallbackCount += Manifest.bUsedFallback ? 1 : 0;
-		LoopCount += Manifest.Connections.FilterByPredicate([](const FNDHouseManifestConnection& L) { return L.bIsLoop; }).Num();
-		SecondaryExitCount += Manifest.SecondaryExitRoom != INDEX_NONE ? 1 : 0;
-		if (FailureCount > 20)
-		{
-			AddError(TEXT("Demasiados fallos; se para la prueba"));
-			break;
-		}
+		AddInfo(FString::Printf(TEXT("%s, %d semillas: %d-%d salas, %d casas de respaldo (%.2f %%), %d bucles, %d accesos secundarios"),
+			*NDHouseGenTests::SizeName(Size), SeedCount, MinRoomsSeen, MaxRoomsSeen, FallbackCount, FallbackCount * 100.f / SeedCount,
+			LoopCount, SecondaryExitCount));
+		TestTrue(FString::Printf(TEXT("%s: casa de respaldo en menos del 1%% de semillas"), *NDHouseGenTests::SizeName(Size)), FallbackCount * 100 < SeedCount);
 	}
-	AddInfo(FString::Printf(TEXT("%d semillas: %d casas de respaldo, %d bucles, %d accesos secundarios"), SeedCount, FallbackCount, LoopCount, SecondaryExitCount));
-	TestTrue(TEXT("Casa de respaldo en menos del 1% de semillas"), FallbackCount * 100 < SeedCount);
 
 	// Un grafo roto se detecta: quitar una puerta necesaria deja salas sin alcanzar.
 	{
@@ -136,7 +163,7 @@ bool FNDHouseGenDeterminismTest::RunTest(const FString& Parameters)
 	TSet<FString> Distinct;
 	for (int64 Seed = 1; Seed <= 1000; ++Seed)
 	{
-		const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed);
+		const FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
 		FNDHouseGenerationManifest First;
 		FNDHouseGenerationManifest Second;
 		FNDHouseGenerator::Generate(Params, First);
@@ -154,7 +181,7 @@ bool FNDHouseGenDeterminismTest::RunTest(const FString& Parameters)
 	// Semillas negativas y grandes también valen.
 	for (const int64 Seed : { -1LL, -987654321LL, 9007199254740993LL })
 	{
-		FNDHouseGenParams Params = NDHouseGenTests::MakeParams(FMath::Abs(Seed));
+		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(FMath::Abs(Seed));
 		Params.Seed = Seed;
 		FNDHouseGenerationManifest First;
 		FNDHouseGenerationManifest Second;
@@ -176,7 +203,7 @@ bool FNDHouseGenCarryEnvelopeTest::RunTest(const FString& Parameters)
 
 	for (int64 Seed = 1; Seed <= 2000; ++Seed)
 	{
-		const FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed);
+		const FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
 		FNDHouseGenerationManifest Manifest;
 		FNDHouseLayout Layout;
 		if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
