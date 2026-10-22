@@ -19,21 +19,36 @@ struct FNDHouseLootCandidate
 	int32 Value = 0;
 };
 
-/** Qué botín va en qué hueco. */
+/** Lo que el contrato pide al reparto del botín (copia de UNDContractDefinition, sin UObjects). */
+struct FNDHouseLootContractSpec
+{
+	int32 Quota = 0;
+	TArray<FName> RequiredLootIds;
+	TArray<FName> DecoyLootIds;
+	FNDContractHouseRequirements House;
+
+	static FNDHouseLootContractSpec FromContract(const UNDContractDefinition* Contract);
+};
+
+/** Qué botín va en qué sitio. */
 struct FNDHouseLootPlacement
 {
-	/** Índice en FNDHouseLayout::Markers, o INDEX_NONE si va en el centro de la sala objetivo. */
+	/** Índice en FNDHouseLayout::Markers, o INDEX_NONE si no va en un hueco de botín. */
 	int32 MarkerIndex = INDEX_NONE;
 	/** Índice en la lista de candidatos. */
 	int32 Candidate = INDEX_NONE;
 	/** Sala donde queda. */
 	int32 Room = INDEX_NONE;
-	/** LootGuid estable: sale de la semilla, del lote y del hueco (StableSpawnId). */
+	/** LootGuid estable: sale de la semilla, del lote y del sitio (StableSpawnId). */
 	FGuid LootGuid;
 	/** Relativo al centro del lote (Z = suelo de su piso). */
 	FTransform LotTransform;
 	/** Lo exige el contrato. */
 	bool bRequired = false;
+	/** Señuelo del contrato (parecido al objetivo o distractor). */
+	bool bDecoy = false;
+	/** Va dentro de un tarro de rescate que hay que abrir. */
+	bool bInRescueContainer = false;
 };
 
 /**
@@ -44,19 +59,24 @@ struct FNDHouseLootPlacement
 struct NDE_API FNDHouseLootPlanner
 {
 	/**
-	 * Los objetos que pide el contrato van primero, en la sala objetivo (la ruta del bulto ya
-	 * está validada hasta ella). Después se rellenan huecos al azar hasta superar la cuota con
-	 * margen. Los pesados extra solo van en la planta baja.
+	 * 1) Lo que pide el contrato, en una de sus ubicaciones candidatas (sala objetivo, sala obligatoria,
+	 *    cabecera de la cama o tarro de rescate), elegida con la semilla.
+	 * 2) Los señuelos, en las demás candidatas y cerca.
+	 * 3) Relleno al azar hasta cubrir la cuota con el margen del contrato. Los pesados extra solo en planta baja.
 	 */
-	static void Plan(const FNDHouseLayout& Layout, int64 RunSeed, int32 Quota, const TArray<FName>& RequiredLootIds,
+	static void Plan(const FNDHouseLayout& Layout, int64 RunSeed, const FNDHouseLootContractSpec& Spec,
 		const TArray<FNDHouseLootCandidate>& Candidates, TArray<FNDHouseLootPlacement>& OutPlacements);
 
-	/** LootGuid estable de un hueco. */
+	/** Ubicaciones candidatas para el objetivo del contrato (en orden estable). */
+	static void GetObjectiveCandidates(const FNDHouseLayout& Layout, const FNDContractHouseRequirements& House,
+		TArray<FTransform>& OutTransforms, TArray<int32>& OutMarkers);
+
+	/** LootGuid estable de un sitio. */
 	static FGuid MakeLootGuid(int64 RunSeed, FName LotId, int32 SpawnId);
 
-	/** Valor mínimo a repartir: la cuota con margen, o un mínimo si el contrato no tiene cuota. */
-	static int32 GetTargetValue(int32 Quota);
+	/** Valor mínimo a repartir: la cuota con el margen del contrato, o un mínimo si no tiene cuota. */
+	static int32 GetTargetValue(int32 Quota, float Coverage = 1.35f);
 
-	/** Solo servidor: crea los objetos del reparto en el lote. */
-	static TArray<ANDLootActor*> SpawnLoot(ANDHouseLot& Lot, const UNDContractDefinition* Contract, const TArray<UNDLootDefinition*>& Pool);
+	/** Solo servidor: crea los objetos del reparto (y los tarros de rescate) en el lote. */
+	static TArray<AActor*> SpawnLoot(ANDHouseLot& Lot, const UNDContractDefinition* Contract, const TArray<UNDLootDefinition*>& Pool);
 };

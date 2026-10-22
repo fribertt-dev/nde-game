@@ -37,6 +37,7 @@ void ANDLootActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ANDLootActor, LootGuid);
 	DOREPLIFETIME(ANDLootActor, LootState);
 	DOREPLIFETIME(ANDLootActor, Condition);
+	DOREPLIFETIME(ANDLootActor, bLocked);
 	DOREPLIFETIME(ANDLootActor, Carriers);
 }
 
@@ -52,6 +53,16 @@ void ANDLootActor::InitializeSpawn(UNDLootDefinition* InDefinition, const FGuid&
 	LootGuid = InStableGuid;
 }
 
+void ANDLootActor::SetLocked(bool bInLocked)
+{
+	if (HasAuthority() && bLocked != bInLocked)
+	{
+		bLocked = bInLocked;
+		ApplyStateLocally();
+		ForceNetUpdate();
+	}
+}
+
 void ANDLootActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -65,6 +76,8 @@ void ANDLootActor::BeginPlay()
 			LootGuid = FGuid::NewGuid();
 		}
 		LastSafeLocation = GetActorLocation();
+		// Al aparecer cae unos centímetros: ese golpe no cuenta (los frágiles llegarían dañados sin tocarlos).
+		LastImpactTime = GetWorld()->GetTimeSeconds() + SpawnImpactGraceSeconds;
 		Mesh->OnComponentHit.AddDynamic(this, &ANDLootActor::HandleMeshHit);
 	}
 
@@ -124,8 +137,9 @@ void ANDLootActor::ApplyStateLocally()
 			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		}
 		SetActorHiddenInGame(false);
-		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		Mesh->SetSimulatePhysics(true);
+		// Bloqueado en un contenedor: quieto y sin física hasta que se abra.
+		Mesh->SetCollisionEnabled(bLocked ? ECollisionEnabled::QueryOnly : ECollisionEnabled::QueryAndPhysics);
+		Mesh->SetSimulatePhysics(!bLocked);
 		SetActorTickInterval(0.2f);
 		break;
 	case ENDLootState::Carried:
@@ -239,6 +253,10 @@ int32 ANDLootActor::GetCurrentLootPoints() const
 bool ANDLootActor::CanBeGrabbedBy(const APawn* Pawn) const
 {
 	if (!Pawn || !Definition || IsCarriedBy(Pawn))
+	{
+		return false;
+	}
+	if (bLocked)
 	{
 		return false;
 	}

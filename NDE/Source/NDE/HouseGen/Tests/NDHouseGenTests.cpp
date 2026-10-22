@@ -2,6 +2,8 @@
 
 #include "HouseGen/NDHouseGenerator.h"
 #include "HouseGen/NDHouseLoot.h"
+#include "Contracts/NDContractDefinition.h"
+#include "Loot/NDLootDefinition.h"
 #include "HouseGen/NDRoomCatalog.h"
 #include "Misc/AutomationTest.h"
 
@@ -391,8 +393,11 @@ bool FNDHouseGenLootPlanTest::RunTest(const FString& Parameters)
 
 		TArray<FNDHouseLootPlacement> PlanA;
 		TArray<FNDHouseLootPlacement> PlanB;
-		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanA);
-		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanB);
+		FNDHouseLootContractSpec Spec;
+		Spec.Quota = Quota;
+		Spec.RequiredLootIds = Required;
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, PlanA);
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, PlanB);
 
 		bool bSame = PlanA.Num() == PlanB.Num();
 		for (int32 Index = 0; bSame && Index < PlanA.Num(); ++Index)
@@ -530,6 +535,193 @@ bool FNDHouseGenGameplayPointsTest::RunTest(const FString& Parameters)
 	}
 	AddInfo(FString::Printf(TEXT("%d casas: %.1f escondites y %.1f peligros de media"), Houses,
 		TotalHiding / static_cast<float>(Houses), TotalHazards / static_cast<float>(Houses)));
+	return true;
+}
+
+namespace NDHouseGenContractTests
+{
+	const TCHAR* ContractIds[] = { TEXT("C01"), TEXT("C02"), TEXT("C03"), TEXT("C04"), TEXT("C05"), TEXT("C06"), TEXT("C07") };
+	const TCHAR* LootIds[] = { TEXT("L01"), TEXT("L02"), TEXT("L03"), TEXT("L04"), TEXT("L05"), TEXT("L07"), TEXT("L08"), TEXT("L09"), TEXT("L10"),
+		TEXT("L11"), TEXT("L12"), TEXT("L16"), TEXT("L19"), TEXT("L20"), TEXT("L32"), TEXT("L33"), TEXT("L34"), TEXT("L41"), TEXT("L50") };
+
+	template <typename T>
+	T* LoadData(const TCHAR* Folder, const TCHAR* Prefix, const TCHAR* Id)
+	{
+		return LoadObject<T>(nullptr, *FString::Printf(TEXT("/Game/_NDE_/Data/%s/%s%s.%s%s"), Folder, Prefix, Id, Prefix, Id));
+	}
+
+	/** Botín de los Data Assets reales. */
+	bool LoadCandidates(FAutomationTestBase& Test, TArray<FNDHouseLootCandidate>& OutCandidates)
+	{
+		for (const TCHAR* Id : LootIds)
+		{
+			const UNDLootDefinition* Loot = LoadData<UNDLootDefinition>(TEXT("Loot"), TEXT("DA_Loot_"), Id);
+			if (!Loot)
+			{
+				Test.AddError(FString::Printf(TEXT("Falta DA_Loot_%s (ejecuta Scripts/nde_setup_contratos_d01.py)"), Id));
+				return false;
+			}
+			OutCandidates.Add({ Loot->LootId, Loot->Category, Loot->BaseValue });
+		}
+		return true;
+	}
+
+	/** Recuento por contrato de lo que vigilan las pruebas. */
+	struct FStats
+	{
+		int32 Houses = 0;
+		int32 Fallbacks = 0;
+		int32 ObjectiveUnreachable = 0;
+		int32 QuotaShort = 0;
+		int32 CarryRouteMissing = 0;
+		int32 RescueInvalid = 0;
+	};
+
+	/** Genera casas de todos los tamaños con cada contrato y reparte su botín. */
+	bool Run(FAutomationTestBase& Test, int32 SeedsPerSize, TMap<FString, FStats>& OutStats)
+	{
+		TArray<FNDHouseLootCandidate> Candidates;
+		if (!LoadCandidates(Test, Candidates))
+		{
+			return false;
+		}
+		for (const TCHAR* ContractId : ContractIds)
+		{
+			const UNDContractDefinition* Contract = LoadData<UNDContractDefinition>(TEXT("Contracts"), TEXT("DA_Contract_"), ContractId);
+			if (!Contract)
+			{
+				Test.AddError(FString::Printf(TEXT("Falta DA_Contract_%s"), ContractId));
+				return false;
+			}
+			const FNDHouseLootContractSpec Spec = FNDHouseLootContractSpec::FromContract(Contract);
+			FStats& Stats = OutStats.Add(ContractId);
+			for (const ENDHouseSize Size : NDHouseGenTests::AllSizes)
+			{
+				for (int64 Seed = 1; Seed <= SeedsPerSize; ++Seed)
+				{
+					FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed, Size);
+					Params.ContractId = Contract->ContractId;
+					Params.ContractRequirements = Contract->HouseRequirements;
+					FNDHouseGenerationManifest Manifest;
+					FNDHouseLayout Layout;
+					if (!NDHouseGenTests::GenerateLayout(Test, Params, Manifest, Layout))
+					{
+						return false;
+					}
+					++Stats.Houses;
+					Stats.Fallbacks += Manifest.bUsedFallback ? 1 : 0;
+
+					TArray<FNDHouseLootPlacement> Placements;
+					FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, Placements);
+
+					// Objetivo: todos los requeridos en la sala del contrato, a la que se llega.
+					const int32 Anchor = Layout.GetAnchorRoom(Spec.House);
+					TArray<int32> Depths;
+					Layout.ComputeDepths(Depths);
+					int32 RequiredPlaced = 0;
+					for (const FNDHouseLootPlacement& Placement : Placements)
+					{
+						if (Placement.bRequired)
+						{
+							++RequiredPlaced;
+							if (Placement.Room != Anchor || !Depths.IsValidIndex(Anchor) || Depths[Anchor] == INDEX_NONE)
+							{
+								++Stats.ObjectiveUnreachable;
+							}
+						}
+					}
+					Stats.ObjectiveUnreachable += RequiredPlaced < Spec.RequiredLootIds.Num() ? 1 : 0;
+
+					// Cuota cubierta con margen (sin contar señuelos).
+					int32 Value = 0;
+					for (const FNDHouseLootPlacement& Placement : Placements)
+					{
+						Value += Placement.bDecoy ? 0 : Candidates[Placement.Candidate].Value;
+					}
+					if (Spec.Quota > 0 && Value < Spec.Quota * Spec.House.QuotaCoverage)
+					{
+						++Stats.QuotaShort;
+					}
+
+					// Ruta del bulto hasta el objetivo con el ancho que pida el contrato (o el del bulto pesado).
+					const bool bHeavy = Spec.RequiredLootIds.ContainsByPredicate([&Candidates](const FName& Id)
+					{
+						return Candidates.ContainsByPredicate([&Id](const FNDHouseLootCandidate& C) { return C.LootId == Id && C.Category == ENDLootCategory::Heavy; });
+					});
+					const float Width = FMath::Max(Spec.House.MinRouteWidth, bHeavy ? Params.CarryEnvelopeWidth : 0.f);
+					if (!Layout.FindRoute(Layout.EntryRoom, Anchor, Width))
+					{
+						++Stats.CarryRouteMissing;
+					}
+
+					// Rescate: tarro con dos accesos, lejos de las puertas, y el objeto dentro.
+					if (Spec.House.ObjectiveAnchor == ENDContractAnchor::RescueContainer)
+					{
+						const FNDHouseLootPlacement* Rescue = Placements.FindByPredicate([](const FNDHouseLootPlacement& P) { return P.bInRescueContainer; });
+						bool bValid = Rescue && Layout.CountAccesses(Anchor) >= 2;
+						if (Rescue)
+						{
+							const FNDHouseLayoutRoom& Room = Layout.Rooms[Rescue->Room];
+							for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+							{
+								bValid &= !Room.Sockets[SocketIndex].IsOpen()
+									|| FVector::Dist2D(Layout.GetSocketLocation(Rescue->Room, SocketIndex), Rescue->LotTransform.GetLocation()) >= 100.f;
+							}
+						}
+						Stats.RescueInvalid += bValid ? 0 : 1;
+					}
+				}
+			}
+			Test.AddInfo(FString::Printf(TEXT("%s: %d casas, %d de respaldo, objetivo inaccesible %d, cuota corta %d, sin ruta de bulto %d, rescate invalido %d"),
+				ContractId, Stats.Houses, Stats.Fallbacks, Stats.ObjectiveUnreachable, Stats.QuotaShort, Stats.CarryRouteMissing, Stats.RescueInvalid));
+		}
+		return true;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractQuotaTest, "NDE.HouseGen.Contracts.TestQuotaCoverage", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractQuotaTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	for (const TPair<FString, NDHouseGenContractTests::FStats>& Pair : Stats)
+	{
+		TestEqual(FString::Printf(TEXT("%s: casas con cuota corta"), *Pair.Key), Pair.Value.QuotaShort, 0);
+		TestEqual(FString::Printf(TEXT("%s: objetivo inaccesible"), *Pair.Key), Pair.Value.ObjectiveUnreachable, 0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractRescueTest, "NDE.HouseGen.Contracts.TestRescueContainer", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractRescueTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	TestEqual(TEXT("C06: tarros sin dos accesos, tapando una puerta o sin Trasto"), Stats.FindRef(TEXT("C06")).RescueInvalid, 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractCarryTest, "NDE.HouseGen.Contracts.TestCarryEnvelope", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractCarryTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	for (const TPair<FString, NDHouseGenContractTests::FStats>& Pair : Stats)
+	{
+		TestEqual(FString::Printf(TEXT("%s: sin ruta de bulto al objetivo"), *Pair.Key), Pair.Value.CarryRouteMissing, 0);
+	}
 	return true;
 }
 

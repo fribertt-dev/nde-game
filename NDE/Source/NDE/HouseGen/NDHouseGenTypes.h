@@ -136,6 +136,51 @@ enum class ENDHouseHazardType : uint8
 	MouseTrap UMETA(ToolTip = "Trampa de ratón: atrapa un momento y hace ruido.")
 };
 
+/** Dónde va el objetivo de un contrato dentro de la casa. */
+UENUM(BlueprintType)
+enum class ENDContractAnchor : uint8
+{
+	ObjectiveRoom UMETA(ToolTip = "En la sala objetivo."),
+	RequiredRoom UMETA(ToolTip = "En la primera sala obligatoria del contrato (p. ej. la cocina)."),
+	BedHeadboard UMETA(ToolTip = "En la cabecera de la cama de la criatura, en el borde accesible."),
+	RescueContainer UMETA(ToolTip = "Dentro de un tarro que hay que abrir, en la sala objetivo.")
+};
+
+/** Lo que un contrato pide a la casa (GDD 12 y 15). La casa se genera y se valida con esto. */
+USTRUCT(BlueprintType)
+struct FNDContractHouseRequirements
+{
+	GENERATED_BODY()
+
+	/** Salas que la casa tiene que tener, además de las de siempre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	TArray<ENDRoomType> RequiredRooms;
+
+	/** Dónde va lo que pide el contrato. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDContractAnchor ObjectiveAnchor = ENDContractAnchor::ObjectiveRoom;
+
+	/** Ubicaciones candidatas para el objetivo (2-5); la semilla elige una y en otras van los señuelos. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1", ClampMax = "5"))
+	int32 CandidateLocations = 2;
+
+	/** Accesos (puertas) mínimos a la sala del objetivo: 1-3 rutas para llegar. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1", ClampMax = "3"))
+	int32 MinRoutes = 1;
+
+	/** Ancho mínimo de la ruta de la entrada al objetivo, en cm (0 = cualquiera). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float MinRouteWidth = 0.f;
+
+	/** Botín repartido mínimo frente a la cuota (1,35 = 35 % más). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
+	float QuotaCoverage = 1.35f;
+
+	/** Pide al menos una sala segura: con escondite y sin peligros. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	bool bNeedsSafeRoom = false;
+};
+
 /** Hueco de puerta en el borde de un módulo, en coordenadas del módulo sin rotar. */
 USTRUCT(BlueprintType)
 struct FNDRoomDoorSocket

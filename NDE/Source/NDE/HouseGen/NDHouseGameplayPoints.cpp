@@ -65,6 +65,33 @@ void FNDHouseLayout::GetCarryRouteRooms(float CarryEnvelopeWidth, TSet<int32>& O
 	}
 }
 
+int32 FNDHouseLayout::GetAnchorRoom(const FNDContractHouseRequirements& Requirements) const
+{
+	switch (Requirements.ObjectiveAnchor)
+	{
+	case ENDContractAnchor::BedHeadboard:
+		return BedroomRoom;
+	case ENDContractAnchor::RequiredRoom:
+		if (Requirements.RequiredRooms.Num() > 0)
+		{
+			const ENDRoomType Type = Requirements.RequiredRooms[0];
+			return Rooms.IndexOfByPredicate([Type](const FNDHouseLayoutRoom& Room) { return Room.Def->RoomType == Type; });
+		}
+		return ObjectiveRoom;
+	default:
+		return ObjectiveRoom;
+	}
+}
+
+int32 FNDHouseLayout::CountAccesses(int32 RoomIndex) const
+{
+	if (!Rooms.IsValidIndex(RoomIndex))
+	{
+		return 0;
+	}
+	return Rooms[RoomIndex].Sockets.FilterByPredicate([](const FNDHouseLayoutSocket& Socket) { return Socket.IsOpen(); }).Num();
+}
+
 int32 FNDHouseLayout::FindRoomAt(const FVector& LotPosition) const
 {
 	const FIntPoint Cell(

@@ -43,6 +43,9 @@ public:
 	/** Semilla para la próxima generación automática (p. ej. ?Seed= de la URL). Solo servidor. */
 	void SetSeedOverride(int64 Seed);
 
+	/** Lo que pide el contrato a la casa; se usa en la próxima generación. Solo servidor. */
+	void SetContractRequirements(const FNDContractHouseRequirements& InRequirements) { ContractRequirements = InRequirements; }
+
 	UFUNCTION(BlueprintPure, Category = "NDE|HouseGen")
 	bool IsHouseBuilt() const { return bHouseBuilt; }
 
@@ -153,6 +156,9 @@ public:
 	float GetSoundTransmission(const FVector& WorldA, const FVector& WorldB) const;
 
 protected:
+	/** Requisitos del contrato de la partida (solo servidor; el resultado viaja en el manifiesto). */
+	FNDContractHouseRequirements ContractRequirements;
+
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<USceneComponent> Root;
 

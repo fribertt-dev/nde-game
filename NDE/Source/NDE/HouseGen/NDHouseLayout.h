@@ -88,6 +88,10 @@ struct NDE_API FNDHouseGenParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "1"))
 	float SecondaryExitChance = 0.5f;
 
+	/** Lo que pide el contrato a la casa: salas obligatorias, sitio y rutas del objetivo. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	FNDContractHouseRequirements ContractRequirements;
+
 	/** Intentos con semillas derivadas antes de usar la casa de respaldo. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
 	int32 MaxAttempts = 24;
@@ -261,6 +265,12 @@ struct NDE_API FNDHouseLayout
 	 * algún punto está fuera de la casa.
 	 */
 	float GetSoundTransmission(const FVector& LotA, const FVector& LotB) const;
+
+	/** Sala donde va el objetivo del contrato, o INDEX_NONE si la casa no la tiene. */
+	int32 GetAnchorRoom(const FNDContractHouseRequirements& Requirements) const;
+
+	/** Puertas abiertas de una sala (accesos distintos para llegar a ella). */
+	int32 CountAccesses(int32 RoomIndex) const;
 
 	/** Salas por las que va el bulto (entrada → objetivo); ahí no puede haber peligros. */
 	void GetCarryRouteRooms(float CarryEnvelopeWidth, TSet<int32>& OutRooms) const;

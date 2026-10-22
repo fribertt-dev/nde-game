@@ -449,7 +449,8 @@ void UNDExpeditionComponent::EvaluateObjective()
 	}
 	for (const FNDDepositRecord& Record : Deposits)
 	{
-		if (int32* Count = Needed.Find(Record.LootId); Count && Record.Condition != ENDLootCondition::Broken)
+		const bool bCounts = Contract->bRequiredLootMustBeIntact ? Record.Condition == ENDLootCondition::Intact : Record.Condition != ENDLootCondition::Broken;
+		if (int32* Count = Needed.Find(Record.LootId); Count && bCounts)
 		{
 			--(*Count);
 		}

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "Expedition/NDExpeditionTypes.h"
+#include "HouseGen/NDHouseGenTypes.h"
 #include "NDContractDefinition.generated.h"
 
 UCLASS(BlueprintType)
@@ -38,6 +39,18 @@ public:
 	/** LootId que deben llegar a la camioneta sin romperse. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	TArray<FName> RequiredLootIds;
+
+	/** Los objetos requeridos cuentan solo si llegan intactos (ni dañados ni rotos). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
+	bool bRequiredLootMustBeIntact = false;
+
+	/** Señuelos: objetos parecidos al objetivo o distractores (comida) que se colocan cerca de él. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
+	TArray<FName> DecoyLootIds;
+
+	/** Lo que el contrato pide a la casa: salas obligatorias, sitio del objetivo, accesos y ruta. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "House")
+	FNDContractHouseRequirements HouseRequirements;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Objective")
 	ENDSecondaryObjective SecondaryObjective = ENDSecondaryObjective::None;

@@ -63,7 +63,7 @@ protected:
 	TObjectPtr<ANDExtractionVan> Van;
 
 	UPROPERTY(Transient)
-	TArray<TObjectPtr<ANDLootActor>> HouseLoot;
+	TArray<TObjectPtr<AActor>> HouseLoot;
 
 	UPROPERTY(Transient)
 	TObjectPtr<ANDHouseLot> HouseLot;

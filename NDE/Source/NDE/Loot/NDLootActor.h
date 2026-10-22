@@ -69,6 +69,12 @@ public:
 	 */
 	void InitializeSpawn(UNDLootDefinition* InDefinition, const FGuid& InStableGuid);
 
+	/** Bloqueado dentro de un contenedor (p. ej. el tarro de rescate): no se puede coger ni se mueve. */
+	void SetLocked(bool bInLocked);
+
+	UFUNCTION(BlueprintPure, Category = "NDE|Loot")
+	bool IsLocked() const { return bLocked; }
+
 	bool CanBeGrabbedBy(const APawn* Pawn) const;
 	bool AddCarrier(APawn* Pawn);
 	void RemoveCarrier(APawn* Pawn, const FVector& ReleaseVelocity);
@@ -90,6 +96,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Loot")
 	float ImpactCooldownSeconds = 0.25f;
 
+	/** Segundos tras aparecer en los que los golpes no dañan (la caída al suelo al generarse). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Loot")
+	float SpawnImpactGraceSeconds = 2.f;
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
@@ -108,6 +118,9 @@ protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_Condition)
 	ENDLootCondition Condition = ENDLootCondition::Intact;
+
+	UPROPERTY(ReplicatedUsing = OnRep_LootState)
+	bool bLocked = false;
 
 	/** Quién lo lleva (el primero manda). Cada máquina lo acopla a partir de esto (ver UpdateCarryAttachment). */
 	UPROPERTY(ReplicatedUsing = OnRep_Carriers)

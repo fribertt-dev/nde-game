@@ -35,6 +35,25 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 - `nde.HouseGen.DebugPoints [segundos] [espera]` los dibuja encima de todo: escondites en azul (con capacidad y entrada), peligros en naranja, patrulla en rojo y el paso del sonido en cian.
 - Cambió la versión de generación a `housegen-0.2` (el validador nuevo puede descartar casas que antes valían).
 
+## Contratos de D01 (C01 a C07)
+Cada contrato (`UNDContractDefinition`) trae `HouseRequirements`: salas obligatorias, dónde va el objetivo (sala objetivo, sala obligatoria, cabecera de la cama o tarro de rescate), 2-5 ubicaciones candidatas, accesos mínimos a esa sala (1-3 rutas), ancho mínimo de la ruta y el margen de botín sobre la cuota. El generador añade las salas obligatorias antes del relleno, abre bucles hacia el objetivo si faltan accesos y valida todo; el reparto del botín (`HouseGen/NDHouseLoot`) pone primero el objetivo en una de sus candidatas (la elige la semilla), luego los señuelos y después el relleno hasta cubrir la cuota con margen.
+
+| Id | Nombre | Qué pide | Casa |
+| --- | --- | --- | --- |
+| C01 | La Primera Siesta | Cuota de 700 | Sala segura (escondite sin peligros), 6 huecos de botín |
+| C02 | Oro de Cocina | Cuchara (L04) y azucarero (L05) de plata, cuota 500 | Cocina obligatoria; 2 quesos señuelo (L20) |
+| C03 | El Reloj Perdido | Reloj cucú (L32) | 3 candidatas; 2 relojes señuelo (L33, L34) |
+| C04 | Cuidado con la Vajilla | Tetera (L09), plato (L10) y jarrón (L11) intactos | Ruta de 160 cm; secundario: todos fuera antes del amanecer |
+| C05 | La Hora del Ronquido | Medalla de oro (L41) | En la cabecera de la cama de la criatura, en el borde accesible |
+| C06 | Rescate del Calcetín | Trasto (L50) | Dentro de un tarro (`ANDRescueContainer`) en una sala con 2 accesos; se abre quedándose 2 s al lado |
+| C07 | El Televisor Prestado | Televisor (L16) | Ruta de bulto de 120 cm |
+
+- Datos: `Scripts/nde_setup_contratos_d01.py` crea o actualiza los contratos y el botín nuevo (placeholder con formas del motor). Se ejecuta sin el editor abierto: `UnrealEditor-Cmd.exe NDE.uproject -run=pythonscript -script="<ruta>"`.
+- Los señuelos y el botín de menos de 50 puntos no se usan de relleno, y lo que pide el contrato no se repite.
+- Si una casa pequeña no tiene huecos para cubrir la cuota, el resto va en el suelo de salas de planta baja.
+- Pruebas (cargan los Data Assets reales): `NDE.HouseGen.Contracts.TestQuotaCoverage`, `TestRescueContainer` y `TestCarryEnvelope`. Con 180 casas por contrato: 0 de respaldo, 0 objetivos inaccesibles, 0 cuotas cortas, 0 sin ruta de bulto, 0 tarros inválidos.
+- Prueba en partida: `L_CasaPrueba?listen?Contract=C06`.
+
 ## Pisos y sótano
 - Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).
 - Opciones del lote: `UpperFloor` y `Basement` (Auto según el tamaño, Never, Always). Con Auto: Small 10 % / 15 %, Medium 50 % / 30 %, Large 75 % / 40 %.

@@ -253,6 +253,7 @@ FNDHouseGenParams ANDHouseLot::MakeParams(int64 Seed) const
 	FNDHouseLotInfo Lot = LotInfo;
 	Lot.LotTransform = GetActorTransform();
 	Params.SetLot(Lot);
+	Params.ContractRequirements = ContractRequirements;
 	if (const ANDExpeditionGameState* ExpState = GetWorld() ? GetWorld()->GetGameState<ANDExpeditionGameState>() : nullptr)
 	{
 		Params.ContractId = ExpState->GetContractId();

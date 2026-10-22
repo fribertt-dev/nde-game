@@ -614,6 +614,43 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 		}
 	}
 
+	// Contrato: salas obligatorias, sitio del objetivo accesible, sus accesos y la anchura de la ruta.
+	const FNDContractHouseRequirements& Contract = Params.ContractRequirements;
+	for (const ENDRoomType Type : Contract.RequiredRooms)
+	{
+		if (!Layout.Rooms.ContainsByPredicate([Type](const FNDHouseLayoutRoom& Room) { return Room.Def->RoomType == Type; }))
+		{
+			OutErrors.Add(FString::Printf(TEXT("El contrato pide %s y la casa no la tiene"), *NDHouseGen::GetRoomTypeName(Type)));
+		}
+	}
+	const int32 AnchorRoom = Layout.GetAnchorRoom(Contract);
+	if (!Layout.Rooms.IsValidIndex(AnchorRoom) || Depths[AnchorRoom] == INDEX_NONE)
+	{
+		OutErrors.Add(TEXT("No se llega al sitio del objetivo del contrato"));
+	}
+	else
+	{
+		if (Layout.CountAccesses(AnchorRoom) < Contract.MinRoutes)
+		{
+			OutErrors.Add(FString::Printf(TEXT("El objetivo tiene %d accesos; el contrato pide %d"), Layout.CountAccesses(AnchorRoom), Contract.MinRoutes));
+		}
+		if (Contract.MinRouteWidth > 0.f && !Layout.FindRoute(Layout.EntryRoom, AnchorRoom, Contract.MinRouteWidth))
+		{
+			OutErrors.Add(FString::Printf(TEXT("No hay ruta de %.0f cm hasta el objetivo del contrato"), Contract.MinRouteWidth));
+		}
+	}
+	if (Contract.bNeedsSafeRoom)
+	{
+		const bool bSafeRoom = Layout.HidingSpots.ContainsByPredicate([&Layout](const FNDHouseHidingSpot& Spot)
+		{
+			return Spot.Room != Layout.EntryRoom && !Layout.Hazards.ContainsByPredicate([&Spot](const FNDHouseHazard& Hazard) { return Hazard.Room == Spot.Room; });
+		});
+		if (!bSafeRoom)
+		{
+			OutErrors.Add(TEXT("El contrato pide una sala segura (con escondite y sin peligros)"));
+		}
+	}
+
 	// La criatura tiene que poder llegar a toda la casa (sótano y piso de arriba incluidos) sin pasos bajos.
 	for (int32 RoomIndex = 1; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 	{
