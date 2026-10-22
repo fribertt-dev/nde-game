@@ -709,6 +709,21 @@ namespace NDHouseGenerator
 					break;
 				}
 			}
+			// Sin bucle posible: una sala pequeña colgada de otra puerta del objetivo (otro acceso),
+			// si cabe en el máximo de salas del tamaño.
+			const FNDRoomModuleDefinition* Small[] = { FNDRoomCatalog::Find(TEXT("D01_Storage_A")), FNDRoomCatalog::Find(TEXT("D01_Corridor_Corner")),
+				FNDRoomCatalog::Find(TEXT("D01_Pantry_A")) };
+			for (const FNDRoomModuleDefinition* Def : Small)
+			{
+				if (CountAccesses() >= Params.ContractRequirements.MinRoutes || Rooms.Num() >= Params.MaxRooms)
+				{
+					break;
+				}
+				if (Def)
+				{
+					Attach(Anchor, *Def);
+				}
+			}
 			return CountAccesses() >= Params.ContractRequirements.MinRoutes;
 		}
 

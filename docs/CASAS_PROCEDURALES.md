@@ -42,6 +42,22 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 - La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
 - El botín no recorta el NavMesh (se mueve y se lleva).
 
+## Calidad (10.000 semillas por tamaño y contrato)
+Prueba `NDE.Quality.HouseGen` (fuera de las rápidas; tarda menos de un minuto): genera 10.000 casas por tamaño (Small, Medium, Large) con cada contrato real C01-C07, un tercio con piso superior y sótano forzados, reparte el botín y comprueba objetivo accesible, cuota con margen, ruta del bulto, escondites y patrulla. Deja en `Saved/HouseGenQuality/` el informe (`report.md`), las semillas con problemas (`failed_seeds.txt`) y un SVG por layout fallido o de respaldo (piso por columna; objetivo en amarillo, dormitorio en rojo, escaleras en gris, entrada en verde, puertas como puntos). Para probar con menos: `nde.Quality.Seeds 1000`.
+
+Resultado con `housegen-0.3` (210.000 casas):
+
+| Métrica | Resultado | Objetivo |
+| --- | --- | --- |
+| Casas de respaldo | 20 (0,01 %), todas C02 Small (cocina obligatoria en casa pequeña) | menos del 1 % |
+| Objetivos inaccesibles | 0 | 0 |
+| Cuota insuficiente | 0 | 0 |
+| Bulto sin ruta | 0 | 0 |
+| Escondites o patrulla inválidos | 0 | 0 |
+| Tiempo medio de generación | 0,10 ms por casa (0,07 Small, 0,16 Large) | |
+
+Con piso superior: 38 % de las Small, 67 % de las Medium y 83 % de las Large; con sótano: 38 %, 34 % y 54 %. Para que C06 (dos accesos al tarro) nunca deje sin casa, si no se puede abrir un bucle hacia el objetivo se cuelga de él una sala pequeña por otra puerta.
+
 ## Entrada tardía y reconexión
 Un cliente que entra a mitad de noche o vuelve tras desconectarse recibe lo mismo que los demás:
 - **Casa:** el manifiesto (lote siempre relevante) y la construye igual; mismo hash. Las salas se crean con el mismo nombre en todas las máquinas (`NDRoom_<lote>_r<revisión>_<sala>`) y son estáticas, así el servidor puede referirse a su suelo sin que el cliente se quede atascado.
