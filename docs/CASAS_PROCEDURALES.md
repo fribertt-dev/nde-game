@@ -23,6 +23,7 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 - 18 piezas greybox en `NDRoomCatalog.cpp`: 2 vestíbulos, 3 pasillos (recto, esquina, T), sala de estar (normal y en L), cocina, comedor, dormitorio principal, baño, almacén, despensa, estudio, lavandería, biblioteca, habitación de juguetes y sala objetivo. Las salas en L usan `BlockedCells`.
 - Puertas Door_M de 160 cm; bulto de 120 cm (la cápsula mide 44 cm). Los baños (Door_S, 100 cm) no están en la ruta del bulto.
 - Mínimo 6 huecos de botín, 4 spawns en la Entrada, anchor de criatura en el dormitorio, extracción en el jardín delantero.
+- El bucle de expedición usa estas marcas (`ANDHouseGameMode`, ver `docs/BUCLE_EXPEDICION.md`): el botín sale en los huecos según el contrato y la semilla (`HouseGen/NDHouseLoot`, prueba `NDE.HouseGen.LootPlan`), lo que pide el contrato va a la sala objetivo, y en la extracción va la zona de depósito con la camioneta greybox de lado.
 
 ## Pisos y sótano
 - Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).

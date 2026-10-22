@@ -1,6 +1,7 @@
 // No Despiertes Eso
 
 #include "HouseGen/NDHouseGenerator.h"
+#include "HouseGen/NDHouseLoot.h"
 #include "HouseGen/NDRoomCatalog.h"
 #include "Misc/AutomationTest.h"
 
@@ -361,6 +362,88 @@ bool FNDHouseGenFloorsTest::RunTest(const FString& Parameters)
 			AddError(FString::Printf(TEXT("Semilla %lld con pisos da dos casas distintas"), Seed));
 		}
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenLootPlanTest, "NDE.HouseGen.LootPlan", NDHouseGenTests::Flags)
+
+bool FNDHouseGenLootPlanTest::RunTest(const FString& Parameters)
+{
+	// Botín del corte gris: id, categoría y valor (los Data Assets de Content/_NDE_/Data/Loot).
+	const TArray<FNDHouseLootCandidate> Candidates = {
+		{ TEXT("L01"), ENDLootCategory::Pocket, 85 }, { TEXT("L02"), ENDLootCategory::Pocket, 70 },
+		{ TEXT("L03"), ENDLootCategory::Pocket, 120 }, { TEXT("L07"), ENDLootCategory::Light, 120 },
+		{ TEXT("L08"), ENDLootCategory::Light, 180 }, { TEXT("L11"), ENDLootCategory::Light, 190 },
+		{ TEXT("L12"), ENDLootCategory::Medium, 250 }, { TEXT("L16"), ENDLootCategory::Heavy, 520 },
+		{ TEXT("L19"), ENDLootCategory::Heavy, 670 }, { TEXT("L32"), ENDLootCategory::Medium, 390 } };
+	const TArray<FName> Required = { TEXT("L16") };
+	constexpr int32 Quota = 700;
+
+	int32 ShortHouses = 0;
+	for (int64 Seed = 1; Seed <= 300; ++Seed)
+	{
+		FNDHouseGenerationManifest Manifest;
+		FNDHouseLayout Layout;
+		if (!NDHouseGenTests::GenerateLayout(*this, NDHouseGenTests::MakeMixedParams(Seed), Manifest, Layout))
+		{
+			return false;
+		}
+
+		TArray<FNDHouseLootPlacement> PlanA;
+		TArray<FNDHouseLootPlacement> PlanB;
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanA);
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanB);
+
+		bool bSame = PlanA.Num() == PlanB.Num();
+		for (int32 Index = 0; bSame && Index < PlanA.Num(); ++Index)
+		{
+			bSame = PlanA[Index].MarkerIndex == PlanB[Index].MarkerIndex && PlanA[Index].Candidate == PlanB[Index].Candidate
+				&& PlanA[Index].LootGuid == PlanB[Index].LootGuid;
+		}
+		if (!bSame)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: el reparto del botin no es determinista"), Seed));
+			return false;
+		}
+
+		TSet<FGuid> Guids;
+		int32 Value = 0;
+		int32 FreeSockets = 0;
+		for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
+		{
+			FreeSockets += Marker.Type == ENDRoomMarkerType::LootSocket ? 1 : 0;
+		}
+		for (const FNDHouseLootPlacement& Placement : PlanA)
+		{
+			const FNDHouseLootCandidate& Candidate = Candidates[Placement.Candidate];
+			Value += Candidate.Value;
+			FreeSockets -= Placement.MarkerIndex != INDEX_NONE ? 1 : 0;
+			if (Guids.Contains(Placement.LootGuid))
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: LootGuid repetido"), Seed));
+			}
+			Guids.Add(Placement.LootGuid);
+			if (Placement.bRequired && Placement.Room != Layout.ObjectiveRoom)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: el objeto del contrato no esta en la sala objetivo"), Seed));
+			}
+			if (!Placement.bRequired && Candidate.Category == ENDLootCategory::Heavy && Layout.Rooms[Placement.Room].Floor != 0)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: un pesado extra fuera de la planta baja"), Seed));
+			}
+		}
+		if (!PlanA.ContainsByPredicate([](const FNDHouseLootPlacement& P) { return P.bRequired; }))
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: falta el objeto del contrato"), Seed));
+		}
+		// Valor de sobra para la cuota, salvo que no queden huecos.
+		if (Value < Quota)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: solo %d puntos de botin para una cuota de %d"), Seed, Value, Quota));
+		}
+		ShortHouses += Value < FNDHouseLootPlanner::GetTargetValue(Quota) && FreeSockets > 0 ? 1 : 0;
+	}
+	TestEqual(TEXT("Casas sin el margen de cuota pese a tener huecos libres"), ShortHouses, 0);
 	return true;
 }
 
