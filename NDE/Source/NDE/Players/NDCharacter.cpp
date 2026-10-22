@@ -4,28 +4,42 @@
 
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SpotLightComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Core/NDLog.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "Expedition/NDExpeditionDebugHud.h"
+#include "Expedition/NDExpeditionPlayerComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "InputAction.h"
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
+#include "Loot/NDCarryComponent.h"
+#include "Loot/NDLootActor.h"
 #include "Net/UnrealNetwork.h"
+#include "Tools/NDLoadoutComponent.h"
+#include "Tools/NDToolDefinition.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace NDCharacter
 {
 	const TCHAR* DesveladoClassPath = TEXT("/Game/_NDE_/Characters/BP_Desvelado.BP_Desvelado_C");
+
+	TSoftObjectPtr<UNDToolDefinition> ToolAsset(const TCHAR* Id)
+	{
+		return TSoftObjectPtr<UNDToolDefinition>(FSoftObjectPath(FString::Printf(TEXT("/Game/_NDE_/Data/Tools/DA_Tool_%s.DA_Tool_%s"), Id, Id)));
+	}
 }
 
 ANDCharacter::ANDCharacter()
 {
+	PrimaryActorTick.bCanEverTick = true;
+
 	// Un Desvelado mide unos 45-60 cm (GDD 2.3).
 	GetCapsuleComponent()->InitCapsuleSize(22.f, 34.f);
 
@@ -48,6 +62,14 @@ ANDCharacter::ANDCharacter()
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	Camera->bUsePawnControlRotation = false;
 
+	Flashlight = CreateDefaultSubobject<USpotLightComponent>(TEXT("Flashlight"));
+	Flashlight->SetupAttachment(GetRootComponent());
+	Flashlight->SetRelativeLocation(FVector(15.f, 0.f, 20.f));
+	Flashlight->SetIntensity(5000.f);
+	Flashlight->SetAttenuationRadius(1500.f);
+	Flashlight->SetOuterConeAngle(25.f);
+	Flashlight->SetVisibility(false);
+
 	PlaceholderBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderBody"));
 	PlaceholderBody->SetupAttachment(GetRootComponent());
 	PlaceholderBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -69,6 +91,16 @@ ANDCharacter::ANDCharacter()
 	{
 		PlaceholderNose->SetStaticMesh(CubeMesh.Object);
 	}
+
+	Carry = CreateDefaultSubobject<UNDCarryComponent>(TEXT("Carry"));
+	Loadout = CreateDefaultSubobject<UNDLoadoutComponent>(TEXT("Loadout"));
+	ExpeditionPlayer = CreateDefaultSubobject<UNDExpeditionPlayerComponent>(TEXT("ExpeditionPlayer"));
+
+	TestToolA = NDCharacter::ToolAsset(TEXT("T03"));
+	TestToolB = NDCharacter::ToolAsset(TEXT("T07"));
+	TestPingTool = NDCharacter::ToolAsset(TEXT("T02"));
+	TestConsumables.Add(NDCharacter::ToolAsset(TEXT("T17")));
+	TestConsumables.Add(NDCharacter::ToolAsset(TEXT("T18")));
 }
 
 TSubclassOf<APawn> ANDCharacter::GetDesveladoClass()
@@ -86,9 +118,21 @@ void ANDCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Aplica las velocidades editadas en el Blueprint.
-	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
+	Loadout->OnFlashlightChanged.AddDynamic(this, &ANDCharacter::HandleFlashlightChanged);
 	UpdateMovementSpeed();
+}
+
+void ANDCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	// Mientras no exista el loadout de La Madriguera, cada jugador sale con el equipo de prueba.
+	static int32 NextConsumable = 0;
+	UNDToolDefinition* Consumable = TestConsumables.Num() > 0
+		? TestConsumables[NextConsumable++ % TestConsumables.Num()].LoadSynchronous()
+		: nullptr;
+	Loadout->PingTool = TestPingTool.LoadSynchronous();
+	Loadout->SetLoadout(TestToolA.LoadSynchronous(), TestToolB.LoadSynchronous(), Consumable, 0);
 }
 
 void ANDCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -96,6 +140,11 @@ void ANDCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME_CONDITION(ANDCharacter, bIsSprinting, COND_SkipOwner);
+}
+
+void ANDCharacter::HandleFlashlightChanged(bool bOn)
+{
+	Flashlight->SetVisibility(bOn);
 }
 
 // ---------------------------------------------------------------------------
@@ -144,9 +193,18 @@ void ANDCharacter::EnsureInputObjects()
 
 	struct FButton { const TCHAR* Name; FKey Key; FKey PadKey; };
 	const FButton Buttons[] = {
-		{ TEXT("Jump"),   EKeys::SpaceBar,    EKeys::Gamepad_FaceButton_Bottom },
-		{ TEXT("Sprint"), EKeys::LeftShift,   EKeys::Gamepad_LeftThumbstick },
-		{ TEXT("Crouch"), EKeys::LeftControl, EKeys::Gamepad_FaceButton_Right },
+		{ TEXT("Jump"),       EKeys::SpaceBar,          EKeys::Gamepad_FaceButton_Bottom },
+		{ TEXT("Sprint"),     EKeys::LeftShift,         EKeys::Gamepad_LeftThumbstick },
+		{ TEXT("Crouch"),     EKeys::LeftControl,       EKeys::Gamepad_FaceButton_Right },
+		{ TEXT("Interact"),   EKeys::E,                 EKeys::Gamepad_FaceButton_Left },
+		{ TEXT("Drop"),       EKeys::G,                 EKeys::Gamepad_FaceButton_Top },
+		{ TEXT("Throw"),      EKeys::LeftMouseButton,   EKeys::Gamepad_RightTrigger },
+		{ TEXT("UseTool"),    EKeys::RightMouseButton,  EKeys::Gamepad_LeftTrigger },
+		{ TEXT("Consumable"), EKeys::Q,                 EKeys::Gamepad_RightShoulder },
+		{ TEXT("Ping"),       EKeys::MiddleMouseButton, EKeys::Gamepad_DPad_Up },
+		{ TEXT("Slot1"),      EKeys::One,               EKeys::Gamepad_DPad_Left },
+		{ TEXT("Slot2"),      EKeys::Two,               EKeys::Gamepad_DPad_Right },
+		{ TEXT("VoteNo"),     EKeys::N,                 EKeys::Gamepad_DPad_Down },
 	};
 	for (const FButton& Button : Buttons)
 	{
@@ -191,6 +249,16 @@ void ANDCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	Input->BindAction(Actions[TEXT("Sprint")], ETriggerEvent::Completed, this, &ANDCharacter::OnSprintEnded);
 	Input->BindAction(Actions[TEXT("Crouch")], ETriggerEvent::Started, this, &ANDCharacter::OnCrouchStarted);
 	Input->BindAction(Actions[TEXT("Crouch")], ETriggerEvent::Completed, this, &ANDCharacter::OnCrouchEnded);
+	Input->BindAction(Actions[TEXT("Interact")], ETriggerEvent::Started, this, &ANDCharacter::OnInteract);
+	Input->BindAction(Actions[TEXT("Drop")], ETriggerEvent::Started, this, &ANDCharacter::OnDrop);
+	Input->BindAction(Actions[TEXT("Throw")], ETriggerEvent::Started, this, &ANDCharacter::OnThrowStarted);
+	Input->BindAction(Actions[TEXT("Throw")], ETriggerEvent::Completed, this, &ANDCharacter::OnThrowReleased);
+	Input->BindAction(Actions[TEXT("UseTool")], ETriggerEvent::Started, this, &ANDCharacter::OnUseTool);
+	Input->BindAction(Actions[TEXT("Consumable")], ETriggerEvent::Started, this, &ANDCharacter::OnUseConsumable);
+	Input->BindAction(Actions[TEXT("Ping")], ETriggerEvent::Started, this, &ANDCharacter::OnPing);
+	Input->BindAction(Actions[TEXT("Slot1")], ETriggerEvent::Started, this, &ANDCharacter::OnSelectSlot1);
+	Input->BindAction(Actions[TEXT("Slot2")], ETriggerEvent::Started, this, &ANDCharacter::OnSelectSlot2);
+	Input->BindAction(Actions[TEXT("VoteNo")], ETriggerEvent::Started, this, &ANDCharacter::OnVoteNo);
 }
 
 void ANDCharacter::OnMove(const FInputActionValue& Value)
@@ -232,8 +300,84 @@ void ANDCharacter::OnCrouchEnded()
 	UnCrouch();
 }
 
+void ANDCharacter::OnInteract()
+{
+	if (ExpeditionPlayer->IsInsideVan())
+	{
+		ExpeditionPlayer->RequestVanInteraction();
+		return;
+	}
+	if (ANDLootActor* Target = Carry->FindBestLootTarget())
+	{
+		Carry->RequestGrab(Target);
+	}
+}
+
+void ANDCharacter::OnDrop()
+{
+	Carry->RequestDrop();
+}
+
+void ANDCharacter::OnThrowStarted()
+{
+	ThrowStartTime = GetWorld()->GetTimeSeconds();
+}
+
+void ANDCharacter::OnThrowReleased()
+{
+	if (!Carry->GetHeldLoot() || ThrowStartTime < 0.0)
+	{
+		return;
+	}
+	const float Charge = FMath::Clamp(static_cast<float>(GetWorld()->GetTimeSeconds() - ThrowStartTime), 0.f, 1.f);
+	ThrowStartTime = -1.0;
+
+	FRotator Aim = GetControlRotation();
+	Aim.Pitch = FMath::Clamp(FRotator::NormalizeAxis(Aim.Pitch) + 10.f, -30.f, 60.f);
+	Carry->RequestThrow(Aim.Vector(), Charge);
+}
+
+void ANDCharacter::OnUseTool()
+{
+	Loadout->RequestUseActiveTool(GetAimPoint());
+}
+
+void ANDCharacter::OnUseConsumable()
+{
+	Loadout->RequestUseConsumable(GetAimPoint());
+}
+
+void ANDCharacter::OnPing()
+{
+	Loadout->RequestPing(GetAimPoint());
+}
+
+void ANDCharacter::OnSelectSlot1()
+{
+	Loadout->RequestSelectSlot(0);
+}
+
+void ANDCharacter::OnSelectSlot2()
+{
+	Loadout->RequestSelectSlot(1);
+}
+
+void ANDCharacter::OnVoteNo()
+{
+	ExpeditionPlayer->RequestEscapeVote(false);
+}
+
+FVector ANDCharacter::GetAimPoint() const
+{
+	const FVector Start = Camera->GetComponentLocation();
+	const FVector End = Start + Camera->GetForwardVector() * 1500.f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(NDCharacterAim), false, this);
+	FHitResult Hit;
+	return GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params) ? Hit.ImpactPoint : End;
+}
+
 // ---------------------------------------------------------------------------
-// Correr
+// Movimiento
 
 void ANDCharacter::SetSprinting(bool bNewSprinting)
 {
@@ -251,12 +395,26 @@ void ANDCharacter::ServerSetSprinting_Implementation(bool bNewSprinting)
 	UpdateMovementSpeed();
 }
 
-void ANDCharacter::OnRep_IsSprinting()
+void ANDCharacter::Tick(float DeltaSeconds)
 {
-	UpdateMovementSpeed();
+	Super::Tick(DeltaSeconds);
+
+	// El peso de la carga cambia sin avisar; servidor y dueño recalculan la velocidad cada frame.
+	if (HasAuthority() || IsLocallyControlled())
+	{
+		UpdateMovementSpeed();
+	}
+	if (IsLocallyControlled() && bShowDebugHud)
+	{
+		NDExpeditionDebugHud::Draw(this, *Carry, *Loadout, *ExpeditionPlayer);
+	}
 }
 
 void ANDCharacter::UpdateMovementSpeed()
 {
-	GetCharacterMovement()->MaxWalkSpeed = bIsSprinting ? SprintSpeed : WalkSpeed;
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	const float Multiplier = Carry->GetSpeedMultiplier();
+	const bool bSprinting = bIsSprinting && Carry->CanSprint() && !bIsCrouched;
+	Movement->MaxWalkSpeed = (bSprinting ? SprintSpeed : WalkSpeed) * Multiplier;
+	Movement->MaxWalkSpeedCrouched = CrouchSpeed * Multiplier;
 }
