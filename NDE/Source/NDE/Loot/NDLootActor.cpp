@@ -46,6 +46,12 @@ void ANDLootActor::OnConstruction(const FTransform& Transform)
 	ApplyDefinitionVisuals();
 }
 
+void ANDLootActor::InitializeSpawn(UNDLootDefinition* InDefinition, const FGuid& InStableGuid)
+{
+	Definition = InDefinition;
+	LootGuid = InStableGuid;
+}
+
 void ANDLootActor::BeginPlay()
 {
 	Super::BeginPlay();

@@ -197,6 +197,7 @@ protected:
 	void CompleteEvacuation();
 	void FinishExpedition(ENDExpeditionEndReason Reason);
 	void BroadcastStateChanged();
+	void LogRunSummary() const;
 
 	UFUNCTION()
 	void HandleNightPhaseChanged(ENDNightPhase NewPhase, ENDNightPhase OldPhase);

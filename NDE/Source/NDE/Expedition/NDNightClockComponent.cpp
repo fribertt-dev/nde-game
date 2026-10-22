@@ -52,6 +52,14 @@ void UNDNightClockComponent::StopClock()
 	bRunning = false;
 }
 
+void UNDNightClockComponent::DebugSkipSeconds(float Seconds)
+{
+	if (GetOwner() && GetOwner()->HasAuthority() && bRunning && Seconds > 0.f)
+	{
+		NightStartServerTime -= Seconds;
+	}
+}
+
 double UNDNightClockComponent::GetServerNow() const
 {
 	const UWorld* World = GetWorld();

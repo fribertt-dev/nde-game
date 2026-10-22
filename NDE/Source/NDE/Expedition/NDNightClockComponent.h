@@ -28,6 +28,9 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Night")
 	void StopClock();
 
+	/** Depuración: adelanta el reloj estos segundos (solo servidor). */
+	void DebugSkipSeconds(float Seconds);
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Night")
 	bool IsRunning() const { return bRunning; }
 

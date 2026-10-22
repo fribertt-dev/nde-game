@@ -13,6 +13,23 @@ Primer corte jugable del bucle central: entrar en la casa, coger botín, llevarl
 3. Abre `L_Expedicion_Prueba`. En `Play > Net Mode` elige **Play As Listen Server** con 2 a 4 jugadores y pulsa Play.
 4. Para cambiar de contrato, selecciona `Director_Expedicion` y en el componente `Expedition` cambia `Contract`. Si quieres partidas cortas para probar, baja `NightDurationSeconds` en el Data Asset del contrato.
 
+### En la casa generada (L_CasaPrueba)
+
+`ANDHouseGameMode` monta el bucle solo: crea el director de expedición, reparte el botín en los huecos amarillos de la casa y pone la camioneta en la marca verde del jardín delantero. Cruzar la puerta de la entrada arranca el reloj.
+
+- Contrato: `?Contract=C07` en la URL (por defecto C01). Ejemplo: `L_CasaPrueba?listen?Seed=42?Contract=C07`.
+- Los objetos que pide el contrato (L16 en C07, L32 en C03) salen en la sala objetivo, que ya tiene ruta validada para el bulto. El resto se reparte al azar hasta pasar la cuota con un 50 % de margen; los pesados extra solo van en la planta baja.
+- Todo sale de la semilla: misma casa y mismo botín (con el mismo LootGuid) en servidor y clientes. Solo el servidor crea los objetos.
+
+Comandos de depuración (consola, `~`):
+
+| Comando | Qué hace |
+| --- | --- |
+| `nde.Expedition.Status [cada s]` | Escribe en el log fase, reloj, botín y resultado. |
+| `nde.Expedition.DepositLoot [cuántos] [espera]` | Servidor: deposita botín suelto en la camioneta. |
+| `nde.Expedition.ToVan [espera]` | Servidor: lleva a todos a la camioneta. |
+| `nde.Expedition.SkipTime <s> [espera]` | Servidor: adelanta el reloj de la noche. |
+
 ## Controles del personaje provisional
 
 | Acción | Teclado y ratón | Mando |

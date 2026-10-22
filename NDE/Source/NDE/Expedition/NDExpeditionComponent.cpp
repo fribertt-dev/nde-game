@@ -754,7 +754,16 @@ void UNDExpeditionComponent::FinishExpedition(ENDExpeditionEndReason Reason)
 	BroadcastStateChanged();
 
 	bSettledBroadcastLocally = true;
+	LogRunSummary();
 	OnExpeditionSettled.Broadcast(RunSummary);
+}
+
+void UNDExpeditionComponent::LogRunSummary() const
+{
+	UE_LOG(LogTemp, Log, TEXT("NDExpedition [%s]: resultado %s (%s), botin %d de cuota %d, objetivo %s"),
+		GetOwner()->HasAuthority() ? TEXT("servidor") : TEXT("cliente"),
+		*UEnum::GetValueAsString(RunSummary.Outcome), *UEnum::GetValueAsString(RunSummary.EndReason),
+		RunSummary.LootPointsDeposited, RunSummary.Quota, RunSummary.bObjectiveMet ? TEXT("cumplido") : TEXT("no cumplido"));
 }
 
 void UNDExpeditionComponent::BroadcastStateChanged()
@@ -785,6 +794,7 @@ void UNDExpeditionComponent::OnRep_RunSummary()
 	if (!bSettledBroadcastLocally && RunSummary.Outcome != ENDExpeditionOutcome::None)
 	{
 		bSettledBroadcastLocally = true;
+		LogRunSummary();
 		OnExpeditionSettled.Broadcast(RunSummary);
 	}
 }

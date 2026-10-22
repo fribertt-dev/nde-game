@@ -60,6 +60,12 @@ public:
 
 	// --- Solo servidor. Las llama UNDCarryComponent y ANDExtractionVan. ---
 
+	/**
+	 * Para objetos que aparecen al generar la casa: definición y LootGuid estable (derivado de la semilla
+	 * y del hueco de botín). Llamar antes de FinishSpawning.
+	 */
+	void InitializeSpawn(UNDLootDefinition* InDefinition, const FGuid& InStableGuid);
+
 	bool CanBeGrabbedBy(const APawn* Pawn) const;
 	bool AddCarrier(APawn* Pawn);
 	void RemoveCarrier(APawn* Pawn, const FVector& ReleaseVelocity);
