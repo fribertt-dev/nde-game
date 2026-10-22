@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "HouseGen/NDHouseLot.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -47,7 +48,10 @@ void ANDHouseGameMode::RestartPlayer(AController* NewPlayer)
 	{
 		return;
 	}
-	RestartPlayerAtTransform(NewPlayer, HouseLot->GetPlayerSpawnTransform(NextSpawnIndex++));
+	const int32 SpawnIndex = NextSpawnIndex++;
+	RestartPlayerAtTransform(NewPlayer, HouseLot->GetPlayerSpawnTransform(SpawnIndex));
+	UE_LOG(LogNDHouseGen, Log, TEXT("%s aparece en la Entrada (spawn %d)"),
+		NewPlayer->PlayerState ? *NewPlayer->PlayerState->GetPlayerName() : *NewPlayer->GetName(), SpawnIndex);
 }
 
 void ANDHouseGameMode::HandleHouseBuilt(ANDHouseLot* Lot)
