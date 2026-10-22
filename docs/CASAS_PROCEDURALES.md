@@ -10,8 +10,17 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 5. **GameMode** (`ANDHouseGameMode`): igual que la expedición, pero los jugadores aparecen en la Entrada cuando la casa está construida.
 
 ## Reglas de H01 (provisionales)
-- 5-8 salas, una planta, distrito D01.
-- Entrada en la fachada; distribuidor; dormitorio principal a 2-5 puertas; sala objetivo a 2-7; 0-2 bucles; acceso secundario al patio con 50 %.
+- Una planta, distrito D01. Tamaño (`HouseSize` en el lote; `MinRooms`/`MaxRooms` lo cambian):
+
+  | Tamaño | Salas | Lote mínimo | Bucles | 2.ª salida |
+  |---|---|---|---|---|
+  | Small | 5-8 | 10×10 | 0-2 | 50 % |
+  | Medium | 7-11 | 12×12 | 0-2 | 60 % |
+  | Large | 10-17 | 14×14 | 1-2 | 90 % |
+
+  Si el lote es más pequeño que el mínimo, crece solo (lo avisa el log).
+- Entrada en la fachada; distribuidor; dormitorio principal a 2-5 puertas; sala objetivo a 2-7.
+- 18 piezas greybox en `NDRoomCatalog.cpp`: 2 vestíbulos, 3 pasillos (recto, esquina, T), sala de estar (normal y en L), cocina, comedor, dormitorio principal, baño, almacén, despensa, estudio, lavandería, biblioteca, habitación de juguetes y sala objetivo. Las salas en L usan `BlockedCells`.
 - Puertas Door_M de 160 cm; bulto de 120 cm (la cápsula mide 44 cm). Los baños (Door_S, 100 cm) no están en la ruta del bulto.
 - Mínimo 6 huecos de botín, 4 spawns en la Entrada, anchor de criatura en el dormitorio, extracción en el jardín delantero.
 
@@ -20,6 +29,6 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 - `?Seed=1234` en la URL del mapa, o `bUseFixedSeed` en el lote.
 - `bDrawDebugGraph` en el lote, o `ANDHouseGenDebugActor` con su botón **Generate**.
 - Log: categoría `LogNDHouseGen`.
-- Tests: `NDE.HouseGen.Connectivity`, `NDE.HouseGen.Determinism`, `NDE.HouseGen.CarryEnvelope`.
+- Tests: `NDE.HouseGen.Connectivity` (10.000 semillas por tamaño), `NDE.HouseGen.Determinism`, `NDE.HouseGen.CarryEnvelope`.
 
 La navegación necesita `RuntimeGeneration=Dynamic` (está en `DefaultEngine.ini`) y un `NavMeshBoundsVolume` que cubra el lote.
