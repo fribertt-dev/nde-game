@@ -2,6 +2,8 @@
 
 #include "HouseGen/NDHouseGenerator.h"
 #include "HouseGen/NDHouseLoot.h"
+#include "Contracts/NDContractDefinition.h"
+#include "Loot/NDLootDefinition.h"
 #include "HouseGen/NDRoomCatalog.h"
 #include "Misc/AutomationTest.h"
 
@@ -391,8 +393,11 @@ bool FNDHouseGenLootPlanTest::RunTest(const FString& Parameters)
 
 		TArray<FNDHouseLootPlacement> PlanA;
 		TArray<FNDHouseLootPlacement> PlanB;
-		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanA);
-		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Quota, Required, Candidates, PlanB);
+		FNDHouseLootContractSpec Spec;
+		Spec.Quota = Quota;
+		Spec.RequiredLootIds = Required;
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, PlanA);
+		FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, PlanB);
 
 		bool bSame = PlanA.Num() == PlanB.Num();
 		for (int32 Index = 0; bSame && Index < PlanA.Num(); ++Index)
@@ -444,6 +449,378 @@ bool FNDHouseGenLootPlanTest::RunTest(const FString& Parameters)
 		ShortHouses += Value < FNDHouseLootPlanner::GetTargetValue(Quota) && FreeSockets > 0 ? 1 : 0;
 	}
 	TestEqual(TEXT("Casas sin el margen de cuota pese a tener huecos libres"), ShortHouses, 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenGameplayPointsTest, "NDE.HouseGen.GameplayPoints", NDHouseGenTests::Flags)
+
+bool FNDHouseGenGameplayPointsTest::RunTest(const FString& Parameters)
+{
+	int32 Houses = 0;
+	int32 TotalHiding = 0;
+	int32 TotalHazards = 0;
+	for (int64 Seed = 1; Seed <= 600; ++Seed)
+	{
+		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
+		// Un tercio con piso superior y sótano, para probar escaleras en la patrulla y el sonido.
+		if (Seed % 3 == 0)
+		{
+			Params.ApplyFloorOptions(ENDFloorOption::Always, ENDFloorOption::Always);
+		}
+		FNDHouseGenerationManifest Manifest;
+		FNDHouseLayout Layout;
+		if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+		{
+			return false;
+		}
+		++Houses;
+		TotalHiding += Layout.HidingSpots.Num();
+		TotalHazards += Layout.Hazards.Num();
+
+		// Mismo manifiesto, mismos puntos (lo que construye un cliente).
+		FNDHouseLayout Again;
+		FString Error;
+		FNDHouseLayout::FromManifest(Manifest, Again, Error);
+		const bool bSame = Again.HidingSpots.Num() == Layout.HidingSpots.Num() && Again.Hazards.Num() == Layout.Hazards.Num()
+			&& Again.PatrolRoute == Layout.PatrolRoute
+			&& (Layout.Hazards.IsEmpty() || Again.Hazards.Last().LotTransform.Equals(Layout.Hazards.Last().LotTransform));
+		if (!bSame)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: los puntos de juego no salen iguales del mismo manifiesto"), Seed));
+			return false;
+		}
+
+		// Escondites con entrada dentro de su sala.
+		if (Layout.HidingSpots.Num() < 2)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: %d escondites"), Seed, Layout.HidingSpots.Num()));
+		}
+		for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+		{
+			if (Layout.FindRoomAt(Spot.EntryPoint) != Spot.Room || Spot.Capacity < 1 || Spot.Capacity > 2)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: escondite %d mal colocado"), Seed, Spot.StableId));
+			}
+		}
+
+		// Patrulla: todas las salas salvo las de puerta pequeña (baños), empieza y acaba en el dormitorio.
+		TSet<int32> Visited(Layout.PatrolRoute);
+		const int32 SmallDoorRooms = Layout.Rooms.FilterByPredicate([&Layout](const FNDHouseLayoutRoom& Room)
+		{
+			return !Layout.Connections.ContainsByPredicate([&Layout, &Room](const FNDHouseLayoutConnection& Link)
+			{
+				return (Link.RoomA == Room.InstanceId || Link.RoomB == Room.InstanceId) && !Layout.IsLowClearance(Link) && Link.OpeningWidth >= 140.f;
+			});
+		}).Num();
+		if (Visited.Num() + SmallDoorRooms < Layout.Rooms.Num() || Layout.PatrolRoute.IsEmpty()
+			|| Layout.PatrolRoute[0] != Layout.BedroomRoom || Layout.PatrolRoute.Last() != Layout.BedroomRoom)
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: la patrulla recorre %d de %d salas"), Seed, Visited.Num(), Layout.Rooms.Num()));
+		}
+
+		// Peligros fuera de la ruta del bulto.
+		TSet<int32> RouteRooms;
+		Layout.GetCarryRouteRooms(Params.CarryEnvelopeWidth, RouteRooms);
+		for (const FNDHouseHazard& Hazard : Layout.Hazards)
+		{
+			if (RouteRooms.Contains(Hazard.Room))
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: peligro en la ruta del bulto"), Seed));
+			}
+		}
+
+		// Sonido: 1 en la misma sala, simétrico, y entre 0 y 1 hacia el dormitorio.
+		const FVector Entry = Layout.PatrolNodes[Layout.EntryRoom].Location + FVector(0.f, 0.f, 50.f);
+		const FVector Bedroom = Layout.PatrolNodes[Layout.BedroomRoom].Location + FVector(0.f, 0.f, 50.f);
+		const float Same = Layout.GetSoundTransmission(Entry, Entry);
+		const float There = Layout.GetSoundTransmission(Entry, Bedroom);
+		const float Back = Layout.GetSoundTransmission(Bedroom, Entry);
+		if (!FMath::IsNearlyEqual(Same, 1.f, 1e-4f) || There <= 0.f || There >= 1.f || !FMath::IsNearlyEqual(There, Back, 1e-4f))
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld: sonido entrada-dormitorio %.3f / %.3f (misma sala %.3f)"), Seed, There, Back, Same));
+		}
+	}
+	AddInfo(FString::Printf(TEXT("%d casas: %.1f escondites y %.1f peligros de media"), Houses,
+		TotalHiding / static_cast<float>(Houses), TotalHazards / static_cast<float>(Houses)));
+	return true;
+}
+
+namespace NDHouseGenContractTests
+{
+	const TCHAR* ContractIds[] = { TEXT("C01"), TEXT("C02"), TEXT("C03"), TEXT("C04"), TEXT("C05"), TEXT("C06"), TEXT("C07") };
+	const TCHAR* LootIds[] = { TEXT("L01"), TEXT("L02"), TEXT("L03"), TEXT("L04"), TEXT("L05"), TEXT("L07"), TEXT("L08"), TEXT("L09"), TEXT("L10"),
+		TEXT("L11"), TEXT("L12"), TEXT("L16"), TEXT("L19"), TEXT("L20"), TEXT("L32"), TEXT("L33"), TEXT("L34"), TEXT("L41"), TEXT("L50") };
+
+	template <typename T>
+	T* LoadData(const TCHAR* Folder, const TCHAR* Prefix, const TCHAR* Id)
+	{
+		return LoadObject<T>(nullptr, *FString::Printf(TEXT("/Game/_NDE_/Data/%s/%s%s.%s%s"), Folder, Prefix, Id, Prefix, Id));
+	}
+
+	/** Botín de los Data Assets reales. */
+	bool LoadCandidates(FAutomationTestBase& Test, TArray<FNDHouseLootCandidate>& OutCandidates)
+	{
+		for (const TCHAR* Id : LootIds)
+		{
+			const UNDLootDefinition* Loot = LoadData<UNDLootDefinition>(TEXT("Loot"), TEXT("DA_Loot_"), Id);
+			if (!Loot)
+			{
+				Test.AddError(FString::Printf(TEXT("Falta DA_Loot_%s (ejecuta Scripts/nde_setup_contratos_d01.py)"), Id));
+				return false;
+			}
+			OutCandidates.Add({ Loot->LootId, Loot->Category, Loot->BaseValue });
+		}
+		return true;
+	}
+
+	/** Recuento por contrato de lo que vigilan las pruebas. */
+	struct FStats
+	{
+		int32 Houses = 0;
+		int32 Fallbacks = 0;
+		int32 ObjectiveUnreachable = 0;
+		int32 QuotaShort = 0;
+		int32 CarryRouteMissing = 0;
+		int32 RescueInvalid = 0;
+	};
+
+	/** Genera casas de todos los tamaños con cada contrato y reparte su botín. */
+	bool Run(FAutomationTestBase& Test, int32 SeedsPerSize, TMap<FString, FStats>& OutStats)
+	{
+		TArray<FNDHouseLootCandidate> Candidates;
+		if (!LoadCandidates(Test, Candidates))
+		{
+			return false;
+		}
+		for (const TCHAR* ContractId : ContractIds)
+		{
+			const UNDContractDefinition* Contract = LoadData<UNDContractDefinition>(TEXT("Contracts"), TEXT("DA_Contract_"), ContractId);
+			if (!Contract)
+			{
+				Test.AddError(FString::Printf(TEXT("Falta DA_Contract_%s"), ContractId));
+				return false;
+			}
+			const FNDHouseLootContractSpec Spec = FNDHouseLootContractSpec::FromContract(Contract);
+			FStats& Stats = OutStats.Add(ContractId);
+			for (const ENDHouseSize Size : NDHouseGenTests::AllSizes)
+			{
+				for (int64 Seed = 1; Seed <= SeedsPerSize; ++Seed)
+				{
+					FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed, Size);
+					Params.ContractId = Contract->ContractId;
+					Params.ContractRequirements = Contract->HouseRequirements;
+					FNDHouseGenerationManifest Manifest;
+					FNDHouseLayout Layout;
+					if (!NDHouseGenTests::GenerateLayout(Test, Params, Manifest, Layout))
+					{
+						return false;
+					}
+					++Stats.Houses;
+					Stats.Fallbacks += Manifest.bUsedFallback ? 1 : 0;
+
+					TArray<FNDHouseLootPlacement> Placements;
+					FNDHouseLootPlanner::Plan(Layout, Manifest.RunSeed, Spec, Candidates, Placements);
+
+					// Objetivo: todos los requeridos en la sala del contrato, a la que se llega.
+					const int32 Anchor = Layout.GetAnchorRoom(Spec.House);
+					TArray<int32> Depths;
+					Layout.ComputeDepths(Depths);
+					int32 RequiredPlaced = 0;
+					for (const FNDHouseLootPlacement& Placement : Placements)
+					{
+						if (Placement.bRequired)
+						{
+							++RequiredPlaced;
+							if (Placement.Room != Anchor || !Depths.IsValidIndex(Anchor) || Depths[Anchor] == INDEX_NONE)
+							{
+								++Stats.ObjectiveUnreachable;
+							}
+						}
+					}
+					Stats.ObjectiveUnreachable += RequiredPlaced < Spec.RequiredLootIds.Num() ? 1 : 0;
+
+					// Cuota cubierta con margen (sin contar señuelos).
+					int32 Value = 0;
+					for (const FNDHouseLootPlacement& Placement : Placements)
+					{
+						Value += Placement.bDecoy ? 0 : Candidates[Placement.Candidate].Value;
+					}
+					if (Spec.Quota > 0 && Value < Spec.Quota * Spec.House.QuotaCoverage)
+					{
+						++Stats.QuotaShort;
+					}
+
+					// Ruta del bulto hasta el objetivo con el ancho que pida el contrato (o el del bulto pesado).
+					const bool bHeavy = Spec.RequiredLootIds.ContainsByPredicate([&Candidates](const FName& Id)
+					{
+						return Candidates.ContainsByPredicate([&Id](const FNDHouseLootCandidate& C) { return C.LootId == Id && C.Category == ENDLootCategory::Heavy; });
+					});
+					const float Width = FMath::Max(Spec.House.MinRouteWidth, bHeavy ? Params.CarryEnvelopeWidth : 0.f);
+					if (!Layout.FindRoute(Layout.EntryRoom, Anchor, Width))
+					{
+						++Stats.CarryRouteMissing;
+					}
+
+					// Rescate: tarro con dos accesos, lejos de las puertas, y el objeto dentro.
+					if (Spec.House.ObjectiveAnchor == ENDContractAnchor::RescueContainer)
+					{
+						const FNDHouseLootPlacement* Rescue = Placements.FindByPredicate([](const FNDHouseLootPlacement& P) { return P.bInRescueContainer; });
+						bool bValid = Rescue && Layout.CountAccesses(Anchor) >= 2;
+						if (Rescue)
+						{
+							const FNDHouseLayoutRoom& Room = Layout.Rooms[Rescue->Room];
+							for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+							{
+								bValid &= !Room.Sockets[SocketIndex].IsOpen()
+									|| FVector::Dist2D(Layout.GetSocketLocation(Rescue->Room, SocketIndex), Rescue->LotTransform.GetLocation()) >= 100.f;
+							}
+						}
+						Stats.RescueInvalid += bValid ? 0 : 1;
+					}
+				}
+			}
+			Test.AddInfo(FString::Printf(TEXT("%s: %d casas, %d de respaldo, objetivo inaccesible %d, cuota corta %d, sin ruta de bulto %d, rescate invalido %d"),
+				ContractId, Stats.Houses, Stats.Fallbacks, Stats.ObjectiveUnreachable, Stats.QuotaShort, Stats.CarryRouteMissing, Stats.RescueInvalid));
+		}
+		return true;
+	}
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractQuotaTest, "NDE.HouseGen.Contracts.TestQuotaCoverage", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractQuotaTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	for (const TPair<FString, NDHouseGenContractTests::FStats>& Pair : Stats)
+	{
+		TestEqual(FString::Printf(TEXT("%s: casas con cuota corta"), *Pair.Key), Pair.Value.QuotaShort, 0);
+		TestEqual(FString::Printf(TEXT("%s: objetivo inaccesible"), *Pair.Key), Pair.Value.ObjectiveUnreachable, 0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractRescueTest, "NDE.HouseGen.Contracts.TestRescueContainer", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractRescueTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	TestEqual(TEXT("C06: tarros sin dos accesos, tapando una puerta o sin Trasto"), Stats.FindRef(TEXT("C06")).RescueInvalid, 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenContractCarryTest, "NDE.HouseGen.Contracts.TestCarryEnvelope", NDHouseGenTests::Flags)
+
+bool FNDHouseGenContractCarryTest::RunTest(const FString& Parameters)
+{
+	TMap<FString, NDHouseGenContractTests::FStats> Stats;
+	if (!NDHouseGenContractTests::Run(*this, 60, Stats))
+	{
+		return false;
+	}
+	for (const TPair<FString, NDHouseGenContractTests::FStats>& Pair : Stats)
+	{
+		TestEqual(FString::Printf(TEXT("%s: sin ruta de bulto al objetivo"), *Pair.Key), Pair.Value.CarryRouteMissing, 0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenVariantsTest, "NDE.HouseGen.VariantsAndDecorations", NDHouseGenTests::Flags)
+
+bool FNDHouseGenVariantsTest::RunTest(const FString& Parameters)
+{
+	// Cada familia de salas de H01 (salvo escaleras, cuyas variantes son los tres tipos) tiene 2-5 variantes.
+	TMap<ENDRoomType, int32> Families;
+	for (const FNDRoomModuleDefinition& Def : FNDRoomCatalog::GetModules())
+	{
+		if (Def.StairPart == ENDStairPart::None)
+		{
+			++Families.FindOrAdd(Def.RoomType);
+		}
+	}
+	for (const TPair<ENDRoomType, int32>& Family : Families)
+	{
+		TestTrue(FString::Printf(TEXT("%s tiene %d variantes (2-5)"), *NDHouseGen::GetRoomTypeName(Family.Key), Family.Value), Family.Value >= 2 && Family.Value <= 5);
+	}
+
+	TSet<FName> UsedModules;
+	int32 Rooms = 0;
+	int32 Decorated = 0;
+	int32 DecorationCount = 0;
+	for (int64 Seed = 1; Seed <= 400; ++Seed)
+	{
+		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
+		if (Seed % 2 == 0)
+		{
+			Params.ApplyFloorOptions(ENDFloorOption::Always, ENDFloorOption::Always);
+		}
+		FNDHouseGenerationManifest Manifest;
+		FNDHouseLayout Layout;
+		if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+		{
+			return false;
+		}
+		for (const FNDHouseLayoutRoom& Room : Layout.Rooms)
+		{
+			UsedModules.Add(Room.Def->RoomModuleId);
+		}
+
+		// Muebles: nunca junto a una puerta, en la ruta puerta-centro ni encima del botín.
+		for (const FNDHouseDecoration& Decoration : Layout.Decorations)
+		{
+			const FVector Location = Decoration.LotTransform.GetLocation();
+			const float Radius = FMath::Max(Decoration.HalfExtent.X, Decoration.HalfExtent.Y);
+			const FNDHouseLayoutRoom& Room = Layout.Rooms[Decoration.Room];
+			for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+			{
+				if (Room.Sockets[SocketIndex].IsOpen())
+				{
+					const FVector Door = Layout.GetSocketLocation(Decoration.Room, SocketIndex);
+					const FVector Hub = Layout.PatrolNodes[Decoration.Room].Location;
+					if (FVector::Dist2D(Door, Location) < Radius + FNDHouseLayout::DecorationRouteClearance
+						|| FMath::PointDistToSegment(FVector(Location.X, Location.Y, 0.f), FVector(Door.X, Door.Y, 0.f), FVector(Hub.X, Hub.Y, 0.f)) < Radius)
+					{
+						AddError(FString::Printf(TEXT("Semilla %lld: mueble %d tapa una puerta o la ruta de la sala %d"), Seed, Decoration.StableId, Decoration.Room));
+					}
+				}
+			}
+			for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
+			{
+				if (Marker.Type == ENDRoomMarkerType::LootSocket && FMath::Abs(Marker.LotTransform.GetLocation().Z - Location.Z) < 200.f
+					&& FVector::Dist2D(Marker.LotTransform.GetLocation(), Location) < Radius)
+				{
+					AddError(FString::Printf(TEXT("Semilla %lld: mueble %d encima de un hueco de botin"), Seed, Decoration.StableId));
+				}
+			}
+		}
+		for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
+		{
+			const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];
+			if (RoomIndex == Layout.EntryRoom || Room.Def->StairPart != ENDStairPart::None || Room.Def->RoomType == ENDRoomType::R02_Corridor)
+			{
+				continue;
+			}
+			++Rooms;
+			const int32 InRoom = Layout.Decorations.FilterByPredicate([RoomIndex](const FNDHouseDecoration& D) { return D.Room == RoomIndex; }).Num();
+			Decorated += InRoom > 0 ? 1 : 0;
+			DecorationCount += InRoom;
+			if (InRoom > 3)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: %d muebles en la sala %d"), Seed, InRoom, RoomIndex));
+			}
+		}
+	}
+	const int32 CatalogModules = FNDRoomCatalog::GetModules().Num();
+	AddInfo(FString::Printf(TEXT("Modulos usados: %d de %d. Salas con muebles: %d de %d (%.1f muebles de media)"),
+		UsedModules.Num(), CatalogModules, Decorated, Rooms, DecorationCount / static_cast<float>(FMath::Max(1, Rooms))));
+	TestTrue(TEXT("La mayoría de salas tiene muebles"), Decorated >= Rooms * 0.8f);
 	return true;
 }
 

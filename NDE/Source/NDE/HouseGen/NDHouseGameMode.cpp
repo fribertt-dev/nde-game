@@ -29,7 +29,8 @@ namespace NDHouseGameMode
 		return FSoftObjectPath(FString::Printf(TEXT("/Game/_NDE_/Data/Contracts/DA_Contract_%s.DA_Contract_%s"), *ContractId, *ContractId));
 	}
 
-	const TCHAR* LootIds[] = { TEXT("L01"), TEXT("L02"), TEXT("L03"), TEXT("L07"), TEXT("L08"), TEXT("L11"), TEXT("L12"), TEXT("L16"), TEXT("L19"), TEXT("L32") };
+	const TCHAR* LootIds[] = { TEXT("L01"), TEXT("L02"), TEXT("L03"), TEXT("L04"), TEXT("L05"), TEXT("L07"), TEXT("L08"), TEXT("L09"), TEXT("L10"),
+		TEXT("L11"), TEXT("L12"), TEXT("L16"), TEXT("L19"), TEXT("L20"), TEXT("L32"), TEXT("L33"), TEXT("L34"), TEXT("L41"), TEXT("L50") };
 }
 
 ANDHouseGameMode::ANDHouseGameMode()
@@ -137,6 +138,11 @@ void ANDHouseGameMode::SetupExpedition()
 		Director->Expedition->SetContract(ResolveContract());
 	}
 	const UNDContractDefinition* Contract = Director->Expedition->Contract;
+	// La casa se genera un tick después: así ya sabe qué salas y accesos pide el contrato.
+	if (HouseLot && Contract)
+	{
+		HouseLot->SetContractRequirements(Contract->HouseRequirements);
+	}
 	UE_LOG(LogNDHouseGen, Log, TEXT("Expedicion en la casa: contrato %s, cuota %d"),
 		Contract ? *Contract->ContractId.ToString() : TEXT("ninguno"), Contract ? Contract->RequiredQuotaValue : 0);
 }
@@ -144,7 +150,7 @@ void ANDHouseGameMode::SetupExpedition()
 void ANDHouseGameMode::SetupHouseExpedition(ANDHouseLot* Lot)
 {
 	// Botín: se borra el de la casa anterior y se reparte el de esta.
-	for (ANDLootActor* Loot : HouseLoot)
+	for (AActor* Loot : HouseLoot)
 	{
 		if (IsValid(Loot))
 		{

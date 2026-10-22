@@ -25,6 +25,70 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 - Mínimo 6 huecos de botín, 4 spawns en la Entrada, anchor de criatura en el dormitorio, extracción en el jardín delantero.
 - El bucle de expedición usa estas marcas (`ANDHouseGameMode`, ver `docs/BUCLE_EXPEDICION.md`): el botín sale en los huecos según el contrato y la semilla (`HouseGen/NDHouseLoot`, prueba `NDE.HouseGen.LootPlan`), lo que pide el contrato va a la sala objetivo, y en la extracción va la zona de depósito con la camioneta greybox de lado.
 
+## Puntos de juego (escondites, peligros, patrulla y sonido)
+Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así que servidor y clientes tienen los mismos sin replicar nada más. Cada uno tiene `StableId` (su índice), que sirve de StableSpawnId.
+- **Escondites** (`HidingSpots`): las marcas azules de cada módulo. Tipo según la sala: debajo de un mueble (dormitorios y sala de estar; caben 2), dentro de un armario (cocina, baño, almacén, despensa, lavadero; cabe 1) o detrás de un mueble (resto; cabe 1, se le ve de lado). Cada uno tiene su punto de entrada y salida hacia el centro de la sala.
+- **Peligros** (`Hazards`): suelo que cruje, objeto frágil y trampa de ratón. Más o menos en una de cada dos salas libres, nunca en la ruta del bulto (entrada → objetivo), ni en escaleras, ni a menos de 140 cm de una puerta.
+- **Patrulla** (`PatrolNodes`, `PatrolRoute`): un nodo por sala (en las escaleras, en el umbral de su puerta), unidos por las puertas por las que cabe la criatura. El recorrido sale del dormitorio, pasa por todas las salas y vuelve. En partida, el servidor comprueba con el NavMesh que se llega a cada nodo (`PatrolNodesStuck` y el log).
+- **Sonido** (`AudioLinks`): una arista por puerta con cuánto sonido pasa: hueco o puerta abierta 0,6, paso ancho 0,85, escalera 0,7 (y 0,2 para una puerta cerrada, cuando las haya). `ANDHouseLot::GetSoundTransmission(A, B)` da la fracción que llega de un punto a otro por el mejor camino, sin contar la distancia.
+- El validador pide al menos 2 escondites con entrada accesible, que la patrulla cubra todas las salas sin nodos aislados y que ningún peligro esté en la ruta del bulto ni tape una puerta. Prueba: `NDE.HouseGen.GameplayPoints` (600 casas, 9,8 escondites y 2 peligros de media).
+- `nde.HouseGen.DebugPoints [segundos] [espera]` los dibuja encima de todo: escondites en azul (con capacidad y entrada), peligros en naranja, patrulla en rojo y el paso del sonido en cian.
+- Cambió la versión de generación a `housegen-0.2` (el validador nuevo puede descartar casas que antes valían).
+
+## Variantes de piezas y muebles
+- Cada familia de salas de H01 tiene 2 o 3 variantes (las B de `housegen-0.3` cambian tamaño, puertas y huecos): cocina 2x1 o 2x2, comedor 2x1 o 1x1, baño 1x1 o 2x1, almacén, objetivo (la B tiene cuatro huecos, más accesos), despacho, lavadero, biblioteca, cuarto de juegos, despensa y dormitorio infantil. Las escaleras tienen sus tres tipos (recta, U y L). La prueba `NDE.HouseGen.VariantsAndDecorations` comprueba que cada familia tiene 2-5 variantes y que se usan los 39 módulos.
+- Muebles (`Decorations`): 2-3 por sala elegidos con la semilla (no en entrada, pasillos ni escaleras): mesa, sillón, armario, estantería, cama pequeña o caja, según la sala. Van pegados a esquinas o paredes, con colisión simple, y nunca cerca de una puerta (incluido el hueco desplazado de las escaleras en U), en la línea puerta-centro de la sala ni encima del botín, los escondites o el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 99 % de las salas tiene muebles (2,2 de media) y ningún nodo de patrulla queda atascado.
+- `nde.HouseGen.Furniture 0` construye la casa sin muebles (depuración; los puntos de juego no cambian).
+- La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
+- El botín no recorta el NavMesh (se mueve y se lleva).
+
+## Calidad (10.000 semillas por tamaño y contrato)
+Prueba `NDE.Quality.HouseGen` (fuera de las rápidas; tarda menos de un minuto): genera 10.000 casas por tamaño (Small, Medium, Large) con cada contrato real C01-C07, un tercio con piso superior y sótano forzados, reparte el botín y comprueba objetivo accesible, cuota con margen, ruta del bulto, escondites y patrulla. Deja en `Saved/HouseGenQuality/` el informe (`report.md`), las semillas con problemas (`failed_seeds.txt`) y un SVG por layout fallido o de respaldo (piso por columna; objetivo en amarillo, dormitorio en rojo, escaleras en gris, entrada en verde, puertas como puntos). Para probar con menos: `nde.Quality.Seeds 1000`.
+
+Resultado con `housegen-0.3` (210.000 casas):
+
+| Métrica | Resultado | Objetivo |
+| --- | --- | --- |
+| Casas de respaldo | 20 (0,01 %), todas C02 Small (cocina obligatoria en casa pequeña) | menos del 1 % |
+| Objetivos inaccesibles | 0 | 0 |
+| Cuota insuficiente | 0 | 0 |
+| Bulto sin ruta | 0 | 0 |
+| Escondites o patrulla inválidos | 0 | 0 |
+| Tiempo medio de generación | 0,10 ms por casa (0,07 Small, 0,16 Large) | |
+
+Con piso superior: 38 % de las Small, 67 % de las Medium y 83 % de las Large; con sótano: 38 %, 34 % y 54 %. Para que C06 (dos accesos al tarro) nunca deje sin casa, si no se puede abrir un bucle hacia el objetivo se cuelga de él una sala pequeña por otra puerta.
+
+## Entrada tardía y reconexión
+Un cliente que entra a mitad de noche o vuelve tras desconectarse recibe lo mismo que los demás:
+- **Casa:** el manifiesto (lote siempre relevante) y la construye igual; mismo hash. Las salas se crean con el mismo nombre en todas las máquinas (`NDRoom_<lote>_r<revisión>_<sala>`) y son estáticas, así el servidor puede referirse a su suelo sin que el cliente se quede atascado.
+- **Botín:** cada objeto es siempre relevante y nunca duerme en red, así que llega con su estado real (suelto, llevado y por quién, en la mochila, bloqueado en el tarro). La física solo corre en el servidor; los clientes siguen la posición replicada y, cuando el objeto se queda quieto, su sitio de reposo (`RestLocation`), que también recibe quien entra tarde. Lo depositado llega por el libro de depósitos de la expedición; los objetos depositados ya no existen. LootGuid estable: nunca hay duplicados ni pérdidas.
+- **Tarro de rescate:** su estado (abierto o cerrado) está replicado.
+- **Expedición:** quien vuelve a tiempo recupera su PlayerState y vuelve a estar activo; quien entra nuevo en los primeros 90 s cuenta como participante.
+- Aún no hay puertas que se abran ni escondites ocupables, así que no hay nada que sincronizar de ellos.
+
+Comprobación: `nde.Expedition.StateHash <cada s> [1 = detalle]` escribe en cada máquina una huella del estado (botín, depósitos, tarros) y, con detalle, cada objeto con su posición y (en el servidor) si cada cliente tiene su canal abierto. `nde.Expedition.Later <s> <comando>` lanza un comando aunque se viaje o se desconecte (p. ej. `disconnect` y `open 127.0.0.1:7788`). Prueba hecha con servidor y tres conexiones (A desde el principio, se desconecta y vuelve; B entra tarde) mientras el host coge, lanza, deposita y abre el tarro: en 6 de 6 partidas, con tres casas distintas, las tres máquinas acaban con la misma huella y las posiciones a menos de 1 mm.
+
+## Contratos de D01 (C01 a C07)
+Cada contrato (`UNDContractDefinition`) trae `HouseRequirements`: salas obligatorias, dónde va el objetivo (sala objetivo, sala obligatoria, cabecera de la cama o tarro de rescate), 2-5 ubicaciones candidatas, accesos mínimos a esa sala (1-3 rutas), ancho mínimo de la ruta y el margen de botín sobre la cuota. El generador añade las salas obligatorias antes del relleno, abre bucles hacia el objetivo si faltan accesos y valida todo; el reparto del botín (`HouseGen/NDHouseLoot`) pone primero el objetivo en una de sus candidatas (la elige la semilla), luego los señuelos y después el relleno hasta cubrir la cuota con margen.
+
+| Id | Nombre | Qué pide | Casa |
+| --- | --- | --- | --- |
+| C01 | La Primera Siesta | Cuota de 700; secundario: ningún jarrón roto | Sala segura (escondite sin peligros), 6 huecos de botín |
+| C02 | Oro de Cocina | Cuchara (L04) y azucarero (L05) de plata, cuota 800 | Cocina obligatoria; 2 quesos señuelo (L20) |
+| C03 | El Reloj Perdido | Reloj cucú (L32) y cuota 850; secundario: sin tocar los otros relojes (pendiente) | 3 candidatas; 2 relojes señuelo (L33, L34) |
+| C04 | Cuidado con la Vajilla | Tetera (L09), plato (L10) y jarrón (L11) intactos y cuota 950 | Ruta de 160 cm; secundario: tiempo récord (todos fuera antes del amanecer) |
+| C05 | La Hora del Ronquido | Medalla de oro (L41) y cuota 1.050; secundario: como mucho 2 alertas (pendiente) | En la cabecera de la cama de la criatura, en el borde accesible |
+| C06 | Rescate del Calcetín | Trasto (L50) y cuota 1.150; secundario: sin despertar a nadie (pendiente) | Dentro de un tarro (`ANDRescueContainer`) en una sala con 2 accesos; se abre quedándose 2 s al lado |
+| C07 | El Televisor Prestado | Televisor (L16) y cuota 1.400; secundario: sin golpes fuertes | Ruta de bulto de 120 cm |
+
+Valores del GDD (12 y 16.2): C01-C06 son tier I (pago 120-170 por jugador, reputación 35-55, noche de 9-10 min) y C07 tier II (pago 220, reputación 65, 11 min); suben con la dificultad. Los secundarios marcados "pendiente" necesitan la criatura y el sistema de alertas; de momento no se evalúan. El bono por botín extra (tope 35 % del pago), el secundario (15 %), el rescate (7,5 %) y la devolución parcial (0,2) están en `FNDEconomyTuning`, dentro de los rangos del GDD.
+
+- Datos: `Scripts/nde_setup_contratos_d01.py` crea o actualiza los contratos y el botín nuevo (placeholder con formas del motor). Se ejecuta sin el editor abierto: `UnrealEditor-Cmd.exe NDE.uproject -run=pythonscript -script="<ruta>"`.
+- Los señuelos y el botín de menos de 50 puntos no se usan de relleno, y lo que pide el contrato no se repite.
+- Si una casa pequeña no tiene huecos para cubrir la cuota, el resto va en el suelo de salas de planta baja.
+- Pruebas (cargan los Data Assets reales): `NDE.HouseGen.Contracts.TestQuotaCoverage`, `TestRescueContainer` y `TestCarryEnvelope`. Con 180 casas por contrato: 0 de respaldo, 0 objetivos inaccesibles, 0 cuotas cortas, 0 sin ruta de bulto, 0 tarros inválidos.
+- Prueba en partida: `L_CasaPrueba?listen?Contract=C06`.
+
 ## Pisos y sótano
 - Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).
 - Opciones del lote: `UpperFloor` y `Basement` (Auto según el tamaño, Never, Always). Con Auto: Small 10 % / 15 %, Medium 50 % / 30 %, Large 75 % / 40 %.

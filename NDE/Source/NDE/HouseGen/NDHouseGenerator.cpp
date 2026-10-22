@@ -674,6 +674,59 @@ namespace NDHouseGenerator
 			return Added;
 		}
 
+		/** Sala donde va el objetivo del contrato (como FNDHouseLayout::GetAnchorRoom). */
+		int32 FindContractAnchorRoom() const
+		{
+			const FNDContractHouseRequirements& Contract = Params.ContractRequirements;
+			ENDRoomType Type = ENDRoomType::R09_Objective;
+			if (Contract.ObjectiveAnchor == ENDContractAnchor::BedHeadboard)
+			{
+				Type = ENDRoomType::R06_MasterBedroom;
+			}
+			else if (Contract.ObjectiveAnchor == ENDContractAnchor::RequiredRoom && Contract.RequiredRooms.Num() > 0)
+			{
+				Type = Contract.RequiredRooms[0];
+			}
+			return Rooms.IndexOfByPredicate([Type](const FWorkRoom& Room) { return Room.Def->RoomType == Type; });
+		}
+
+		/** Abre bucles hacia la sala del objetivo hasta tener los accesos que pide el contrato. */
+		bool AddContractAccesses()
+		{
+			const int32 Anchor = FindContractAnchorRoom();
+			if (Anchor == INDEX_NONE)
+			{
+				return Params.ContractRequirements.MinRoutes <= 1;
+			}
+			auto CountAccesses = [this, Anchor]()
+			{
+				return Links.FilterByPredicate([Anchor](const FNDHouseManifestConnection& Link) { return Link.RoomA == Anchor || Link.RoomB == Anchor; }).Num();
+			};
+			for (int32 Try = 0; Try < 3 && CountAccesses() < Params.ContractRequirements.MinRoutes; ++Try)
+			{
+				if (AddLoops(1, Anchor) == 0 && !AddAutoLoop(Anchor))
+				{
+					break;
+				}
+			}
+			// Sin bucle posible: una sala pequeña colgada de otra puerta del objetivo (otro acceso),
+			// si cabe en el máximo de salas del tamaño.
+			const FNDRoomModuleDefinition* Small[] = { FNDRoomCatalog::Find(TEXT("D01_Storage_A")), FNDRoomCatalog::Find(TEXT("D01_Corridor_Corner")),
+				FNDRoomCatalog::Find(TEXT("D01_Pantry_A")) };
+			for (const FNDRoomModuleDefinition* Def : Small)
+			{
+				if (CountAccesses() >= Params.ContractRequirements.MinRoutes || Rooms.Num() >= Params.MaxRooms)
+				{
+					break;
+				}
+				if (Def)
+				{
+					Attach(Anchor, *Def);
+				}
+			}
+			return CountAccesses() >= Params.ContractRequirements.MinRoutes;
+		}
+
 		/**
 		 * Une RoomIndex con una sala vecina abriendo en esta una puerta "Auto" frente a un hueco libre de RoomIndex,
 		 * aunque su módulo no tuviera hueco en esa pared (nunca en la entrada ni en otra escalera). true si lo hace.
@@ -969,6 +1022,20 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		}
 	}
 
+	// Salas que pide el contrato (p. ej. la cocina en C02), antes del relleno.
+	for (const ENDRoomType Type : Params.ContractRequirements.RequiredRooms)
+	{
+		if (Builder.Rooms.ContainsByPredicate([Type](const FWorkRoom& Room) { return Room.Def->RoomType == Type; }))
+		{
+			continue;
+		}
+		const TArray<const FNDRoomModuleDefinition*> Pool = MakePool(Params.District, { Type }, 1);
+		if (Pool.IsEmpty() || Builder.AttachAnywhere(*Builder.Pick(Pool)) == INDEX_NONE)
+		{
+			return Fail(TEXT("una sala del contrato no cabe"));
+		}
+	}
+
 	// Resto de la planta baja. Los pisos extra van después, con toda la planta baja debajo para apoyarse.
 	while (Builder.Rooms.Num() < GroundRooms())
 	{
@@ -1068,6 +1135,10 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 	{
 		return Fail(TEXT("faltan bucles"));
 	}
+	if (!Builder.AddContractAccesses())
+	{
+		return Fail(TEXT("faltan accesos al objetivo del contrato"));
+	}
 	if (Stream.FRand() < Params.SecondaryExitChance)
 	{
 		Builder.PickSecondaryExit();
@@ -1114,6 +1185,8 @@ bool FNDHouseGenerator::BuildFallback(const FNDHouseGenParams& Params, FNDHouseG
 			return false;
 		}
 	}
+	// Accesos que pida el contrato (p. ej. dos puertas al tarro de C06).
+	Builder.AddContractAccesses();
 	Builder.WriteManifest(OutManifest);
 	OutManifest.bUsedFallback = true;
 	return true;

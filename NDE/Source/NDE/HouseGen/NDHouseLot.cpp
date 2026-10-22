@@ -11,6 +11,8 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Containers/Ticker.h"
+#include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenDebug.h"
 #include "HouseGen/NDHouseGenerator.h"
@@ -78,6 +80,53 @@ namespace NDHouseLot
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.Regenerate: semilla %lld dentro de %.0f s"), Seed, Delay);
 	}
 
+	TAutoConsoleVariable<int32> CVarFurniture(
+		TEXT("nde.HouseGen.Furniture"),
+		1,
+		TEXT("Construye los muebles greybox de la casa: 1 = si, 0 = no (depuracion; los puntos de juego no cambian). Se aplica al construir o regenerar."));
+
+	void DrawPointsNow(UWorld* World, float Duration)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		if (!Lot || !Lot->IsHouseBuilt())
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.DebugPoints: no hay casa construida"));
+			return;
+		}
+		const FNDHouseLayout& Layout = Lot->GetLayout();
+		NDHouseGenDebug::DrawGameplayPoints(World, Lot->GetLotToWorld(), Layout, Duration);
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: %d escondites, %d peligros, %d muebles, %d nodos de patrulla (recorrido de %d pasos), %d puertas en el grafo de sonido"),
+			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.Decorations.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
+	}
+
+	void DebugPoints(const TArray<FString>& Args, UWorld* World)
+	{
+		const float Duration = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 30.f;
+		const float Delay = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
+		if (Delay <= 0.f)
+		{
+			DrawPointsNow(World, Duration);
+			return;
+		}
+		// Con espera, por el ticker del motor: sirve en un cliente que se conecta después (cambia de mundo).
+		FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda([Duration](float)
+		{
+			for (const FWorldContext& Context : GEngine->GetWorldContexts())
+			{
+				if (Context.World() && (Context.WorldType == EWorldType::Game || Context.WorldType == EWorldType::PIE))
+				{
+					DrawPointsNow(Context.World(), Duration);
+				}
+			}
+			return false;
+		}), Delay);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs DebugPointsCommand(
+		TEXT("nde.HouseGen.DebugPoints"),
+		TEXT("Dibuja escondites (azul), peligros (naranja), patrulla (rojo) y paso del sonido por puerta (cian). Uso: nde.HouseGen.DebugPoints [segundos] [espera]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&DebugPoints));
+
 	FAutoConsoleCommandWithWorldAndArgs RegenerateCommand(
 		TEXT("nde.HouseGen.Regenerate"),
 		TEXT("Regenera la casa del lote con la semilla dada (al azar si no se da). Solo en el servidor. Uso: nde.HouseGen.Regenerate 1234 [segundos de espera]"),
@@ -123,6 +172,12 @@ ANDHouseLot::ANDHouseLot()
 	ExtractionMeshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 	ExtractionMeshes->SetCanEverAffectNavigation(false);
 
+	DecorationMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Decorations"));
+	DecorationMeshes->SetupAttachment(Root);
+	DecorationMeshes->SetStaticMesh(CubeFinder.Object);
+	DecorationMeshes->SetMobility(EComponentMobility::Movable);
+	DecorationMeshes->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+
 	UpdateEditorBounds();
 }
 
@@ -159,6 +214,7 @@ void ANDHouseLot::BeginPlay()
 
 	NDHouseLot::SetColor(GroundMeshes, BaseMaterial, this, FLinearColor(0.18f, 0.35f, 0.12f));
 	NDHouseLot::SetColor(ExtractionMeshes, BaseMaterial, this, FLinearColor(0.1f, 0.9f, 0.2f));
+	NDHouseLot::SetColor(DecorationMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
 	if (HasAuthority())
 	{
 		if (bGenerateOnBeginPlay)
@@ -209,6 +265,7 @@ FNDHouseGenParams ANDHouseLot::MakeParams(int64 Seed) const
 	FNDHouseLotInfo Lot = LotInfo;
 	Lot.LotTransform = GetActorTransform();
 	Params.SetLot(Lot);
+	Params.ContractRequirements = ContractRequirements;
 	if (const ANDExpeditionGameState* ExpState = GetWorld() ? GetWorld()->GetGameState<ANDExpeditionGameState>() : nullptr)
 	{
 		Params.ContractId = ExpState->GetContractId();
@@ -263,6 +320,7 @@ void ANDHouseLot::ClearHouse()
 	RoomActors.Reset();
 	GroundMeshes->ClearInstances();
 	ExtractionMeshes->ClearInstances();
+	DecorationMeshes->ClearInstances();
 	bHouseBuilt = false;
 	bNavPathVerified = false;
 }
@@ -294,6 +352,9 @@ void ANDHouseLot::BuildFromManifest()
 		TArray<FIntPoint> Cells;
 		Layout.GetRoomCells(RoomIndex, Cells);
 		const FTransform RoomTransform = FTransform(FRotator(0.f, Room.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(RoomIndex)) * LotToWorld;
+		// Mismo nombre en todas las máquinas: así el servidor puede referirse a esta sala (p. ej. como suelo
+		// sobre el que está un jugador) y el cliente la encuentra. La revisión evita choques al regenerar.
+		SpawnParams.Name = FName(*FString::Printf(TEXT("NDRoom_%s_r%d_%02d"), *LotInfo.LotId.ToString(), Manifest.Revision, RoomIndex));
 		ANDRoomModuleActor* RoomActor = World->SpawnActor<ANDRoomModuleActor>(ANDRoomModuleActor::StaticClass(), RoomTransform, SpawnParams);
 		if (!RoomActor)
 		{
@@ -339,7 +400,7 @@ void ANDHouseLot::BuildFromManifest()
 		}
 		RoomActor->RoomInstanceId = RoomIndex;
 		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets, &ExtraOpenings);
-		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		// Sin acoplar al lote: la sala es estática (no se mueve) y el lote no; el lote la borra por su lista.
 		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
 		if (Room.Floor > MaxVisibleFloor)
 		{
@@ -355,6 +416,14 @@ void ANDHouseLot::BuildFromManifest()
 		{
 			UsedCells.Append(Cells);
 		}
+	}
+
+	// Muebles greybox: el cubo del motor mide 100 cm y se apoya en el suelo. nde.HouseGen.Furniture 0 los quita (depuración).
+	for (const FNDHouseDecoration& Decoration : NDHouseLot::CVarFurniture.GetValueOnGameThread() != 0 ? Layout.Decorations : TArray<FNDHouseDecoration>())
+	{
+		const FTransform& Base = Decoration.LotTransform;
+		DecorationMeshes->AddInstance(FTransform(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z),
+			Decoration.HalfExtent * 2.f / 100.f));
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.
@@ -462,6 +531,47 @@ void ANDHouseLot::CheckNavigationPath()
 				bProjected ? TEXT("sin camino completo") : TEXT("fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
 		}
 	}
+
+	// Patrulla: desde el dormitorio a cada nodo. Un nodo sin camino dejaría a la criatura atascada.
+	PatrolNodesStuck = 0;
+	FNavLocation BedroomOnNav;
+	if (Layout.PatrolNodes.IsValidIndex(Layout.BedroomRoom)
+		&& NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.PatrolNodes[Layout.BedroomRoom].Location), BedroomOnNav, Extent))
+	{
+		for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
+		{
+			// Fuera del recorrido (salas con puerta pequeña): la criatura no va.
+			if (Node.Room == Layout.BedroomRoom || !Layout.PatrolRoute.Contains(Node.StableId))
+			{
+				continue;
+			}
+			FNavLocation NodeOnNav;
+			const bool bProjected = NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Node.Location), NodeOnNav, Extent);
+			UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, NodeOnNav.Location) : nullptr;
+			if (!Path || !Path->IsValid() || Path->IsPartial())
+			{
+				++PatrolNodesStuck;
+				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s (%s, %d muebles, vecinos: %s, en %s)"),
+					*LotInfo.LotId.ToString(), Node.StableId, Node.Room, *NDHouseGen::GetRoomTypeName(Layout.Rooms[Node.Room].Def->RoomType),
+					Layout.Rooms[Node.Room].Floor, bProjected ? TEXT("") : TEXT(" (fuera del NavMesh)"), *Layout.Rooms[Node.Room].Def->RoomModuleId.ToString(),
+					Layout.Decorations.FilterByPredicate([&Node](const FNDHouseDecoration& D) { return D.Room == Node.Room; }).Num(),
+					*FString::JoinBy(Node.Neighbors, TEXT(", "), [this](int32 Other) { return Layout.Rooms[Other].Def->RoomModuleId.ToString(); }),
+					*LotToWorld.TransformPosition(Node.Location).ToCompactString());
+			}
+		}
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: patrulla %d nodos, %d sin camino; recorrido de %d pasos"),
+			*LotInfo.LotId.ToString(), Layout.PatrolNodes.Num(), PatrolNodesStuck, Layout.PatrolRoute.Num());
+	}
+}
+
+float ANDHouseLot::GetSoundTransmission(const FVector& WorldA, const FVector& WorldB) const
+{
+	if (!bHouseBuilt)
+	{
+		return 1.f;
+	}
+	const FTransform LotToWorld = GetLotToWorld();
+	return Layout.GetSoundTransmission(LotToWorld.InverseTransformPosition(WorldA), LotToWorld.InverseTransformPosition(WorldB));
 }
 
 FTransform ANDHouseLot::GetPlayerSpawnTransform(int32 Index) const

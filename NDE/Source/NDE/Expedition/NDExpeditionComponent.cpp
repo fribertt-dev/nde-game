@@ -345,6 +345,12 @@ void UNDExpeditionComponent::UpdateDisconnections()
 			Participant.Status = ENDParticipantStatus::Disconnected;
 			bChanged = true;
 		}
+		else if (!bGone && Participant.Status == ENDParticipantStatus::Disconnected)
+		{
+			// Volvió a tiempo (Unreal le devuelve su PlayerState): sigue en la expedición.
+			Participant.Status = ENDParticipantStatus::Active;
+			bChanged = true;
+		}
 	}
 	if (bChanged)
 	{
@@ -449,7 +455,8 @@ void UNDExpeditionComponent::EvaluateObjective()
 	}
 	for (const FNDDepositRecord& Record : Deposits)
 	{
-		if (int32* Count = Needed.Find(Record.LootId); Count && Record.Condition != ENDLootCondition::Broken)
+		const bool bCounts = Contract->bRequiredLootMustBeIntact ? Record.Condition == ENDLootCondition::Intact : Record.Condition != ENDLootCondition::Broken;
+		if (int32* Count = Needed.Find(Record.LootId); Count && bCounts)
 		{
 			--(*Count);
 		}

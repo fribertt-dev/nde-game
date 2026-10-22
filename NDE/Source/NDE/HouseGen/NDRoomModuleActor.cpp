@@ -32,7 +32,7 @@ namespace NDRoomModuleActor
 		UInstancedStaticMeshComponent* Meshes = Owner->CreateDefaultSubobject<UInstancedStaticMeshComponent>(Name);
 		Meshes->SetupAttachment(Parent);
 		Meshes->SetStaticMesh(Cube);
-		Meshes->SetMobility(EComponentMobility::Movable);
+		Meshes->SetMobility(EComponentMobility::Static);
 		Meshes->SetCollisionProfileName(bCollision ? UCollisionProfile::BlockAll_ProfileName : UCollisionProfile::NoCollision_ProfileName);
 		Meshes->SetCanEverAffectNavigation(bCollision);
 		return Meshes;
@@ -50,7 +50,9 @@ ANDRoomModuleActor::ANDRoomModuleActor()
 	BaseMaterial = MaterialFinder.Object;
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
-	Root->SetMobility(EComponentMobility::Movable);
+	// Estática: no se mueve, y así no hace falta referirse a ella por red como "suelo que se mueve"
+	// (un cliente que entra tarde podría no resolverla y su personaje se quedaría atascado).
+	Root->SetMobility(EComponentMobility::Static);
 	RootComponent = Root;
 
 	FloorMeshes = NDRoomModuleActor::CreateMeshes(this, TEXT("Floor"), Root, CubeFinder.Object, true);

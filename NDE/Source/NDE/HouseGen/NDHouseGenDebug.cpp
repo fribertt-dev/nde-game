@@ -21,6 +21,50 @@ namespace NDHouseGenDebug
 		}
 	}
 
+	void DrawGameplayPoints(const UWorld* World, const FTransform& LotToWorld, const FNDHouseLayout& Layout, float Duration)
+	{
+		if (!World)
+		{
+			return;
+		}
+		auto ToWorld = [&LotToWorld](const FVector& LotLocation) { return LotToWorld.TransformPosition(LotLocation); };
+		const FVector Up(0.f, 0.f, 40.f);
+
+		for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+		{
+			const FVector Location = ToWorld(Spot.LotTransform.GetLocation() + Up);
+			DrawDebugSphere(World, Location, 30.f, 10, FColor::Blue, false, Duration, SDPG_Foreground, 3.f);
+			DrawDebugDirectionalArrow(World, ToWorld(Spot.EntryPoint + Up), Location, 30.f, FColor::Blue, false, Duration, SDPG_Foreground, 2.f);
+			DrawDebugString(World, Location + FVector(0.f, 0.f, 50.f), FString::Printf(TEXT("Escondite %d x%d"), Spot.StableId, Spot.Capacity), nullptr, FColor::Blue, Duration, true);
+		}
+		for (const FNDHouseHazard& Hazard : Layout.Hazards)
+		{
+			const FVector Location = ToWorld(Hazard.LotTransform.GetLocation() + Up);
+			DrawDebugBox(World, Location, FVector(25.f), FColor::Orange, false, Duration, SDPG_Foreground, 3.f);
+			DrawDebugString(World, Location + FVector(0.f, 0.f, 50.f), StaticEnum<ENDHouseHazardType>()->GetNameStringByValue(static_cast<int64>(Hazard.Type)), nullptr, FColor::Orange, Duration, true);
+		}
+		for (const FNDHouseDecoration& Decoration : Layout.Decorations)
+		{
+			const FVector Location = ToWorld(Decoration.LotTransform.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z));
+			DrawDebugBox(World, Location, Decoration.HalfExtent, LotToWorld.GetRotation() * Decoration.LotTransform.GetRotation(), FColor::White, false, Duration, SDPG_Foreground, 2.f);
+		}
+		const FVector PatrolUp(0.f, 0.f, 90.f);
+		for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
+		{
+			DrawDebugSphere(World, ToWorld(Node.Location + PatrolUp), 25.f, 8, FColor::Red, false, Duration, SDPG_Foreground, 3.f);
+		}
+		for (int32 Step = 1; Step < Layout.PatrolRoute.Num(); ++Step)
+		{
+			DrawDebugLine(World, ToWorld(Layout.PatrolNodes[Layout.PatrolRoute[Step - 1]].Location + PatrolUp),
+				ToWorld(Layout.PatrolNodes[Layout.PatrolRoute[Step]].Location + PatrolUp), FColor::Red, false, Duration, SDPG_Foreground, 4.f);
+		}
+		for (const FNDHouseAudioLink& Link : Layout.AudioLinks)
+		{
+			const FVector Middle = ToWorld((Layout.PatrolNodes[Link.RoomA].Location + Layout.PatrolNodes[Link.RoomB].Location) * 0.5f + FVector(0.f, 0.f, 130.f));
+			DrawDebugString(World, Middle, FString::Printf(TEXT("sonido %.2f"), Link.Transmission), nullptr, FColor::Cyan, Duration, true);
+		}
+	}
+
 	FString GetRoomLabel(const FNDHouseLayout& Layout, int32 RoomIndex)
 	{
 		const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];

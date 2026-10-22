@@ -26,7 +26,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.1");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.3");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */
@@ -116,6 +116,81 @@ enum class ENDRoomMarkerType : uint8
 	LootSocket UMETA(ToolTip = "Hueco donde puede aparecer botín."),
 	MonsterAnchor UMETA(ToolTip = "Donde duerme o vuelve la criatura gigante."),
 	HideSpot UMETA(ToolTip = "Escondite para un Desvelado.")
+};
+
+/** Cómo se esconde un Desvelado; decide cuántos caben y si se le ve desde fuera. */
+UENUM(BlueprintType)
+enum class ENDHidingSpotKind : uint8
+{
+	UnderFurniture UMETA(ToolTip = "Debajo de un mueble (cama, sofá): caben dos, no se les ve de pie."),
+	InsideCabinet UMETA(ToolTip = "Dentro de un armario o mueble con puerta: cabe uno, no se le ve."),
+	BehindFurniture UMETA(ToolTip = "Detrás de un mueble: cabe uno, se le ve desde un lado.")
+};
+
+/** Peligro fijo de la casa que hace ruido o atrapa. */
+UENUM(BlueprintType)
+enum class ENDHouseHazardType : uint8
+{
+	CreakyFloor UMETA(ToolTip = "Suelo que cruje al pisarlo."),
+	FragileItem UMETA(ToolTip = "Objeto frágil en un mueble: se cae y suena si se roza."),
+	MouseTrap UMETA(ToolTip = "Trampa de ratón: atrapa un momento y hace ruido.")
+};
+
+/** Mueble greybox de decoración: da cobertura y algunos sirven de escondite. */
+UENUM(BlueprintType)
+enum class ENDDecorationKind : uint8
+{
+	Table UMETA(ToolTip = "Mesa: se esconden debajo dos."),
+	Armchair UMETA(ToolTip = "Sillón: uno detrás."),
+	Wardrobe UMETA(ToolTip = "Armario: uno dentro."),
+	Shelf UMETA(ToolTip = "Estantería: solo cobertura."),
+	Bed UMETA(ToolTip = "Cama pequeña: dos debajo."),
+	Crate UMETA(ToolTip = "Caja o baúl: solo cobertura.")
+};
+
+/** Dónde va el objetivo de un contrato dentro de la casa. */
+UENUM(BlueprintType)
+enum class ENDContractAnchor : uint8
+{
+	ObjectiveRoom UMETA(ToolTip = "En la sala objetivo."),
+	RequiredRoom UMETA(ToolTip = "En la primera sala obligatoria del contrato (p. ej. la cocina)."),
+	BedHeadboard UMETA(ToolTip = "En la cabecera de la cama de la criatura, en el borde accesible."),
+	RescueContainer UMETA(ToolTip = "Dentro de un tarro que hay que abrir, en la sala objetivo.")
+};
+
+/** Lo que un contrato pide a la casa (GDD 12 y 15). La casa se genera y se valida con esto. */
+USTRUCT(BlueprintType)
+struct FNDContractHouseRequirements
+{
+	GENERATED_BODY()
+
+	/** Salas que la casa tiene que tener, además de las de siempre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	TArray<ENDRoomType> RequiredRooms;
+
+	/** Dónde va lo que pide el contrato. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDContractAnchor ObjectiveAnchor = ENDContractAnchor::ObjectiveRoom;
+
+	/** Ubicaciones candidatas para el objetivo (2-5); la semilla elige una y en otras van los señuelos. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1", ClampMax = "5"))
+	int32 CandidateLocations = 2;
+
+	/** Accesos (puertas) mínimos a la sala del objetivo: 1-3 rutas para llegar. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1", ClampMax = "3"))
+	int32 MinRoutes = 1;
+
+	/** Ancho mínimo de la ruta de la entrada al objetivo, en cm (0 = cualquiera). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
+	float MinRouteWidth = 0.f;
+
+	/** Botín repartido mínimo frente a la cuota (1,35 = 35 % más). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "1"))
+	float QuotaCoverage = 1.35f;
+
+	/** Pide al menos una sala segura: con escondite y sin peligros. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	bool bNeedsSafeRoom = false;
 };
 
 /** Hueco de puerta en el borde de un módulo, en coordenadas del módulo sin rotar. */

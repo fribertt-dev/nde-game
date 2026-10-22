@@ -261,6 +261,9 @@ bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FN
 		Marker.Room = 0;
 		Marker.LotTransform = FTransform(FRotator(0.f, static_cast<int32>(Exit.LotDirection) * 90.f, 0.f), OutLayout.Lot.GetCellCenter(Exit.GetOutsideCell()));
 	}
+
+	OutLayout.RunSeed = Manifest.RunSeed;
+	OutLayout.BuildGameplayPoints();
 	return true;
 }
 
@@ -561,6 +564,101 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 	if (Layout.ObjectiveRoom != INDEX_NONE && !Layout.FindRoute(Layout.EntryRoom, Layout.ObjectiveRoom, Params.CarryEnvelopeWidth))
 	{
 		OutErrors.Add(FString::Printf(TEXT("No hay ruta de bulto de %.0f cm entre la entrada y el objetivo"), Params.CarryEnvelopeWidth));
+	}
+
+	// Escondites: al menos dos, en salas a las que se llega y con la entrada dentro de su sala.
+	constexpr int32 MinHidingSpots = 2;
+	if (Layout.HidingSpots.Num() < MinHidingSpots)
+	{
+		OutErrors.Add(FString::Printf(TEXT("Solo %d escondites; se piden %d"), Layout.HidingSpots.Num(), MinHidingSpots));
+	}
+	for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+	{
+		if (Depths[Spot.Room] == INDEX_NONE || Layout.FindRoomAt(Spot.EntryPoint) != Spot.Room)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Escondite %d (sala %d) sin entrada accesible"), Spot.StableId, Spot.Room));
+		}
+	}
+
+	// Patrulla: un nodo por sala; fuera del recorrido solo pueden quedar salas a las que se entra por una
+	// puerta pequeña (la criatura no cabe). Las demás, incluidas escaleras y sótano, en el recorrido.
+	TSet<int32> Patrolled(Layout.PatrolRoute);
+	if (Layout.PatrolNodes.Num() != Layout.Rooms.Num() || Layout.PatrolRoute.IsEmpty())
+	{
+		OutErrors.Add(TEXT("La patrulla no tiene un nodo por sala"));
+	}
+	for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
+	{
+		if (Patrolled.Contains(Node.StableId))
+		{
+			continue;
+		}
+		const bool bOnlySmallDoors = !Layout.Connections.ContainsByPredicate([&Layout, &Node](const FNDHouseLayoutConnection& Link)
+		{
+			return (Link.RoomA == Node.Room || Link.RoomB == Node.Room) && !Layout.IsLowClearance(Link)
+				&& Link.OpeningWidth >= NDHouseGen::GetDefaultSocketWidth(ENDRoomSocketType::Door_M);
+		});
+		if (!bOnlySmallDoors)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Nodo de patrulla %d (sala %d) fuera del recorrido"), Node.StableId, Node.Room));
+		}
+	}
+
+	// Peligros: nunca en la ruta del bulto ni pegados a una puerta.
+	TSet<int32> RouteRooms;
+	Layout.GetCarryRouteRooms(Params.CarryEnvelopeWidth, RouteRooms);
+	for (const FNDHouseHazard& Hazard : Layout.Hazards)
+	{
+		if (RouteRooms.Contains(Hazard.Room))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Peligro %d en la ruta del bulto (sala %d)"), Hazard.StableId, Hazard.Room));
+		}
+		const FNDHouseLayoutRoom& Room = Layout.Rooms[Hazard.Room];
+		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+		{
+			if (Room.Sockets[SocketIndex].IsOpen()
+				&& FVector::Dist2D(Layout.GetSocketLocation(Hazard.Room, SocketIndex), Hazard.LotTransform.GetLocation()) < FNDHouseLayout::HazardDoorClearance)
+			{
+				OutErrors.Add(FString::Printf(TEXT("Peligro %d tapa una puerta (sala %d)"), Hazard.StableId, Hazard.Room));
+			}
+		}
+	}
+
+	// Contrato: salas obligatorias, sitio del objetivo accesible, sus accesos y la anchura de la ruta.
+	const FNDContractHouseRequirements& Contract = Params.ContractRequirements;
+	for (const ENDRoomType Type : Contract.RequiredRooms)
+	{
+		if (!Layout.Rooms.ContainsByPredicate([Type](const FNDHouseLayoutRoom& Room) { return Room.Def->RoomType == Type; }))
+		{
+			OutErrors.Add(FString::Printf(TEXT("El contrato pide %s y la casa no la tiene"), *NDHouseGen::GetRoomTypeName(Type)));
+		}
+	}
+	const int32 AnchorRoom = Layout.GetAnchorRoom(Contract);
+	if (!Layout.Rooms.IsValidIndex(AnchorRoom) || Depths[AnchorRoom] == INDEX_NONE)
+	{
+		OutErrors.Add(TEXT("No se llega al sitio del objetivo del contrato"));
+	}
+	else
+	{
+		if (Layout.CountAccesses(AnchorRoom) < Contract.MinRoutes)
+		{
+			OutErrors.Add(FString::Printf(TEXT("El objetivo tiene %d accesos; el contrato pide %d"), Layout.CountAccesses(AnchorRoom), Contract.MinRoutes));
+		}
+		if (Contract.MinRouteWidth > 0.f && !Layout.FindRoute(Layout.EntryRoom, AnchorRoom, Contract.MinRouteWidth))
+		{
+			OutErrors.Add(FString::Printf(TEXT("No hay ruta de %.0f cm hasta el objetivo del contrato"), Contract.MinRouteWidth));
+		}
+	}
+	if (Contract.bNeedsSafeRoom)
+	{
+		const bool bSafeRoom = Layout.HidingSpots.ContainsByPredicate([&Layout](const FNDHouseHidingSpot& Spot)
+		{
+			return Spot.Room != Layout.EntryRoom && !Layout.Hazards.ContainsByPredicate([&Spot](const FNDHouseHazard& Hazard) { return Hazard.Room == Spot.Room; });
+		});
+		if (!bSafeRoom)
+		{
+			OutErrors.Add(TEXT("El contrato pide una sala segura (con escondite y sin peligros)"));
+		}
 	}
 
 	// La criatura tiene que poder llegar a toda la casa (sótano y piso de arriba incluidos) sin pasos bajos.

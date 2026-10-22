@@ -22,6 +22,9 @@ class NDE_API ANDRoomModuleActor : public AActor
 	GENERATED_BODY()
 
 public:
+	/** Se crea con el mismo nombre en servidor y clientes (ANDHouseLot): el servidor puede referirse a ella por red. */
+	virtual bool IsNameStableForNetworking() const override { return true; }
+
 	ANDRoomModuleActor();
 
 	virtual void OnConstruction(const FTransform& Transform) override;

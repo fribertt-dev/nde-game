@@ -43,6 +43,9 @@ public:
 	/** Semilla para la próxima generación automática (p. ej. ?Seed= de la URL). Solo servidor. */
 	void SetSeedOverride(int64 Seed);
 
+	/** Lo que pide el contrato a la casa; se usa en la próxima generación. Solo servidor. */
+	void SetContractRequirements(const FNDContractHouseRequirements& InRequirements) { ContractRequirements = InRequirements; }
+
 	UFUNCTION(BlueprintPure, Category = "NDE|HouseGen")
 	bool IsHouseBuilt() const { return bHouseBuilt; }
 
@@ -141,7 +144,21 @@ public:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "NDE|HouseGen")
 	bool bNavPathVerified = false;
 
+	/** Nodos de patrulla sin camino por el NavMesh desde el dormitorio (solo servidor; 0 = bien). */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Transient, Category = "NDE|HouseGen")
+	int32 PatrolNodesStuck = 0;
+
+	/**
+	 * Fracción del sonido (0-1) que pasa de un punto a otro por las puertas de la casa, sin contar la
+	 * distancia. Para que el ruido y la criatura sepan cuánto se oye de una sala a otra.
+	 */
+	UFUNCTION(BlueprintPure, Category = "NDE|HouseGen")
+	float GetSoundTransmission(const FVector& WorldA, const FVector& WorldB) const;
+
 protected:
+	/** Requisitos del contrato de la partida (solo servidor; el resultado viaja en el manifiesto). */
+	FNDContractHouseRequirements ContractRequirements;
+
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<USceneComponent> Root;
 
@@ -160,6 +177,10 @@ protected:
 	/** Marca de extracción (sitio de la camioneta). */
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<UInstancedStaticMeshComponent> ExtractionMeshes;
+
+	/** Muebles greybox (mesas, armarios...) con colisión: cobertura y algunos escondites. */
+	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
+	TObjectPtr<UInstancedStaticMeshComponent> DecorationMeshes;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;

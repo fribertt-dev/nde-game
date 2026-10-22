@@ -19,6 +19,9 @@ ANDLootActor::ANDLootActor()
 	PrimaryActorTick.TickInterval = 0.2f;
 
 	bReplicates = true;
+	// Pocos objetos por casa: siempre relevantes, así un cliente que entra tarde o vuelve los recibe todos.
+	bAlwaysRelevant = true;
+	NetDormancy = DORM_Never;
 	SetReplicateMovement(true);
 
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
@@ -26,6 +29,8 @@ ANDLootActor::ANDLootActor()
 	Mesh->SetSimulatePhysics(true);
 	Mesh->SetNotifyRigidBodyCollision(true);
 	Mesh->SetGenerateOverlapEvents(true);
+	// El botín se mueve y se lleva: no recorta el NavMesh (si no, uno en una puerta cortaría la patrulla).
+	Mesh->SetCanEverAffectNavigation(false);
 	SetRootComponent(Mesh);
 }
 
@@ -37,6 +42,9 @@ void ANDLootActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(ANDLootActor, LootGuid);
 	DOREPLIFETIME(ANDLootActor, LootState);
 	DOREPLIFETIME(ANDLootActor, Condition);
+	DOREPLIFETIME(ANDLootActor, bLocked);
+	DOREPLIFETIME(ANDLootActor, RestLocation);
+	DOREPLIFETIME(ANDLootActor, RestRotation);
 	DOREPLIFETIME(ANDLootActor, Carriers);
 }
 
@@ -52,6 +60,16 @@ void ANDLootActor::InitializeSpawn(UNDLootDefinition* InDefinition, const FGuid&
 	LootGuid = InStableGuid;
 }
 
+void ANDLootActor::SetLocked(bool bInLocked)
+{
+	if (HasAuthority() && bLocked != bInLocked)
+	{
+		bLocked = bInLocked;
+		ApplyStateLocally();
+		ForceNetUpdate();
+	}
+}
+
 void ANDLootActor::BeginPlay()
 {
 	Super::BeginPlay();
@@ -65,6 +83,8 @@ void ANDLootActor::BeginPlay()
 			LootGuid = FGuid::NewGuid();
 		}
 		LastSafeLocation = GetActorLocation();
+		// Al aparecer cae unos centímetros: ese golpe no cuenta (los frágiles llegarían dañados sin tocarlos).
+		LastImpactTime = GetWorld()->GetTimeSeconds() + SpawnImpactGraceSeconds;
 		Mesh->OnComponentHit.AddDynamic(this, &ANDLootActor::HandleMeshHit);
 	}
 
@@ -102,6 +122,19 @@ void ANDLootActor::OnRep_Condition()
 	OnConditionChanged.Broadcast(this, Condition);
 }
 
+void ANDLootActor::OnRep_RestTransform()
+{
+	ApplyRestTransform();
+}
+
+void ANDLootActor::ApplyRestTransform()
+{
+	if (!HasAuthority() && LootState == ENDLootState::WorldLoose && !GetAttachParentActor() && !RestLocation.IsZero())
+	{
+		SetActorLocationAndRotation(RestLocation, RestRotation, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
 void ANDLootActor::OnRep_Carriers()
 {
 	UpdateCarryAttachment();
@@ -124,8 +157,12 @@ void ANDLootActor::ApplyStateLocally()
 			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		}
 		SetActorHiddenInGame(false);
-		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		Mesh->SetSimulatePhysics(true);
+		// La física solo corre en el servidor; los clientes siguen la posición replicada. Si un cliente la
+		// simulara, uno que entra tarde lo vería caer antes de tener la casa construida (y quedarse ahí).
+		// Bloqueado en un contenedor: quieto y sin física hasta que se abra.
+		Mesh->SetCollisionEnabled(bLocked || !HasAuthority() ? ECollisionEnabled::QueryOnly : ECollisionEnabled::QueryAndPhysics);
+		Mesh->SetSimulatePhysics(!bLocked && HasAuthority());
+		ApplyRestTransform();
 		SetActorTickInterval(0.2f);
 		break;
 	case ENDLootState::Carried:
@@ -239,6 +276,10 @@ int32 ANDLootActor::GetCurrentLootPoints() const
 bool ANDLootActor::CanBeGrabbedBy(const APawn* Pawn) const
 {
 	if (!Pawn || !Definition || IsCarriedBy(Pawn))
+	{
+		return false;
+	}
+	if (bLocked)
 	{
 		return false;
 	}
@@ -413,6 +454,14 @@ void ANDLootActor::Tick(float DeltaSeconds)
 		SetActorLocationAndRotation(Shared.GetLocation(), Shared.GetRotation());
 	}
 
+	// Servidor: cuando el objeto suelto se queda quieto, se guarda su sitio para los clientes.
+	if (HasAuthority() && LootState == ENDLootState::WorldLoose && GetVelocity().SizeSquared() < 1.f
+		&& FVector::DistSquared(GetActorLocation(), RestLocation) > FMath::Square(2.f))
+	{
+		RestLocation = GetActorLocation();
+		RestRotation = GetActorRotation();
+	}
+
 	if (!HasAuthority() || LootState != ENDLootState::Carried || Carriers.Num() < 2)
 	{
 		return;
@@ -514,4 +563,12 @@ void ANDLootActor::FellOutOfWorld(const UDamageType& DamageType)
 	{
 		SetCondition(ENDLootCondition::Damaged);
 	}
+}
+
+void ANDLootActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Depuración de red: un objeto que desaparece en un cliente sin haberse depositado es un error.
+	UE_CLOG(!HasAuthority() && LootState != ENDLootState::Deposited && EndPlayReason == EEndPlayReason::Destroyed, LogTemp, Warning,
+		TEXT("NDLoot: %s (%s) quitado en el cliente sin depositarse"), *LootGuid.ToString(), Definition ? *Definition->LootId.ToString() : TEXT("?"));
+	Super::EndPlay(EndPlayReason);
 }
