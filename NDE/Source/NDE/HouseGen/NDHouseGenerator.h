@@ -24,6 +24,6 @@ struct NDE_API FNDHouseGenerator
 	/** Casa fija y sencilla para cuando la generación falla. */
 	static bool BuildFallback(const FNDHouseGenParams& Params, FNDHouseGenerationManifest& OutManifest);
 
-	/** Un único intento con una semilla concreta, sin validar. Para pruebas. */
-	static bool TryGenerateAttempt(const FNDHouseGenParams& Params, int32 AttemptSeed, FNDHouseGenerationManifest& OutManifest);
+	/** Un único intento con una semilla concreta, sin validar. OutReason dice en qué paso falló. */
+	static bool TryGenerateAttempt(const FNDHouseGenParams& Params, int32 AttemptSeed, FNDHouseGenerationManifest& OutManifest, FString* OutReason = nullptr);
 };

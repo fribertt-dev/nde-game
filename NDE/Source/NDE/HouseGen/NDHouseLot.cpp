@@ -304,7 +304,9 @@ void ANDHouseLot::BuildFromManifest()
 		TArray<float> Openings;
 		for (const FNDHouseLayoutSocket& Socket : Room.Sockets)
 		{
-			Openings.Add(Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f));
+			// La unión vertical de una escalera no abre hueco en la pared.
+			const bool bWallOpening = Socket.Type != ENDRoomSocketType::Stairs;
+			Openings.Add(!bWallOpening ? 0.f : (Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f)));
 		}
 		// Techo solo donde no hay otra sala encima: allí el suelo de arriba hace de techo.
 		TArray<bool> CeilingPerCell;
@@ -394,23 +396,48 @@ void ANDHouseLot::CheckNavigationPath()
 		return;
 	}
 	const FTransform LotToWorld = GetLotToWorld();
-	const FVector Start = LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.EntryRoom));
-	const FVector End = LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.BedroomRoom));
+	// Ruta de la criatura: de la Entrada al dormitorio y, si existen, a una sala del piso de arriba y del
+	// sótano (comprueba que el NavMesh sube y baja por las rampas).
+	auto FindRoomOnFloor = [this](int32 Floor)
+	{
+		return Layout.Rooms.IndexOfByPredicate([Floor](const FNDHouseLayoutRoom& R) { return R.Floor == Floor && R.Def->StairPart == ENDStairPart::None; });
+	};
+	const TPair<const TCHAR*, int32> Targets[] = {
+		{ TEXT("Dormitorio"), Layout.BedroomRoom },
+		{ TEXT("Piso superior"), FindRoomOnFloor(NDHouseGen::UpperFloor) },
+		{ TEXT("Sotano"), FindRoomOnFloor(NDHouseGen::BasementFloor) },
+	};
 	const FVector Extent(150.f, 150.f, 300.f);
 	FNavLocation StartOnNav;
-	FNavLocation EndOnNav;
-	const bool bProjected = NavSys->ProjectPointToNavigation(Start, StartOnNav, Extent) && NavSys->ProjectPointToNavigation(End, EndOnNav, Extent);
-	UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, StartOnNav.Location, EndOnNav.Location) : nullptr;
-	bNavPathVerified = Path && Path->IsValid() && !Path->IsPartial();
-
-	if (bNavPathVerified)
+	const bool bStartOnNav = NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.GetRoomCenter(Layout.EntryRoom)), StartOnNav, Extent);
+	for (const TPair<const TCHAR*, int32>& Target : Targets)
 	{
-		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: PathExists Entrada -> Dormitorio OK (%.0f cm)"), *LotInfo.LotId.ToString(), Path->GetPathLength());
-	}
-	else
-	{
-		UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: PathExists Entrada -> Dormitorio FALLA (%s)"), *LotInfo.LotId.ToString(),
-			bProjected ? TEXT("sin camino completo") : TEXT("entrada o dormitorio fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
+		if (!Layout.Rooms.IsValidIndex(Target.Value))
+		{
+			continue;
+		}
+		FNavLocation EndOnNav;
+		const bool bProjected = bStartOnNav && NavSys->ProjectPointToNavigation(LotToWorld.TransformPosition(Layout.GetRoomCenter(Target.Value)), EndOnNav, Extent);
+		UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, StartOnNav.Location, EndOnNav.Location) : nullptr;
+		const bool bPathOk = Path && Path->IsValid() && !Path->IsPartial();
+		if (Target.Value == Layout.BedroomRoom)
+		{
+			bNavPathVerified = bPathOk;
+		}
+		if (bPathOk)
+		{
+			UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: PathExists Entrada -> %s OK (%.0f cm)"), *LotInfo.LotId.ToString(), Target.Key, Path->GetPathLength());
+		}
+		else if (Target.Value != Layout.BedroomRoom && Layout.Rooms[Target.Value].Floor == NDHouseGen::BasementFloor && bProjected)
+		{
+			// El sótano puede quedar unido solo por debajo de la rampa: pasan los Desvelados, no la criatura.
+			UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: Sotano sin camino para la criatura (solo se entra por debajo de la rampa)"), *LotInfo.LotId.ToString());
+		}
+		else
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: PathExists Entrada -> %s FALLA (%s)"), *LotInfo.LotId.ToString(), Target.Key,
+				bProjected ? TEXT("sin camino completo") : TEXT("fuera del NavMesh; revisa que RecastNavMesh tenga Runtime Generation = Dynamic"));
+		}
 	}
 }
 

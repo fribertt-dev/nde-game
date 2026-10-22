@@ -246,13 +246,15 @@ namespace NDRoomCatalog
 			Modules.Add(Def);
 		}
 
-		// Pisos: cada escalera son dos salas 2x1 iguales, una encima de otra. Se entra abajo por S0
-		// y se sale arriba por N1; los huecos Stairs solo marcan la unión vertical.
+		// Pisos: cada escalera son dos salas 2x1 iguales, una encima de otra. Se entra abajo por S0 (pie de la
+		// rampa) y se sale arriba por N1; los huecos Stairs solo marcan la unión vertical. Abajo, N1 es una puerta
+		// a ras de suelo bajo el final de la rampa: ahí va la sala que sostiene la llegada de arriba.
 		{
 			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Stairs_Bottom"), ENDRoomType::R17_Stairwell, 2, 1);
 			Def.StairPart = ENDStairPart::Bottom;
 			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
-			AddSocket(Def, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("Up"), 1, 0, EDir::West, ESock::Stairs);
 			Modules.Add(Def);
 		}
 		{
