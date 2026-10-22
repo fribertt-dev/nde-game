@@ -96,11 +96,13 @@ ANDHouseLot::ANDHouseLot()
 	GroundMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Ground"));
 	GroundMeshes->SetupAttachment(Root);
 	GroundMeshes->SetStaticMesh(CubeFinder.Object);
+	GroundMeshes->SetMobility(EComponentMobility::Movable);
 	GroundMeshes->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 
 	ExtractionMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Extraction"));
 	ExtractionMeshes->SetupAttachment(Root);
 	ExtractionMeshes->SetStaticMesh(CubeFinder.Object);
+	ExtractionMeshes->SetMobility(EComponentMobility::Movable);
 	ExtractionMeshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 	ExtractionMeshes->SetCanEverAffectNavigation(false);
 

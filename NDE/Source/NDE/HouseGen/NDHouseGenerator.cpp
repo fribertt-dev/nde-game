@@ -484,7 +484,7 @@ bool FNDHouseGenerator::BuildFallback(const FNDHouseGenParams& Params, FNDHouseG
 	using namespace NDHouseGenerator;
 
 	// Entrada, distribuidor y cuatro salas colgadas de él: dormitorio y objetivo a profundidad 2.
-	const FNDRoomModuleDefinition* Modules[] = {
+	const TArray<const FNDRoomModuleDefinition*> Modules = {
 		FNDRoomCatalog::Find(HubModuleId),
 		FNDRoomCatalog::Find(TEXT("D01_MasterBedroom_A")),
 		FNDRoomCatalog::Find(TEXT("D01_Objective_A")),
@@ -497,7 +497,7 @@ bool FNDHouseGenerator::BuildFallback(const FNDHouseGenParams& Params, FNDHouseG
 	{
 		return false;
 	}
-	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Modules); ++Index)
+	for (int32 Index = 0; Index < Modules.Num(); ++Index)
 	{
 		if (!Modules[Index] || Builder.Attach(Index == 0 ? 0 : 1, *Modules[Index]) == INDEX_NONE)
 		{

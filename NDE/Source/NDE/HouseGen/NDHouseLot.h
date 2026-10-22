@@ -12,6 +12,7 @@ class UArrowComponent;
 class UBoxComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
+class ANDHouseLot;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNDOnHouseBuilt, ANDHouseLot*, Lot);
 

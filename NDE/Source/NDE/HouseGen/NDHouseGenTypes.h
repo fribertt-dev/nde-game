@@ -3,9 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UObject/SoftObjectPath.h"
 #include "NDHouseGenTypes.generated.h"
-
-class UWorld;
 
 namespace NDHouseGen
 {
@@ -164,8 +163,8 @@ struct FNDRoomModuleDefinition
 	TArray<FNDRoomMarker> Markers;
 
 	/** Más adelante: Level Instance con el arte de Blender que sustituye al greybox. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen")
-	TSoftObjectPtr<UWorld> ArtLevel;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (AllowedClasses = "/Script/Engine.World"))
+	FSoftObjectPath ArtLevel;
 
 	/** Ancho útil del módulo (lado corto menos paredes), en cm. */
 	float GetMinClearWidth() const
