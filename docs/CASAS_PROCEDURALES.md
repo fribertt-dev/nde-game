@@ -28,12 +28,17 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 - Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).
 - Opciones del lote: `UpperFloor` y `Basement` (Auto según el tamaño, Never, Always). Con Auto: Small 10 % / 15 %, Medium 50 % / 30 %, Large 75 % / 40 %.
 - La Entrada y la extracción siempre en planta baja. El piso superior y el sótano solo ocupan celdas con planta baja encima o debajo, y no tienen salida a la calle.
-- Escalera = dos salas 2x1 iguales (`D01_Stairs_Bottom` abajo, `D01_Stairs_Top` arriba): rampa de 26,6° (360 cm de ancho, pasa el bulto) y hueco en el forjado. Abajo hay además una puerta a ras de suelo bajo el final de la rampa; por ahí entra una sala de planta baja que sostiene la llegada.
-- El generador hace primero la planta baja entera y luego las escaleras. El dormitorio puede ir arriba (si cabe a profundidad ≤ 5); si no, se queda abajo. Las casas grandes intentan una segunda escalera unida arriba (bucle entre pisos), aunque casi nunca cabe.
-- Sótano: la primera sala prefiere salir del pie de la rampa (la criatura puede bajar). Si no cabe, sale por debajo de la rampa: pasan los Desvelados, pero no la criatura.
+- Cada escalera son dos salas iguales (arranque abajo, llegada arriba) que suben 400 cm con tramos de 26,6° como mucho. El generador prueba la que quepa:
+  - **Recta** 2x1 (`D01_Stairs_*`): una rampa de 360 cm de ancho; se sale arriba por el otro extremo. Abajo hay un paso bajo el final de la rampa (`bLowClearance`): pasan los Desvelados, no la criatura.
+  - **En U** 2x1 (`D01_StairsU_*`): dos carriles de 170 cm con murete y rellano al fondo; la llegada queda encima de la entrada, sobre la sala de la que sale. Las puertas de los carriles van desplazadas (`Offset`) y la sala vecina abre el hueco en el mismo sitio.
+  - **En L** 2x2 sin una celda (`D01_StairsL_*`): tramo, rellano y tramo girado 90°.
+- El generador hace primero la planta baja entera y luego las escaleras. El dormitorio puede ir arriba (justo al llegar o una sala más allá, a profundidad ≤ 5); hay un dormitorio alargado 2x1 (`D01_MasterBedroom_B`) que cabe mejor arriba.
+- La criatura tiene que llegar a toda la casa (sótano incluido) sin pasos bajos; si no, el layout se descarta.
+- Casas grandes con piso superior: segunda escalera unida arriba (bucle entre pisos). Se cuelga de una sala de arriba o sale de la planta baja; si la sala vecina no tiene hueco en esa pared, se abre una puerta **"Auto"** (`Auto_X_Y_D` en el manifiesto: celda y lado del módulo sin girar).
+- Casa Small con piso superior y sótano a la vez: sube a 10 salas (lo avisa el log).
 - Techo solo donde no hay otra sala encima. `MaxVisibleFloor` en el lote oculta los pisos de arriba para ver los de abajo (0 = planta baja, -1 = sótano).
 - El NavMeshBoundsVolume del mapa cubre de -600 a +1000 cm; bajo el lote no hay suelo del vecindario, para que el sótano no choque.
-- Test `NDE.HouseGen.Floors`: 10.000 semillas por tamaño con los dos pisos extra forzados.
+- Test `NDE.HouseGen.Floors`: 10.000 semillas por tamaño con los dos pisos extra forzados. Mide casa de respaldo, % de dormitorio arriba, % de segunda escalera unida arriba y % de sótano alcanzable por la criatura.
 
 ## Depuración
 - `nde.HouseGen.Regenerate <semilla>` en la consola del host.
