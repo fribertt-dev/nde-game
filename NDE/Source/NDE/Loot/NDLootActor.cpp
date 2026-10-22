@@ -26,6 +26,8 @@ ANDLootActor::ANDLootActor()
 	Mesh->SetSimulatePhysics(true);
 	Mesh->SetNotifyRigidBodyCollision(true);
 	Mesh->SetGenerateOverlapEvents(true);
+	// El botín se mueve y se lleva: no recorta el NavMesh (si no, uno en una puerta cortaría la patrulla).
+	Mesh->SetCanEverAffectNavigation(false);
 	SetRootComponent(Mesh);
 }
 

@@ -80,6 +80,11 @@ namespace NDHouseLot
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.Regenerate: semilla %lld dentro de %.0f s"), Seed, Delay);
 	}
 
+	TAutoConsoleVariable<int32> CVarFurniture(
+		TEXT("nde.HouseGen.Furniture"),
+		1,
+		TEXT("Construye los muebles greybox de la casa: 1 = si, 0 = no (depuracion; los puntos de juego no cambian). Se aplica al construir o regenerar."));
+
 	void DrawPointsNow(UWorld* World, float Duration)
 	{
 		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
@@ -90,8 +95,8 @@ namespace NDHouseLot
 		}
 		const FNDHouseLayout& Layout = Lot->GetLayout();
 		NDHouseGenDebug::DrawGameplayPoints(World, Lot->GetLotToWorld(), Layout, Duration);
-		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: %d escondites, %d peligros, %d nodos de patrulla (recorrido de %d pasos), %d puertas en el grafo de sonido"),
-			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
+		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: %d escondites, %d peligros, %d muebles, %d nodos de patrulla (recorrido de %d pasos), %d puertas en el grafo de sonido"),
+			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.Decorations.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
 	}
 
 	void DebugPoints(const TArray<FString>& Args, UWorld* World)
@@ -167,6 +172,12 @@ ANDHouseLot::ANDHouseLot()
 	ExtractionMeshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
 	ExtractionMeshes->SetCanEverAffectNavigation(false);
 
+	DecorationMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("Decorations"));
+	DecorationMeshes->SetupAttachment(Root);
+	DecorationMeshes->SetStaticMesh(CubeFinder.Object);
+	DecorationMeshes->SetMobility(EComponentMobility::Movable);
+	DecorationMeshes->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+
 	UpdateEditorBounds();
 }
 
@@ -203,6 +214,7 @@ void ANDHouseLot::BeginPlay()
 
 	NDHouseLot::SetColor(GroundMeshes, BaseMaterial, this, FLinearColor(0.18f, 0.35f, 0.12f));
 	NDHouseLot::SetColor(ExtractionMeshes, BaseMaterial, this, FLinearColor(0.1f, 0.9f, 0.2f));
+	NDHouseLot::SetColor(DecorationMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
 	if (HasAuthority())
 	{
 		if (bGenerateOnBeginPlay)
@@ -308,6 +320,7 @@ void ANDHouseLot::ClearHouse()
 	RoomActors.Reset();
 	GroundMeshes->ClearInstances();
 	ExtractionMeshes->ClearInstances();
+	DecorationMeshes->ClearInstances();
 	bHouseBuilt = false;
 	bNavPathVerified = false;
 }
@@ -400,6 +413,14 @@ void ANDHouseLot::BuildFromManifest()
 		{
 			UsedCells.Append(Cells);
 		}
+	}
+
+	// Muebles greybox: el cubo del motor mide 100 cm y se apoya en el suelo. nde.HouseGen.Furniture 0 los quita (depuración).
+	for (const FNDHouseDecoration& Decoration : NDHouseLot::CVarFurniture.GetValueOnGameThread() != 0 ? Layout.Decorations : TArray<FNDHouseDecoration>())
+	{
+		const FTransform& Base = Decoration.LotTransform;
+		DecorationMeshes->AddInstance(FTransform(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z),
+			Decoration.HalfExtent * 2.f / 100.f));
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.
@@ -516,7 +537,8 @@ void ANDHouseLot::CheckNavigationPath()
 	{
 		for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
 		{
-			if (Node.Room == Layout.BedroomRoom)
+			// Fuera del recorrido (salas con puerta pequeña): la criatura no va.
+			if (Node.Room == Layout.BedroomRoom || !Layout.PatrolRoute.Contains(Node.StableId))
 			{
 				continue;
 			}
@@ -526,9 +548,12 @@ void ANDHouseLot::CheckNavigationPath()
 			if (!Path || !Path->IsValid() || Path->IsPartial())
 			{
 				++PatrolNodesStuck;
-				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s"),
+				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s (%s, %d muebles, vecinos: %s, en %s)"),
 					*LotInfo.LotId.ToString(), Node.StableId, Node.Room, *NDHouseGen::GetRoomTypeName(Layout.Rooms[Node.Room].Def->RoomType),
-					Layout.Rooms[Node.Room].Floor, bProjected ? TEXT("") : TEXT(" (fuera del NavMesh)"));
+					Layout.Rooms[Node.Room].Floor, bProjected ? TEXT("") : TEXT(" (fuera del NavMesh)"), *Layout.Rooms[Node.Room].Def->RoomModuleId.ToString(),
+					Layout.Decorations.FilterByPredicate([&Node](const FNDHouseDecoration& D) { return D.Room == Node.Room; }).Num(),
+					*FString::JoinBy(Node.Neighbors, TEXT(", "), [this](int32 Other) { return Layout.Rooms[Other].Def->RoomModuleId.ToString(); }),
+					*LotToWorld.TransformPosition(Node.Location).ToCompactString());
 			}
 		}
 		UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: patrulla %d nodos, %d sin camino; recorrido de %d pasos"),

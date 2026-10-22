@@ -35,6 +35,13 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 - `nde.HouseGen.DebugPoints [segundos] [espera]` los dibuja encima de todo: escondites en azul (con capacidad y entrada), peligros en naranja, patrulla en rojo y el paso del sonido en cian.
 - Cambió la versión de generación a `housegen-0.2` (el validador nuevo puede descartar casas que antes valían).
 
+## Variantes de piezas y muebles
+- Cada familia de salas de H01 tiene 2 o 3 variantes (las B de `housegen-0.3` cambian tamaño, puertas y huecos): cocina 2x1 o 2x2, comedor 2x1 o 1x1, baño 1x1 o 2x1, almacén, objetivo (la B tiene cuatro huecos, más accesos), despacho, lavadero, biblioteca, cuarto de juegos, despensa y dormitorio infantil. Las escaleras tienen sus tres tipos (recta, U y L). La prueba `NDE.HouseGen.VariantsAndDecorations` comprueba que cada familia tiene 2-5 variantes y que se usan los 39 módulos.
+- Muebles (`Decorations`): 2-3 por sala elegidos con la semilla (no en entrada, pasillos ni escaleras): mesa, sillón, armario, estantería, cama pequeña o caja, según la sala. Van pegados a esquinas o paredes, con colisión simple, y nunca cerca de una puerta (incluido el hueco desplazado de las escaleras en U), en la línea puerta-centro de la sala ni encima del botín, los escondites o el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 99 % de las salas tiene muebles (2,2 de media) y ningún nodo de patrulla queda atascado.
+- `nde.HouseGen.Furniture 0` construye la casa sin muebles (depuración; los puntos de juego no cambian).
+- La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
+- El botín no recorta el NavMesh (se mueve y se lleva).
+
 ## Contratos de D01 (C01 a C07)
 Cada contrato (`UNDContractDefinition`) trae `HouseRequirements`: salas obligatorias, dónde va el objetivo (sala objetivo, sala obligatoria, cabecera de la cama o tarro de rescate), 2-5 ubicaciones candidatas, accesos mínimos a esa sala (1-3 rutas), ancho mínimo de la ruta y el margen de botín sobre la cuota. El generador añade las salas obligatorias antes del relleno, abre bucles hacia el objetivo si faltan accesos y valida todo; el reparto del botín (`HouseGen/NDHouseLoot`) pone primero el objetivo en una de sus candidatas (la elige la semilla), luego los señuelos y después el relleno hasta cubrir la cuota con margen.
 

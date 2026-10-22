@@ -178,6 +178,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<UInstancedStaticMeshComponent> ExtractionMeshes;
 
+	/** Muebles greybox (mesas, armarios...) con colisión: cobertura y algunos escondites. */
+	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
+	TObjectPtr<UInstancedStaticMeshComponent> DecorationMeshes;
+
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 

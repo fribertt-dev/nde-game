@@ -26,6 +26,8 @@ namespace NDHouseLoot
 	constexpr float HeadboardEdgeDistance = 90.f;
 	/** Valor mínimo del botín de relleno: lo que vale menos es señuelo. */
 	constexpr int32 MinFillerValue = 50;
+	/** Distancia mínima del objetivo (o del tarro) a una puerta abierta de su sala. */
+	constexpr float ObjectiveDoorClearance = 120.f;
 }
 
 FNDHouseLootContractSpec FNDHouseLootContractSpec::FromContract(const UNDContractDefinition* Contract)
@@ -79,11 +81,24 @@ void FNDHouseLootPlanner::GetObjectiveCandidates(const FNDHouseLayout& Layout, c
 			}
 		}
 	}
-	// Huecos de botín de la sala.
+	// Huecos de botín de la sala, salvo los pegados a una puerta abierta (p. ej. una puerta "Auto"
+	// abierta para dar otro acceso): el objetivo o el tarro no deben tapar el paso.
+	TArray<FVector> Doors;
+	for (int32 SocketIndex = 0; SocketIndex < Layout.Rooms[Room].Sockets.Num(); ++SocketIndex)
+	{
+		if (Layout.Rooms[Room].Sockets[SocketIndex].IsOpen())
+		{
+			Doors.Add(Layout.GetSocketLocation(Room, SocketIndex));
+		}
+	}
+	auto NearDoor = [&Doors](const FVector& Location)
+	{
+		return Doors.ContainsByPredicate([&Location](const FVector& Door) { return FVector::Dist2D(Door, Location) < NDHouseLoot::ObjectiveDoorClearance; });
+	};
 	for (int32 Index = 0; Index < Layout.Markers.Num() && OutTransforms.Num() < Wanted; ++Index)
 	{
 		const FNDHouseLayoutMarker& Marker = Layout.Markers[Index];
-		if (Marker.Type == ENDRoomMarkerType::LootSocket && Marker.Room == Room)
+		if (Marker.Type == ENDRoomMarkerType::LootSocket && Marker.Room == Room && !NearDoor(Marker.LotTransform.GetLocation()))
 		{
 			OutTransforms.Add(Marker.LotTransform);
 			OutMarkers.Add(Index);

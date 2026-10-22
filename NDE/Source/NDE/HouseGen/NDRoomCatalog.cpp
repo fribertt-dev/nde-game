@@ -363,6 +363,116 @@ namespace NDRoomCatalog
 			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
 			Modules.Add(Def);
 		}
+
+		// Variantes B (housegen-0.3): otro tamaño, otras puertas u otros huecos, para que cada familia tenga 2-3.
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Kitchen_B"), ENDRoomType::R04_Kitchen, 2, 2);
+			AddSocket(Def, TEXT("S00"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("W10"), 1, 0, EDir::West);
+			AddSocket(Def, TEXT("E01"), 0, 1, EDir::East);
+			AddSocket(Def, TEXT("N11"), 1, 1, EDir::North);
+			AddMarker(Def, EMark::LootSocket, 0, 1, 120.f, 120.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 1, 1, -60.f, 0.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_DiningRoom_B"), ENDRoomType::R05_DiningRoom, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N"), 0, 0, EDir::North);
+			AddSocket(Def, TEXT("E"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -130.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Bathroom_B"), ENDRoomType::R07_Bathroom, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South, ESock::Door_S);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, 120.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, -120.f, 130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 120.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Storage_B"), ENDRoomType::R08_Storage, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			// Objetivo de dos celdas con cuatro huecos: más accesos (C06 pide dos).
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Objective_B"), ENDRoomType::R09_Objective, 2, 1, 1.5f);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddSocket(Def, TEXT("W1"), 1, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 100.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, -100.f, 120.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Study_B"), ENDRoomType::R11_Study, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddSocket(Def, TEXT("W0"), 0, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 130.f, -130.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, -130.f, 130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Laundry_B"), ENDRoomType::R13_Laundry, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Library_B"), ENDRoomType::R14_Library, 2, 2, 1.2f);
+			AddSocket(Def, TEXT("S00"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N11"), 1, 1, EDir::North);
+			AddSocket(Def, TEXT("E01"), 0, 1, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 1, 120.f, 120.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, -120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 1, 1, 130.f, -130.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Playroom_B"), ENDRoomType::R15_Playroom, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Pantry_B"), ENDRoomType::R12_Pantry, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("W1"), 1, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 130.f, 130.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, -130.f, 130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_KidsBedroom_B"), ENDRoomType::R10_KidsBedroom, 1, 1);
+			AddSocket(Def, TEXT("S"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, 130.f);
+			Modules.Add(Def);
+		}
 		return Modules;
 	}
 }

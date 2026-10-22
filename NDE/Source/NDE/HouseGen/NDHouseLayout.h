@@ -212,6 +212,18 @@ struct FNDHousePatrolNode
 	TArray<int32> Neighbors;
 };
 
+/** Mueble de decoración elegido con la semilla: pegado a una esquina, fuera de las rutas y de las puertas. */
+struct FNDHouseDecoration
+{
+	int32 StableId = INDEX_NONE;
+	int32 Room = INDEX_NONE;
+	ENDDecorationKind Kind = ENDDecorationKind::Crate;
+	/** Centro de la base, relativo al centro del lote. */
+	FTransform LotTransform;
+	/** Medio tamaño en cm (sin girar). */
+	FVector HalfExtent = FVector(35.f);
+};
+
 /** Cuánto sonido pasa por una puerta entre dos salas (0 = nada, 1 = todo). */
 struct FNDHouseAudioLink
 {
@@ -243,6 +255,10 @@ struct NDE_API FNDHouseLayout
 	/** Recorrido de patrulla desde el dormitorio: pasa por todos los nodos y vuelve (índices de PatrolNodes). */
 	TArray<int32> PatrolRoute;
 	TArray<FNDHouseAudioLink> AudioLinks;
+	/** 2-3 muebles por sala (no en entrada ni escaleras). Algunos añaden escondites. */
+	TArray<FNDHouseDecoration> Decorations;
+	/** Distancia libre que deja un mueble a una puerta abierta y a la ruta puerta-centro de su sala, en cm. */
+	static constexpr float DecorationRouteClearance = 50.f;
 
 	/** Paso del sonido por un hueco abierto, por una puerta cerrada y por una escalera. */
 	static constexpr float DoorOpenTransmission = 0.6f;
@@ -255,6 +271,9 @@ struct NDE_API FNDHouseLayout
 
 	/** Rellena escondites, peligros, patrulla y grafo de sonido. Lo llama FromManifest. */
 	void BuildGameplayPoints();
+
+	/** Muebles de cada sala (lo llama BuildGameplayPoints, al final). */
+	void BuildDecorations();
 
 	/** Sala que contiene un punto (relativo al centro del lote), o INDEX_NONE. */
 	int32 FindRoomAt(const FVector& LotPosition) const;

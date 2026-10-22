@@ -26,7 +26,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.2");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.3");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */
@@ -134,6 +134,18 @@ enum class ENDHouseHazardType : uint8
 	CreakyFloor UMETA(ToolTip = "Suelo que cruje al pisarlo."),
 	FragileItem UMETA(ToolTip = "Objeto frágil en un mueble: se cae y suena si se roza."),
 	MouseTrap UMETA(ToolTip = "Trampa de ratón: atrapa un momento y hace ruido.")
+};
+
+/** Mueble greybox de decoración: da cobertura y algunos sirven de escondite. */
+UENUM(BlueprintType)
+enum class ENDDecorationKind : uint8
+{
+	Table UMETA(ToolTip = "Mesa: se esconden debajo dos."),
+	Armchair UMETA(ToolTip = "Sillón: uno detrás."),
+	Wardrobe UMETA(ToolTip = "Armario: uno dentro."),
+	Shelf UMETA(ToolTip = "Estantería: solo cobertura."),
+	Bed UMETA(ToolTip = "Cama pequeña: dos debajo."),
+	Crate UMETA(ToolTip = "Caja o baúl: solo cobertura.")
 };
 
 /** Dónde va el objetivo de un contrato dentro de la casa. */

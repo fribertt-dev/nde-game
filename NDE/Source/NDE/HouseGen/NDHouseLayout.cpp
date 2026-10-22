@@ -580,17 +580,27 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 		}
 	}
 
-	// Patrulla: un nodo por sala, ninguno aislado, y el recorrido pasa por todos.
+	// Patrulla: un nodo por sala; fuera del recorrido solo pueden quedar salas a las que se entra por una
+	// puerta pequeña (la criatura no cabe). Las demás, incluidas escaleras y sótano, en el recorrido.
 	TSet<int32> Patrolled(Layout.PatrolRoute);
-	if (Layout.PatrolNodes.Num() != Layout.Rooms.Num() || Patrolled.Num() != Layout.PatrolNodes.Num())
+	if (Layout.PatrolNodes.Num() != Layout.Rooms.Num() || Layout.PatrolRoute.IsEmpty())
 	{
-		OutErrors.Add(FString::Printf(TEXT("La patrulla recorre %d de %d salas"), Patrolled.Num(), Layout.Rooms.Num()));
+		OutErrors.Add(TEXT("La patrulla no tiene un nodo por sala"));
 	}
 	for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
 	{
-		if (Layout.PatrolNodes.Num() > 1 && Node.Neighbors.IsEmpty())
+		if (Patrolled.Contains(Node.StableId))
 		{
-			OutErrors.Add(FString::Printf(TEXT("Nodo de patrulla %d aislado (sala %d)"), Node.StableId, Node.Room));
+			continue;
+		}
+		const bool bOnlySmallDoors = !Layout.Connections.ContainsByPredicate([&Layout, &Node](const FNDHouseLayoutConnection& Link)
+		{
+			return (Link.RoomA == Node.Room || Link.RoomB == Node.Room) && !Layout.IsLowClearance(Link)
+				&& Link.OpeningWidth >= NDHouseGen::GetDefaultSocketWidth(ENDRoomSocketType::Door_M);
+		});
+		if (!bOnlySmallDoors)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Nodo de patrulla %d (sala %d) fuera del recorrido"), Node.StableId, Node.Room));
 		}
 	}
 

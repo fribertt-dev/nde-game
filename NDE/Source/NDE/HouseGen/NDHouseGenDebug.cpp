@@ -43,6 +43,11 @@ namespace NDHouseGenDebug
 			DrawDebugBox(World, Location, FVector(25.f), FColor::Orange, false, Duration, SDPG_Foreground, 3.f);
 			DrawDebugString(World, Location + FVector(0.f, 0.f, 50.f), StaticEnum<ENDHouseHazardType>()->GetNameStringByValue(static_cast<int64>(Hazard.Type)), nullptr, FColor::Orange, Duration, true);
 		}
+		for (const FNDHouseDecoration& Decoration : Layout.Decorations)
+		{
+			const FVector Location = ToWorld(Decoration.LotTransform.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z));
+			DrawDebugBox(World, Location, Decoration.HalfExtent, LotToWorld.GetRotation() * Decoration.LotTransform.GetRotation(), FColor::White, false, Duration, SDPG_Foreground, 2.f);
+		}
 		const FVector PatrolUp(0.f, 0.f, 90.f);
 		for (const FNDHousePatrolNode& Node : Layout.PatrolNodes)
 		{

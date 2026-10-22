@@ -11,6 +11,8 @@ namespace NDHouseGameplay
 	constexpr float HidingEntryDistance = 70.f;
 	/** Pasos anchos: a partir de aquí el sonido casi no se frena. */
 	constexpr float WideOpeningWidth = 300.f;
+	/** Puerta más estrecha por la que pasa la criatura en su patrulla (las Door_S, de 100 cm, no). */
+	constexpr float CreatureMinDoorWidth = 140.f;
 
 	ENDHidingSpotKind GetHidingKind(ENDRoomType RoomType)
 	{
@@ -28,6 +30,61 @@ namespace NDHouseGameplay
 			return ENDHidingSpotKind::InsideCabinet;
 		default:
 			return ENDHidingSpotKind::BehindFurniture;
+		}
+	}
+
+	/**
+	 * Puntos del hueco de una puerta: el centro de la pared y, si el hueco va desplazado (carriles de las
+	 * escaleras en U), también los dos lados posibles del desplazamiento.
+	 */
+	void AddDoorPoints(const FNDHouseLayout& Layout, int32 RoomIndex, int32 SocketIndex, TArray<FVector>& OutPoints)
+	{
+		const FNDHouseLayoutSocket& Socket = Layout.Rooms[RoomIndex].Sockets[SocketIndex];
+		const FVector Center = Layout.GetSocketLocation(RoomIndex, SocketIndex);
+		OutPoints.Add(Center);
+		float Offset = Socket.Offset;
+		if (FMath::IsNearlyZero(Offset) && Socket.Connection != INDEX_NONE)
+		{
+			const FNDHouseLayoutConnection& Link = Layout.Connections[Socket.Connection];
+			const bool bIsA = Link.RoomA == RoomIndex && Link.SocketA == SocketIndex;
+			Offset = Layout.Rooms[bIsA ? Link.RoomB : Link.RoomA].Sockets[bIsA ? Link.SocketB : Link.SocketA].Offset;
+		}
+		if (!FMath::IsNearlyZero(Offset))
+		{
+			const FIntPoint Out = NDHouseGen::DirectionToOffset(Socket.LotDirection);
+			const FVector Tangent(-Out.Y, Out.X, 0.f);
+			OutPoints.Add(Center + Tangent * Offset);
+			OutPoints.Add(Center - Tangent * Offset);
+		}
+	}
+
+	/** Mueble según la sala (el dormitorio principal no: allí irá la cama de la criatura con su arte). */
+	ENDDecorationKind GetDecorationKind(ENDRoomType RoomType, FRandomStream& Rng)
+	{
+		switch (RoomType)
+		{
+		case ENDRoomType::R03_LivingRoom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Armchair : ENDDecorationKind::Table;
+		case ENDRoomType::R04_Kitchen:
+		case ENDRoomType::R05_DiningRoom: return Rng.FRand() < 0.6f ? ENDDecorationKind::Table : ENDDecorationKind::Shelf;
+		case ENDRoomType::R06_MasterBedroom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Wardrobe : ENDDecorationKind::Armchair;
+		case ENDRoomType::R10_KidsBedroom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Bed : ENDDecorationKind::Wardrobe;
+		case ENDRoomType::R11_Study:
+		case ENDRoomType::R14_Library: return Rng.FRand() < 0.6f ? ENDDecorationKind::Shelf : ENDDecorationKind::Armchair;
+		default: return Rng.FRand() < 0.5f ? ENDDecorationKind::Crate : ENDDecorationKind::Shelf;
+		}
+	}
+
+	/** Medio tamaño de cada mueble greybox, en cm (a escala de la casa del gigante). */
+	FVector GetDecorationHalfExtent(ENDDecorationKind Kind)
+	{
+		switch (Kind)
+		{
+		case ENDDecorationKind::Table: return FVector(60.f, 45.f, 38.f);
+		case ENDDecorationKind::Armchair: return FVector(45.f, 45.f, 45.f);
+		case ENDDecorationKind::Wardrobe: return FVector(30.f, 55.f, 100.f);
+		case ENDDecorationKind::Shelf: return FVector(20.f, 55.f, 90.f);
+		case ENDDecorationKind::Bed: return FVector(55.f, 50.f, 25.f);
+		default: return FVector(35.f, 35.f, 35.f);
 		}
 	}
 
@@ -243,8 +300,8 @@ void FNDHouseLayout::BuildGameplayPoints()
 	}
 	for (const FNDHouseLayoutConnection& Link : Connections)
 	{
-		// La criatura no pasa por los pasos bajos.
-		if (!IsLowClearance(Link))
+		// La criatura no pasa por los pasos bajos ni por las puertas pequeñas (baños): esas salas quedan fuera de la patrulla.
+		if (!IsLowClearance(Link) && Link.OpeningWidth >= CreatureMinDoorWidth)
 		{
 			PatrolNodes[NodeOfRoom[Link.RoomA]].Neighbors.AddUnique(NodeOfRoom[Link.RoomB]);
 			PatrolNodes[NodeOfRoom[Link.RoomB]].Neighbors.AddUnique(NodeOfRoom[Link.RoomA]);
@@ -288,7 +345,7 @@ void FNDHouseLayout::BuildGameplayPoints()
 		{
 			if (Room.Sockets[SocketIndex].IsOpen())
 			{
-				Doors.Add(GetSocketLocation(RoomIndex, SocketIndex));
+				AddDoorPoints(*this, RoomIndex, SocketIndex, Doors);
 			}
 		}
 		TArray<FIntPoint> Cells;
@@ -307,6 +364,130 @@ void FNDHouseLayout::BuildGameplayPoints()
 				Hazard.Type = Type;
 				Hazard.LotTransform = FTransform(FRotator(0.f, Rng.RandRange(0, 3) * 90.f, 0.f), Location);
 				break;
+			}
+		}
+	}
+
+	BuildDecorations();
+}
+
+void FNDHouseLayout::BuildDecorations()
+{
+	using namespace NDHouseGameplay;
+	Decorations.Reset();
+	FRandomStream Rng(static_cast<int32>(HashCombineFast(GetTypeHash(RunSeed), GetTypeHash(FString(TEXT("Decorations"))))));
+
+	// Puntos que un mueble no puede tapar: botín, spawns, criatura, escondites, peligros.
+	TArray<FVector> Reserved;
+	for (const FNDHouseLayoutMarker& Marker : Markers)
+	{
+		Reserved.Add(Marker.LotTransform.GetLocation());
+		if (Marker.Type == ENDRoomMarkerType::MonsterAnchor && Rooms.IsValidIndex(Marker.Room))
+		{
+			// El borde de la cama (C05 pone ahí la medalla) también queda libre.
+			const FVector ToCenter = (GetRoomCenter(Marker.Room) - Marker.LotTransform.GetLocation()).GetSafeNormal2D();
+			Reserved.Add(Marker.LotTransform.GetLocation() + ToCenter * 90.f);
+		}
+	}
+	for (const FNDHouseHidingSpot& Spot : HidingSpots)
+	{
+		Reserved.Add(Spot.EntryPoint);
+	}
+	for (const FNDHouseHazard& Hazard : Hazards)
+	{
+		Reserved.Add(Hazard.LotTransform.GetLocation());
+	}
+
+	for (int32 RoomIndex = 0; RoomIndex < Rooms.Num(); ++RoomIndex)
+	{
+		const FNDHouseLayoutRoom& Room = Rooms[RoomIndex];
+		if (RoomIndex == EntryRoom || Room.Def->StairPart != ENDStairPart::None || Room.Def->RoomType == ENDRoomType::R02_Corridor)
+		{
+			continue;
+		}
+		// Rutas de la sala: de cada puerta abierta a su nodo de patrulla (el centro libre).
+		const FVector Hub = PatrolNodes[RoomIndex].Location;
+		TArray<FVector> Doors;
+		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
+		{
+			if (Room.Sockets[SocketIndex].IsOpen())
+			{
+				AddDoorPoints(*this, RoomIndex, SocketIndex, Doors);
+			}
+		}
+		// Candidatas: las cuatro esquinas de cada celda, barajadas con la semilla.
+		TArray<FIntPoint> Cells;
+		GetRoomCells(RoomIndex, Cells);
+		TArray<FVector> Spots;
+		for (const FIntPoint& Cell : Cells)
+		{
+			const FVector Center = Lot.GetCellCenter(Cell) + FVector(0.f, 0.f, Room.Floor * NDHouseGen::FloorHeight);
+			// Esquinas y mitad de cada pared de la celda (pegado a la pared, dejando libre el centro).
+			for (const FVector2D Corner : { FVector2D(1, 1), FVector2D(1, -1), FVector2D(-1, 1), FVector2D(-1, -1),
+				FVector2D(1, 0), FVector2D(-1, 0), FVector2D(0, 1), FVector2D(0, -1) })
+			{
+				Spots.Add(Center + FVector(Corner.X * 125.f, Corner.Y * 125.f, 0.f));
+			}
+		}
+		for (int32 Index = Spots.Num() - 1; Index > 0; --Index)
+		{
+			Spots.Swap(Index, Rng.RandRange(0, Index));
+		}
+
+		const int32 Wanted = Rng.RandRange(2, 3);
+		int32 Placed = 0;
+		for (const FVector& Spot : Spots)
+		{
+			if (Placed >= Wanted)
+			{
+				break;
+			}
+			const ENDDecorationKind Kind = GetDecorationKind(Room.Def->RoomType, Rng);
+			const FVector Half = GetDecorationHalfExtent(Kind);
+			const float Radius = FMath::Max(Half.X, Half.Y);
+			const float Clearance = Radius + DecorationRouteClearance;
+			const bool bBlocked = FindRoomAt(Spot) != RoomIndex
+				|| Doors.ContainsByPredicate([&](const FVector& Door)
+					{
+						return FVector::Dist2D(Door, Spot) < Clearance + 40.f
+							|| FMath::PointDistToSegment(FVector(Spot.X, Spot.Y, 0.f), FVector(Door.X, Door.Y, 0.f), FVector(Hub.X, Hub.Y, 0.f)) < Clearance;
+					})
+				|| FVector::Dist2D(Hub, Spot) < Clearance
+				|| Reserved.ContainsByPredicate([&](const FVector& Point) { return FMath::Abs(Point.Z - Spot.Z) < 200.f && FVector::Dist2D(Point, Spot) < Radius + 60.f; })
+				|| Decorations.ContainsByPredicate([&](const FNDHouseDecoration& Other) { return Other.Room == RoomIndex && FVector::Dist2D(Other.LotTransform.GetLocation(), Spot) < 160.f; });
+			if (bBlocked)
+			{
+				continue;
+			}
+			FNDHouseDecoration& Decoration = Decorations.AddDefaulted_GetRef();
+			Decoration.StableId = Decorations.Num() - 1;
+			Decoration.Room = RoomIndex;
+			Decoration.Kind = Kind;
+			Decoration.HalfExtent = Half;
+			Decoration.LotTransform = FTransform(FRotator(0.f, Rng.RandRange(0, 1) * 90.f, 0.f), Spot);
+			++Placed;
+
+			// Algunos muebles son escondites (cuentan como cobertura).
+			int32 Capacity = 0;
+			ENDHidingSpotKind HideKind = ENDHidingSpotKind::BehindFurniture;
+			switch (Kind)
+			{
+			case ENDDecorationKind::Table:
+			case ENDDecorationKind::Bed: Capacity = 2; HideKind = ENDHidingSpotKind::UnderFurniture; break;
+			case ENDDecorationKind::Wardrobe: Capacity = 1; HideKind = ENDHidingSpotKind::InsideCabinet; break;
+			case ENDDecorationKind::Armchair: Capacity = 1; HideKind = ENDHidingSpotKind::BehindFurniture; break;
+			default: break;
+			}
+			if (Capacity > 0)
+			{
+				FNDHouseHidingSpot& Hide = HidingSpots.AddDefaulted_GetRef();
+				Hide.StableId = HidingSpots.Num() - 1;
+				Hide.Room = RoomIndex;
+				Hide.LotTransform = Decoration.LotTransform;
+				Hide.Kind = HideKind;
+				Hide.Capacity = Capacity;
+				const FVector ToHub = (Hub - Spot).GetSafeNormal2D();
+				Hide.EntryPoint = Spot + ToHub * (Radius + 40.f);
 			}
 		}
 	}
