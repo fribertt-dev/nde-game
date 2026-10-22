@@ -13,6 +13,8 @@ class ANDHouseLot;
  * pawn a nadie espera a que el lote construya la casa, y hace aparecer a la banda en la
  * Entrada. Si el mapa no tiene ANDHouseLot crea uno en el origen.
  * Opción de URL: ?Seed=1234 fija la semilla de la casa.
+ * Si el mapa se abre directamente (sin pasar por La Madriguera) deja entrar clientes,
+ * para poder probar la casa con varios jugadores fuera del editor.
  */
 UCLASS()
 class NDE_API ANDHouseGameMode : public ANDExpeditionGameMode
@@ -20,6 +22,7 @@ class NDE_API ANDHouseGameMode : public ANDExpeditionGameMode
 	GENERATED_BODY()
 
 public:
+	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void StartPlay() override;
 	virtual void RestartPlayer(AController* NewPlayer) override;
 

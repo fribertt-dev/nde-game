@@ -58,12 +58,29 @@ namespace NDHouseLot
 			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.Regenerate: solo funciona en el servidor (ventana del host)"));
 			return;
 		}
-		Lot->GenerateHouse(Args.Num() > 0 ? FCString::Atoi64(*Args[0]) : MakeRandomSeed());
+		const int64 Seed = Args.Num() > 0 ? FCString::Atoi64(*Args[0]) : MakeRandomSeed();
+		const float Delay = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
+		if (Delay <= 0.f)
+		{
+			Lot->GenerateHouse(Seed);
+			return;
+		}
+		// Con espera sirve para lanzarlo desde -ExecCmds y ver el cambio con clientes ya dentro.
+		FTimerHandle Handle;
+		TWeakObjectPtr<ANDHouseLot> WeakLot(Lot);
+		World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([WeakLot, Seed]()
+		{
+			if (WeakLot.IsValid())
+			{
+				WeakLot->GenerateHouse(Seed);
+			}
+		}), Delay, false);
+		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.Regenerate: semilla %lld dentro de %.0f s"), Seed, Delay);
 	}
 
 	FAutoConsoleCommandWithWorldAndArgs RegenerateCommand(
 		TEXT("nde.HouseGen.Regenerate"),
-		TEXT("Regenera la casa del lote con la semilla dada (al azar si no se da). Solo en el servidor. Uso: nde.HouseGen.Regenerate 1234"),
+		TEXT("Regenera la casa del lote con la semilla dada (al azar si no se da). Solo en el servidor. Uso: nde.HouseGen.Regenerate 1234 [segundos de espera]"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&Regenerate));
 }
 
@@ -314,8 +331,9 @@ void ANDHouseLot::BuildFromManifest()
 	}
 
 	bHouseBuilt = true;
-	UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: casa construida (%s, revision %d)"),
-		*LotInfo.LotId.ToString(), HasAuthority() ? TEXT("servidor") : TEXT("cliente"), Manifest.Revision);
+	UE_LOG(LogNDHouseGen, Log, TEXT("Lote %s: casa construida (%s, revision %d, semilla %lld, %d salas, hash %08X)"),
+		*LotInfo.LotId.ToString(), HasAuthority() ? TEXT("servidor") : TEXT("cliente"), Manifest.Revision, Manifest.RunSeed,
+		Layout.Rooms.Num(), GetTypeHash(Manifest.ToDebugString()));
 
 	if (HasAuthority())
 	{

@@ -2,6 +2,7 @@
 
 #include "HouseGen/NDHouseGameMode.h"
 
+#include "Core/NDGameInstance.h"
 #include "Core/NDLog.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -9,6 +10,20 @@
 #include "GameFramework/PlayerState.h"
 #include "HouseGen/NDHouseLot.h"
 #include "Kismet/GameplayStatics.h"
+
+void ANDHouseGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+
+	// La expedición solo admite a quien vuelve tras caerse. Sin datos del lobby
+	// (mapa abierto directamente, p. ej. L_CasaPrueba?listen) es una prueba: se deja entrar.
+	const UNDGameInstance* GI = GetGameInstance<UNDGameInstance>();
+	if (ErrorMessage.StartsWith(TEXT("NDE_IN_PROGRESS")) && GI && GI->GetExpectedExpeditionPlayers() == 0)
+	{
+		UE_LOG(LogNDHouseGen, Log, TEXT("Mapa abierto sin lobby: se admite un cliente nuevo (%s)"), *Address);
+		ErrorMessage.Reset();
+	}
+}
 
 void ANDHouseGameMode::StartPlay()
 {
