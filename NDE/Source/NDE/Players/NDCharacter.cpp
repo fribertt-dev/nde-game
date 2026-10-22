@@ -17,6 +17,7 @@
 #include "InputMappingContext.h"
 #include "InputModifiers.h"
 #include "Net/UnrealNetwork.h"
+#include "Players/NDScaleSettings.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace NDCharacter
@@ -26,16 +27,11 @@ namespace NDCharacter
 
 ANDCharacter::ANDCharacter()
 {
-	// Un Desvelado mide unos 45-60 cm (GDD 2.3).
-	GetCapsuleComponent()->InitCapsuleSize(22.f, 34.f);
-
+	// Un Desvelado mide unos 45-60 cm (GDD 2.3); las medidas salen de UNDScaleSettings.
 	bUseControllerRotationYaw = false;
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
 	Movement->bOrientRotationToMovement = true;
 	Movement->RotationRate = FRotator(0.f, 540.f, 0.f);
-	Movement->MaxWalkSpeed = WalkSpeed;
-	Movement->MaxWalkSpeedCrouched = CrouchSpeed;
-	Movement->JumpZVelocity = 560.f;
 	Movement->NavAgentProps.bCanCrouch = true;
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
@@ -51,7 +47,7 @@ ANDCharacter::ANDCharacter()
 	PlaceholderBody = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderBody"));
 	PlaceholderBody->SetupAttachment(GetRootComponent());
 	PlaceholderBody->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	PlaceholderBody->SetRelativeScale3D(FVector(0.44f, 0.44f, 0.68f));
+	// Tamaño en ApplyScaleSettings, igual que la cápsula.
 
 	PlaceholderNose = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PlaceholderNose"));
 	PlaceholderNose->SetupAttachment(GetRootComponent());
@@ -69,6 +65,7 @@ ANDCharacter::ANDCharacter()
 	{
 		PlaceholderNose->SetStaticMesh(CubeMesh.Object);
 	}
+	ApplyScaleSettings();
 }
 
 TSubclassOf<APawn> ANDCharacter::GetDesveladoClass()
@@ -82,12 +79,37 @@ TSubclassOf<APawn> ANDCharacter::GetDesveladoClass()
 	return ANDCharacter::StaticClass();
 }
 
+void ANDCharacter::ApplyScaleSettings()
+{
+	const UNDScaleSettings* Scale = UNDScaleSettings::Get();
+	GetCapsuleComponent()->InitCapsuleSize(Scale->CapsuleRadius, Scale->CapsuleHalfHeight);
+	if (PlaceholderBody)
+	{
+		// El cilindro del motor mide 100 x 100 cm: ocupa justo la cápsula.
+		PlaceholderBody->SetRelativeScale3D(FVector(Scale->CapsuleRadius * 2.f, Scale->CapsuleRadius * 2.f, Scale->CapsuleHalfHeight * 2.f) / 100.f);
+	}
+	WalkSpeed = Scale->WalkSpeed;
+	SprintSpeed = Scale->SprintSpeed;
+	CrouchSpeed = Scale->CrouchSpeed;
+
+	UCharacterMovementComponent* Movement = GetCharacterMovement();
+	Movement->MaxStepHeight = Scale->MaxStepHeight;
+	Movement->JumpZVelocity = Scale->JumpZVelocity;
+	Movement->MaxWalkSpeedCrouched = CrouchSpeed;
+	Movement->SetCrouchedHalfHeight(Scale->CrouchedHalfHeight);
+	UpdateMovementSpeed();
+}
+
+void ANDCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	// También en partida: así manda lo que haya en NDE Scale aunque el Blueprint guarde valores antiguos.
+	ApplyScaleSettings();
+}
+
 void ANDCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// Aplica las velocidades editadas en el Blueprint.
-	GetCharacterMovement()->MaxWalkSpeedCrouched = CrouchSpeed;
 	UpdateMovementSpeed();
 }
 

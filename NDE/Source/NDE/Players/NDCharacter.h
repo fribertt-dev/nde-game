@@ -43,14 +43,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
 	TObjectPtr<UStaticMeshComponent> PlaceholderNose;
 
-	/** Velocidades del GDD 3.3 (CONFIGURABLE). */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
+	/** Velocidad al andar (GDD 3.3). Viene de Project Settings > Game > NDE Scale. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
 	float WalkSpeed = 320.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
+	/** Velocidad al correr (GDD 3.3). Viene de NDE Scale. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
 	float SprintSpeed = 470.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
+	/** Velocidad agachado (GDD 3.3). Viene de NDE Scale. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
 	float CrouchSpeed = 185.f;
 
 	UFUNCTION(BlueprintPure, Category = "NDE|Personaje")
@@ -60,8 +62,12 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void PawnClientRestart() override;
 	virtual void BeginPlay() override;
+	virtual void PostInitializeComponents() override;
 
 protected:
+	/** Cápsula, escalón, salto y velocidades desde UNDScaleSettings (única fuente de la escala). */
+	void ApplyScaleSettings();
+
 	void EnsureInputObjects();
 	UInputAction* MakeAction(FName Name, bool bAxis2D);
 
