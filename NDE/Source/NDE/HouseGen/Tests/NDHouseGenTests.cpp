@@ -253,4 +253,76 @@ bool FNDHouseGenCarryEnvelopeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FNDHouseGenFloorsTest, "NDE.HouseGen.Floors", NDHouseGenTests::Flags)
+
+bool FNDHouseGenFloorsTest::RunTest(const FString& Parameters)
+{
+	// 10.000 semillas por tamaño pidiendo siempre piso superior y sótano: el validador comprueba
+	// conectividad entre los tres niveles, pisos apoyados, escaleras completas y ruta del bulto.
+	constexpr int32 SeedCount = 10000;
+	for (const ENDHouseSize Size : NDHouseGenTests::AllSizes)
+	{
+		int32 FallbackCount = 0;
+		int32 FailureCount = 0;
+		int32 WithUpper = 0;
+		int32 WithBasement = 0;
+		int32 BedroomUpstairs = 0;
+		int32 TwoStairs = 0;
+		for (int64 Seed = 1; Seed <= SeedCount; ++Seed)
+		{
+			FNDHouseGenParams Params = NDHouseGenTests::MakeParams(Seed, Size);
+			Params.ApplyFloorOptions(ENDFloorOption::Always, ENDFloorOption::Always);
+			FNDHouseGenerationManifest Manifest;
+			FNDHouseLayout Layout;
+			if (!NDHouseGenTests::GenerateLayout(*this, Params, Manifest, Layout))
+			{
+				++FailureCount;
+				continue;
+			}
+			TArray<FString> Errors;
+			if (!FNDHouseValidator::Validate(Layout, Params, Errors))
+			{
+				AddError(FString::Printf(TEXT("%s semilla %lld: %s"), *NDHouseGenTests::SizeName(Size), Seed, *FString::Join(Errors, TEXT("; "))));
+				++FailureCount;
+			}
+			int32 Lowest = 0;
+			int32 Highest = 0;
+			Layout.GetFloorRange(Lowest, Highest);
+			FallbackCount += Manifest.bUsedFallback ? 1 : 0;
+			WithUpper += Highest > 0 ? 1 : 0;
+			WithBasement += Lowest < 0 ? 1 : 0;
+			BedroomUpstairs += Layout.Rooms.IsValidIndex(Layout.BedroomRoom) && Layout.Rooms[Layout.BedroomRoom].Floor > 0 ? 1 : 0;
+			const int32 StairsUp = Layout.Rooms.FilterByPredicate([](const FNDHouseLayoutRoom& R)
+			{
+				return R.Def->StairPart == ENDStairPart::Top && R.Floor == NDHouseGen::UpperFloor;
+			}).Num();
+			TwoStairs += StairsUp >= 2 ? 1 : 0;
+			if (FailureCount > 20)
+			{
+				AddError(TEXT("Demasiados fallos; se para la prueba"));
+				break;
+			}
+		}
+		AddInfo(FString::Printf(TEXT("%s con pisos, %d semillas: %d con piso superior, %d con sotano, %d con dormitorio arriba, %d con dos escaleras, %d casas de respaldo (%.2f %%)"),
+			*NDHouseGenTests::SizeName(Size), SeedCount, WithUpper, WithBasement, BedroomUpstairs, TwoStairs, FallbackCount, FallbackCount * 100.f / SeedCount));
+		TestTrue(FString::Printf(TEXT("%s con pisos: casa de respaldo en menos del 1%% de semillas"), *NDHouseGenTests::SizeName(Size)), FallbackCount * 100 < SeedCount);
+	}
+
+	// Determinismo con pisos: misma semilla, misma casa.
+	for (int64 Seed = 1; Seed <= 300; ++Seed)
+	{
+		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
+		Params.ApplyFloorOptions(ENDFloorOption::Always, ENDFloorOption::Always);
+		FNDHouseGenerationManifest First;
+		FNDHouseGenerationManifest Second;
+		FNDHouseGenerator::Generate(Params, First);
+		FNDHouseGenerator::Generate(Params, Second);
+		if (First.ToDebugString() != Second.ToDebugString())
+		{
+			AddError(FString::Printf(TEXT("Semilla %lld con pisos da dos casas distintas"), Seed));
+		}
+	}
+	return true;
+}
+
 #endif

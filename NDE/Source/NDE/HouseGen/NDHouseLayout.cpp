@@ -21,6 +21,8 @@ FNDHouseGenParams FNDHouseGenParams::ForArchetype(FName Archetype, ENDHouseSize 
 		Params.MinRooms = 7;
 		Params.MaxRooms = 11;
 		Params.SecondaryExitChance = 0.6f;
+		Params.UpperFloorChance = 0.5f;
+		Params.BasementChance = 0.3f;
 		break;
 	case ENDHouseSize::Large:
 		// Casa grande: siempre algún bucle y casi siempre dos caminos a la salida.
@@ -28,6 +30,8 @@ FNDHouseGenParams FNDHouseGenParams::ForArchetype(FName Archetype, ENDHouseSize 
 		Params.MaxRooms = 17;
 		Params.MinLoops = 1;
 		Params.SecondaryExitChance = 0.9f;
+		Params.UpperFloorChance = 0.75f;
+		Params.BasementChance = 0.4f;
 		break;
 	default:
 		break;
@@ -80,6 +84,19 @@ void FNDHouseGenParams::OverrideRoomRange(int32 InMinRooms, int32 InMaxRooms)
 	MaxRooms = FMath::Max(MinRooms, MaxRooms);
 }
 
+void FNDHouseGenParams::ApplyFloorOptions(ENDFloorOption UpperFloor, ENDFloorOption Basement)
+{
+	auto Apply = [](ENDFloorOption Option, float& Chance)
+	{
+		if (Option != ENDFloorOption::Auto)
+		{
+			Chance = Option == ENDFloorOption::Always ? 1.f : 0.f;
+		}
+	};
+	Apply(UpperFloor, UpperFloorChance);
+	Apply(Basement, BasementChance);
+}
+
 bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FNDHouseLayout& OutLayout, FString& OutError)
 {
 	OutLayout = FNDHouseLayout();
@@ -104,6 +121,7 @@ bool FNDHouseLayout::FromManifest(const FNDHouseGenerationManifest& Manifest, FN
 		Room.InstanceId = Index;
 		Room.Def = Def;
 		Room.Grid = FIntPoint(Source.Grid.X, Source.Grid.Y);
+		Room.Floor = Source.Grid.Z;
 		Room.YawSteps = NDHouseGen::YawToSteps(Source.Yaw);
 		Room.Size = NDHouseGen::RotateSize(Def->FootprintCells, Room.YawSteps);
 		Room.Depth = Source.Depth;
@@ -220,14 +238,39 @@ FVector FNDHouseLayout::GetRoomCenter(int32 RoomIndex) const
 	return FVector(
 		(Room.Grid.X + Room.Size.X * 0.5f - Lot.SizeCells.X * 0.5f) * NDHouseGen::CellSize,
 		(Room.Grid.Y + Room.Size.Y * 0.5f - Lot.SizeCells.Y * 0.5f) * NDHouseGen::CellSize,
-		0.f);
+		Room.Floor * NDHouseGen::FloorHeight);
 }
 
 FVector FNDHouseLayout::GetSocketLocation(int32 RoomIndex, int32 SocketIndex) const
 {
 	const FNDHouseLayoutSocket& Socket = Rooms[RoomIndex].Sockets[SocketIndex];
 	const FIntPoint Offset = NDHouseGen::DirectionToOffset(Socket.LotDirection);
-	return Lot.GetCellCenter(Socket.LotCell) + FVector(Offset.X, Offset.Y, 0.f) * (NDHouseGen::CellSize * 0.5f);
+	return Lot.GetCellCenter(Socket.LotCell) + FVector(Offset.X * NDHouseGen::CellSize * 0.5f, Offset.Y * NDHouseGen::CellSize * 0.5f,
+		Rooms[RoomIndex].Floor * NDHouseGen::FloorHeight);
+}
+
+void FNDHouseLayout::GetOccupancy(TMap<FIntVector, int32>& OutOccupancy) const
+{
+	for (int32 RoomIndex = 0; RoomIndex < Rooms.Num(); ++RoomIndex)
+	{
+		TArray<FIntPoint> Cells;
+		GetRoomCells(RoomIndex, Cells);
+		for (const FIntPoint& Cell : Cells)
+		{
+			OutOccupancy.Add(FIntVector(Cell.X, Cell.Y, Rooms[RoomIndex].Floor), RoomIndex);
+		}
+	}
+}
+
+void FNDHouseLayout::GetFloorRange(int32& OutLowest, int32& OutHighest) const
+{
+	OutLowest = 0;
+	OutHighest = 0;
+	for (const FNDHouseLayoutRoom& Room : Rooms)
+	{
+		OutLowest = FMath::Min(OutLowest, Room.Floor);
+		OutHighest = FMath::Max(OutHighest, Room.Floor);
+	}
 }
 
 void FNDHouseLayout::GetRoomCells(int32 RoomIndex, TArray<FIntPoint>& OutCells) const
@@ -332,16 +375,22 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 	else
 	{
 		const FNDHouseLayoutSocket& Exit = Layout.Rooms[0].Sockets[Layout.EntryExitSocket];
-		if (Exit.LotDirection != Lot.FrontDirection || !Lot.IsInsideLot(Exit.GetOutsideCell()) || !Lot.IsFrontYard(Exit.GetOutsideCell()))
+		if (Layout.Rooms[0].Floor != NDHouseGen::GroundFloor || Exit.LotDirection != Lot.FrontDirection
+			|| !Lot.IsInsideLot(Exit.GetOutsideCell()) || !Lot.IsFrontYard(Exit.GetOutsideCell()))
 		{
 			OutErrors.Add(TEXT("La puerta de entrada no da a la calle"));
 		}
 	}
 
-	// Dentro del lote, fuera del jardín delantero y sin solapes.
-	TMap<FIntPoint, int32> Occupancy;
+	// Dentro del lote, fuera del jardín delantero y sin solapes en cada piso.
+	TMap<FIntVector, int32> Occupancy;
 	for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 	{
+		const int32 Floor = Layout.Rooms[RoomIndex].Floor;
+		if (Floor < NDHouseGen::BasementFloor || Floor > NDHouseGen::UpperFloor)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Sala %d en un piso que no existe (%d)"), RoomIndex, Floor));
+		}
 		TArray<FIntPoint> Cells;
 		Layout.GetRoomCells(RoomIndex, Cells);
 		for (const FIntPoint& Cell : Cells)
@@ -350,39 +399,78 @@ bool FNDHouseValidator::Validate(const FNDHouseLayout& Layout, const FNDHouseGen
 			{
 				OutErrors.Add(FString::Printf(TEXT("Sala %d fuera del lote en (%d,%d)"), RoomIndex, Cell.X, Cell.Y));
 			}
-			if (const int32* Other = Occupancy.Find(Cell))
+			const FIntVector Key(Cell.X, Cell.Y, Floor);
+			if (const int32* Other = Occupancy.Find(Key))
 			{
-				OutErrors.Add(FString::Printf(TEXT("Salas %d y %d se solapan en (%d,%d)"), *Other, RoomIndex, Cell.X, Cell.Y));
+				OutErrors.Add(FString::Printf(TEXT("Salas %d y %d se solapan en (%d,%d) piso %d"), *Other, RoomIndex, Cell.X, Cell.Y, Floor));
 			}
 			else
 			{
-				Occupancy.Add(Cell, RoomIndex);
+				Occupancy.Add(Key, RoomIndex);
 			}
 		}
 	}
 
-	// Cada puerta une dos huecos enfrentados y compatibles.
+	// Piso superior apoyado y sótano bajo la casa: cada celda fuera de la planta baja tiene planta baja encima o debajo.
+	for (const TPair<FIntVector, int32>& Cell : Occupancy)
+	{
+		if (Cell.Key.Z != NDHouseGen::GroundFloor && !Occupancy.Contains(FIntVector(Cell.Key.X, Cell.Key.Y, NDHouseGen::GroundFloor)))
+		{
+			OutErrors.Add(FString::Printf(TEXT("Sala %d en el piso %d sin planta baja en (%d,%d)"), Cell.Value, Cell.Key.Z, Cell.Key.X, Cell.Key.Y));
+		}
+	}
+
+	// Cada puerta une dos huecos enfrentados y compatibles del mismo piso; cada escalera, sus dos mitades.
 	for (const FNDHouseLayoutConnection& Link : Layout.Connections)
 	{
-		const FNDHouseLayoutSocket& A = Layout.Rooms[Link.RoomA].Sockets[Link.SocketA];
-		const FNDHouseLayoutSocket& B = Layout.Rooms[Link.RoomB].Sockets[Link.SocketB];
-		if (Link.RoomA == Link.RoomB || A.GetOutsideCell() != B.LotCell || B.LotDirection != NDHouseGen::OppositeDirection(A.LotDirection)
-			|| !NDHouseGen::AreSocketsCompatible(A.Type, B.Type))
+		const FNDHouseLayoutRoom& RoomA = Layout.Rooms[Link.RoomA];
+		const FNDHouseLayoutRoom& RoomB = Layout.Rooms[Link.RoomB];
+		const FNDHouseLayoutSocket& A = RoomA.Sockets[Link.SocketA];
+		const FNDHouseLayoutSocket& B = RoomB.Sockets[Link.SocketB];
+		bool bFits;
+		if (A.Type == ENDRoomSocketType::Stairs || B.Type == ENDRoomSocketType::Stairs)
+		{
+			const FNDHouseLayoutRoom& Lower = RoomA.Floor < RoomB.Floor ? RoomA : RoomB;
+			const FNDHouseLayoutRoom& Upper = RoomA.Floor < RoomB.Floor ? RoomB : RoomA;
+			bFits = A.Type == B.Type && Upper.Floor == Lower.Floor + 1 && Lower.Grid == Upper.Grid && Lower.YawSteps == Upper.YawSteps
+				&& Lower.Def->StairPart == ENDStairPart::Bottom && Upper.Def->StairPart == ENDStairPart::Top;
+		}
+		else
+		{
+			bFits = Link.RoomA != Link.RoomB && RoomA.Floor == RoomB.Floor && A.GetOutsideCell() == B.LotCell
+				&& B.LotDirection == NDHouseGen::OppositeDirection(A.LotDirection) && NDHouseGen::AreSocketsCompatible(A.Type, B.Type);
+		}
+		if (!bFits)
 		{
 			OutErrors.Add(FString::Printf(TEXT("Puerta %d.%s - %d.%s no encaja"), Link.RoomA, *A.SocketId.ToString(), Link.RoomB, *B.SocketId.ToString()));
 		}
 	}
 
-	// Acceso secundario: solo a patio trasero o lateral libre dentro del lote.
+	// Acceso secundario: solo en planta baja, a patio trasero o lateral libre dentro del lote.
 	for (int32 RoomIndex = 1; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 	{
 		for (const FNDHouseLayoutSocket& Socket : Layout.Rooms[RoomIndex].Sockets)
 		{
 			const FIntPoint Outside = Socket.GetOutsideCell();
-			if (Socket.bExit && (!Lot.IsBuildable(Outside) || Occupancy.Contains(Outside) || Socket.Connection != INDEX_NONE))
+			if (Socket.bExit && (Layout.Rooms[RoomIndex].Floor != NDHouseGen::GroundFloor || !Lot.IsBuildable(Outside)
+				|| Occupancy.Contains(FIntVector(Outside.X, Outside.Y, NDHouseGen::GroundFloor)) || Socket.Connection != INDEX_NONE))
 			{
 				OutErrors.Add(FString::Printf(TEXT("Acceso secundario %d.%s no da a un patio libre"), RoomIndex, *Socket.SocketId.ToString()));
 			}
+		}
+	}
+
+	// Cada escalera completa: sus dos mitades unidas entre sí.
+	for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
+	{
+		const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];
+		const bool bStairLinked = Room.Sockets.ContainsByPredicate([](const FNDHouseLayoutSocket& S)
+		{
+			return S.Type == ENDRoomSocketType::Stairs && S.Connection != INDEX_NONE;
+		});
+		if (Room.Def->StairPart != ENDStairPart::None && !bStairLinked)
+		{
+			OutErrors.Add(FString::Printf(TEXT("Escalera %d sin su otra mitad"), RoomIndex));
 		}
 	}
 

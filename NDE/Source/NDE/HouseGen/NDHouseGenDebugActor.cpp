@@ -56,6 +56,7 @@ void ANDHouseGenDebugActor::Generate()
 	FNDHouseGenParams Params = FNDHouseGenParams::ForArchetype(Archetype, HouseSize);
 	Params.Seed = Seed;
 	Params.OverrideRoomRange(MinRooms, MaxRooms);
+	Params.ApplyFloorOptions(UpperFloor, Basement);
 	FNDHouseLotInfo Lot = LotInfo;
 	Lot.LotTransform = GetActorTransform();
 	Params.SetLot(Lot);

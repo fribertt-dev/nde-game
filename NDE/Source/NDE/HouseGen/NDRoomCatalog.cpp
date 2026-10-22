@@ -245,6 +245,56 @@ namespace NDRoomCatalog
 			AddMarker(Def, EMark::HideSpot, 0, 0, 0.f, 130.f);
 			Modules.Add(Def);
 		}
+
+		// Pisos: cada escalera son dos salas 2x1 iguales, una encima de otra. Se entra abajo por S0
+		// y se sale arriba por N1; los huecos Stairs solo marcan la unión vertical.
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Stairs_Bottom"), ENDRoomType::R17_Stairwell, 2, 1);
+			Def.StairPart = ENDStairPart::Bottom;
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Stairs_Top"), ENDRoomType::R17_Stairwell, 2, 1);
+			Def.StairPart = ENDStairPart::Top;
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_KidsBedroom_A"), ENDRoomType::R10_KidsBedroom, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("E1"), 1, 0, EDir::East);
+			AddSocket(Def, TEXT("W0"), 0, 0, EDir::West);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 120.f, 120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, -130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Basement_A"), ENDRoomType::R16_Basement, 2, 2, 1.3f);
+			AddSocket(Def, TEXT("S00"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N11"), 1, 1, EDir::North);
+			AddSocket(Def, TEXT("W10"), 1, 0, EDir::West);
+			AddSocket(Def, TEXT("E01"), 0, 1, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 1, 100.f, 100.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 120.f, -120.f);
+			AddMarker(Def, EMark::HideSpot, 0, 0, -130.f, -130.f);
+			AddMarker(Def, EMark::HideSpot, 1, 1, 130.f, 130.f);
+			Modules.Add(Def);
+		}
+		{
+			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Workshop_A"), ENDRoomType::R16_Basement, 2, 1);
+			AddSocket(Def, TEXT("S0"), 0, 0, EDir::South);
+			AddSocket(Def, TEXT("N1"), 1, 0, EDir::North);
+			AddSocket(Def, TEXT("E0"), 0, 0, EDir::East);
+			AddMarker(Def, EMark::LootSocket, 0, 0, 0.f, -140.f);
+			AddMarker(Def, EMark::LootSocket, 1, 0, 0.f, 140.f);
+			AddMarker(Def, EMark::HideSpot, 1, 0, 130.f, -130.f);
+			Modules.Add(Def);
+		}
 		return Modules;
 	}
 }

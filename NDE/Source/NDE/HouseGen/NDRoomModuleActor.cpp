@@ -89,10 +89,10 @@ void ANDRoomModuleActor::ClearGreybox()
 	}
 }
 
-void ANDRoomModuleActor::AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size)
+void ANDRoomModuleActor::AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, const FRotator& Rotation)
 {
 	// El cubo del motor mide 100 cm y tiene el pivote en el centro.
-	Target->AddInstance(FTransform(FRotator::ZeroRotator, Center, Size / 100.f));
+	Target->AddInstance(FTransform(Rotation, Center, Size / 100.f));
 }
 
 void ANDRoomModuleActor::SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color)
@@ -164,7 +164,8 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 	AddBox(WallMeshes, WallCenter + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
 }
 
-void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers, bool bAddRoomLight)
+void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
+	bool bAddRoomLight, const TArray<bool>* CeilingPerCell)
 {
 	using namespace NDHouseGen;
 	ClearGreybox();
@@ -179,11 +180,17 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	// techo opcional y paredes en cada borde que no da a otra celda de la sala.
 	TArray<FIntPoint> Cells;
 	Definition.GetLocalCells(Cells);
-	for (const FIntPoint& Cell : Cells)
+	for (int32 CellIndex = 0; CellIndex < Cells.Num(); ++CellIndex)
 	{
+		const FIntPoint& Cell = Cells[CellIndex];
 		const FVector CellCenter((Cell.X + 0.5f) * CellSize - Extent.X * 0.5f, (Cell.Y + 0.5f) * CellSize - Extent.Y * 0.5f, 0.f);
-		AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
-		if (bBuildCeiling)
+		// La llegada de una escalera es un hueco en el forjado: no lleva suelo.
+		if (Definition.StairPart != ENDStairPart::Top)
+		{
+			AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+		}
+		const bool bCeilingHere = !CeilingPerCell || !CeilingPerCell->IsValidIndex(CellIndex) || (*CeilingPerCell)[CellIndex];
+		if (bBuildCeiling && bCeilingHere)
 		{
 			AddBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
 		}
@@ -204,6 +211,19 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			const FIntPoint Offset = DirectionToOffset(Direction);
 			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening);
 		}
+	}
+
+	// Arranque de escalera: rampa a lo largo de X que sube un piso entero, de la puerta S0 (X mínima)
+	// a la llegada del piso de arriba (X máxima). Ancho = celda menos paredes.
+	if (Definition.StairPart == ENDStairPart::Bottom)
+	{
+		const float Run = Extent.X;
+		const float Rise = FloorHeight;
+		const float Angle = FMath::RadiansToDegrees(FMath::Atan2(Rise, Run));
+		const FVector Up(-FMath::Sin(FMath::DegreesToRadians(Angle)), 0.f, FMath::Cos(FMath::DegreesToRadians(Angle)));
+		// La cara de arriba pasa por (-Run/2, 0) y (Run/2, Rise).
+		const FVector Center = FVector(0.f, 0.f, Rise * 0.5f) - Up * (WallThickness * 0.5f);
+		AddBox(FloorMeshes, Center, FVector(FMath::Sqrt(Run * Run + Rise * Rise), Extent.Y - 2.f * WallThickness, WallThickness), FRotator(Angle, 0.f, 0.f));
 	}
 
 	if (bAddRoomLight)

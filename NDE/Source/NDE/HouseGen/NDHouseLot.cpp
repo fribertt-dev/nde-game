@@ -205,6 +205,7 @@ FNDHouseGenParams ANDHouseLot::MakeParams(int64 Seed) const
 	Params.Seed = Seed;
 	Params.District = District;
 	Params.OverrideRoomRange(MinRooms, MaxRooms);
+	Params.ApplyFloorOptions(UpperFloor, Basement);
 	FNDHouseLotInfo Lot = LotInfo;
 	Lot.LotTransform = GetActorTransform();
 	Params.SetLot(Lot);
@@ -285,9 +286,13 @@ void ANDHouseLot::BuildFromManifest()
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	TSet<FIntPoint> UsedCells;
+	TMap<FIntVector, int32> Occupancy;
+	Layout.GetOccupancy(Occupancy);
 	for (int32 RoomIndex = 0; RoomIndex < Layout.Rooms.Num(); ++RoomIndex)
 	{
 		const FNDHouseLayoutRoom& Room = Layout.Rooms[RoomIndex];
+		TArray<FIntPoint> Cells;
+		Layout.GetRoomCells(RoomIndex, Cells);
 		const FTransform RoomTransform = FTransform(FRotator(0.f, Room.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(RoomIndex)) * LotToWorld;
 		ANDRoomModuleActor* RoomActor = World->SpawnActor<ANDRoomModuleActor>(ANDRoomModuleActor::StaticClass(), RoomTransform, SpawnParams);
 		if (!RoomActor)
@@ -301,17 +306,30 @@ void ANDHouseLot::BuildFromManifest()
 		{
 			Openings.Add(Socket.Connection != INDEX_NONE ? Layout.Connections[Socket.Connection].OpeningWidth : (Socket.bExit ? Socket.Width : 0.f));
 		}
+		// Techo solo donde no hay otra sala encima: allí el suelo de arriba hace de techo.
+		TArray<bool> CeilingPerCell;
+		for (const FIntPoint& Cell : Cells)
+		{
+			CeilingPerCell.Add(!Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Room.Floor + 1)));
+		}
 		RoomActor->RoomInstanceId = RoomIndex;
-		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms);
+		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell);
 		RoomActor->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
+		if (Room.Floor > MaxVisibleFloor)
+		{
+			RoomActor->SetActorHiddenInGame(true);
+			RoomActor->SetActorEnableCollision(false);
+		}
 #if WITH_EDITOR
-		RoomActor->SetActorLabel(FString::Printf(TEXT("Room%02d_%s"), RoomIndex, *Room.Def->RoomModuleId.ToString()));
+		RoomActor->SetActorLabel(FString::Printf(TEXT("Room%02d_F%d_%s"), RoomIndex, Room.Floor, *Room.Def->RoomModuleId.ToString()));
 #endif
 		RoomActors.Add(RoomActor);
 
-		TArray<FIntPoint> Cells;
-		Layout.GetRoomCells(RoomIndex, Cells);
-		UsedCells.Append(Cells);
+		if (Room.Floor == NDHouseGen::GroundFloor)
+		{
+			UsedCells.Append(Cells);
+		}
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.

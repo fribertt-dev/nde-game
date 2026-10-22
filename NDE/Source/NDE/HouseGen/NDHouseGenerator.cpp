@@ -12,14 +12,22 @@ namespace NDHouseGenerator
 	const FName HubModuleId(TEXT("D01_Corridor_Straight"));
 	const FName FallbackLivingModuleId(TEXT("D01_LivingRoom_A"));
 	const FName FallbackKitchenModuleId(TEXT("D01_Kitchen_A"));
+	const FName StairsBottomModuleId(TEXT("D01_Stairs_Bottom"));
+	const FName StairsTopModuleId(TEXT("D01_Stairs_Top"));
 
 	struct FWorkRoom
 	{
 		const FNDRoomModuleDefinition* Def = nullptr;
 		FIntPoint Grid = FIntPoint::ZeroValue;
+		int32 Floor = NDHouseGen::GroundFloor;
 		int32 YawSteps = 0;
 		TArray<bool> SocketUsed;
 	};
+
+	int32 FindStairsSocket(const FNDRoomModuleDefinition& Def)
+	{
+		return Def.DoorSockets.IndexOfByPredicate([](const FNDRoomDoorSocket& S) { return S.Type == ENDRoomSocketType::Stairs; });
+	}
 
 	int32 CountConnectableSockets(const FNDRoomModuleDefinition& Def)
 	{
@@ -38,7 +46,8 @@ namespace NDHouseGenerator
 		const FNDHouseGenParams& Params;
 		FRandomStream* Stream;
 		TArray<FWorkRoom> Rooms;
-		TMap<FIntPoint, int32> Occupancy;
+		/** (X, Y, piso) → sala. */
+		TMap<FIntVector, int32> Occupancy;
 		TArray<FNDHouseManifestConnection> Links;
 		int32 SecondaryExitRoom = INDEX_NONE;
 		FName SecondaryExitSocket;
@@ -89,13 +98,26 @@ namespace NDHouseGenerator
 			}
 		}
 
-		bool IsAreaFree(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps) const
+		/**
+		 * true si el módulo cabe en ese piso. Fuera de la planta baja además tiene que haber planta baja
+		 * en cada celda (piso apoyado, sótano bajo la casa), salvo bRequireSupport = false: la mitad de
+		 * escalera que se coloca a la vez que su pareja ya trae su propio apoyo.
+		 */
+		bool IsAreaFree(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps, int32 Floor = NDHouseGen::GroundFloor, bool bRequireSupport = true) const
 		{
+			if (Floor < NDHouseGen::BasementFloor || Floor > NDHouseGen::UpperFloor)
+			{
+				return false;
+			}
 			TArray<FIntPoint> Cells;
 			GetPlacedCells(Def, Grid, YawSteps, Cells);
 			for (const FIntPoint& Cell : Cells)
 			{
-				if (!Params.Lot.IsBuildable(Cell) || Occupancy.Contains(Cell))
+				if (!Params.Lot.IsBuildable(Cell) || Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Floor)))
+				{
+					return false;
+				}
+				if (Floor != NDHouseGen::GroundFloor && bRequireSupport && !Occupancy.Contains(FIntVector(Cell.X, Cell.Y, NDHouseGen::GroundFloor)))
 				{
 					return false;
 				}
@@ -111,19 +133,20 @@ namespace NDHouseGenerator
 			});
 		}
 
-		int32 AddRoom(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps)
+		int32 AddRoom(const FNDRoomModuleDefinition& Def, const FIntPoint& Grid, int32 YawSteps, int32 Floor = NDHouseGen::GroundFloor)
 		{
 			const int32 Index = Rooms.Num();
 			FWorkRoom& Room = Rooms.AddDefaulted_GetRef();
 			Room.Def = &Def;
 			Room.Grid = Grid;
+			Room.Floor = Floor;
 			Room.YawSteps = YawSteps;
 			Room.SocketUsed.Init(false, Def.DoorSockets.Num());
 			TArray<FIntPoint> Cells;
 			GetPlacedCells(Def, Grid, YawSteps, Cells);
 			for (const FIntPoint& Cell : Cells)
 			{
-				Occupancy.Add(Cell, Index);
+				Occupancy.Add(FIntVector(Cell.X, Cell.Y, Floor), Index);
 			}
 			return Index;
 		}
@@ -187,14 +210,18 @@ namespace NDHouseGenerator
 			return false;
 		}
 
-		/** Pega un módulo nuevo a un hueco libre de Parent. INDEX_NONE si no cabe. */
-		int32 Attach(int32 ParentIndex, const FNDRoomModuleDefinition& Def)
+		/**
+		 * Pega un módulo nuevo a un hueco libre de Parent, en su mismo piso. INDEX_NONE si no cabe.
+		 * Con PairDef también exige sitio para él en las mismas celdas del piso PairFloor (escaleras).
+		 */
+		int32 Attach(int32 ParentIndex, const FNDRoomModuleDefinition& Def, const FNDRoomModuleDefinition* PairDef = nullptr, int32 PairFloor = 0)
 		{
 			if (!Rooms.IsValidIndex(ParentIndex))
 			{
 				return INDEX_NONE;
 			}
 			const FWorkRoom& Parent = Rooms[ParentIndex];
+			const int32 Floor = Parent.Floor;
 			TArray<FIntPoint> Candidates; // X = hueco del padre, Y = hueco del módulo nuevo
 			for (int32 ParentSocket = 0; ParentSocket < Parent.Def->DoorSockets.Num(); ++ParentSocket)
 			{
@@ -220,27 +247,39 @@ namespace NDHouseGenerator
 				const FNDRoomDoorSocket& NewSocket = Def.DoorSockets[Candidate.Y];
 				const int32 YawSteps = (static_cast<int32>(NeededDir) - static_cast<int32>(NewSocket.Direction) + 4) % 4;
 				const FIntPoint Grid = TargetCell - NDHouseGen::RotateCell(NewSocket.Cell, Def.FootprintCells, YawSteps);
-				if (!IsAreaFree(Def, Grid, YawSteps))
+				// La mitad de escalera que va con su pareja no necesita apoyo propio: se lo da la otra.
+				const bool bRequireSupport = PairDef == nullptr;
+				if (!IsAreaFree(Def, Grid, YawSteps, Floor, bRequireSupport)
+					|| (PairDef && !IsAreaFree(*PairDef, Grid, YawSteps, PairFloor, false)))
 				{
 					continue;
 				}
-				const int32 NewIndex = AddRoom(Def, Grid, YawSteps);
+				const int32 NewIndex = AddRoom(Def, Grid, YawSteps, Floor);
 				Connect(ParentIndex, Candidate.X, NewIndex, Candidate.Y, false);
 				return NewIndex;
 			}
 			return INDEX_NONE;
 		}
 
-		/** Pega el módulo a cualquier sala menos la entrada, que solo da al distribuidor. */
-		int32 AttachAnywhere(const FNDRoomModuleDefinition& Def)
+		/** Salas del piso donde se puede colgar algo nuevo (nunca la entrada, que solo da al distribuidor), en orden al azar. */
+		TArray<int32> GetParents(int32 Floor) const
 		{
 			TArray<int32> Parents;
 			for (int32 Index = 1; Index < Rooms.Num(); ++Index)
 			{
-				Parents.Add(Index);
+				if (Rooms[Index].Floor == Floor)
+				{
+					Parents.Add(Index);
+				}
 			}
 			Shuffle(Parents);
-			for (const int32 Parent : Parents)
+			return Parents;
+		}
+
+		/** Pega el módulo a cualquier sala de ese piso. */
+		int32 AttachAnywhere(const FNDRoomModuleDefinition& Def, int32 Floor = NDHouseGen::GroundFloor)
+		{
+			for (const int32 Parent : GetParents(Floor))
 			{
 				const int32 NewIndex = Attach(Parent, Def);
 				if (NewIndex != INDEX_NONE)
@@ -249,6 +288,57 @@ namespace NDHouseGenerator
 				}
 			}
 			return INDEX_NONE;
+		}
+
+		/**
+		 * Escalera colgada de Parent: hacia arriba (arranque en el piso de Parent) o hacia abajo
+		 * (llegada en el piso de Parent, arranque en el de abajo). Devuelve la mitad del otro piso,
+		 * de donde se cuelgan las salas de ese piso; INDEX_NONE si no cabe.
+		 */
+		int32 AttachStairs(int32 ParentIndex, bool bGoingUp)
+		{
+			const FNDRoomModuleDefinition* Bottom = FNDRoomCatalog::Find(StairsBottomModuleId);
+			const FNDRoomModuleDefinition* Top = FNDRoomCatalog::Find(StairsTopModuleId);
+			if (!Bottom || !Top || !Rooms.IsValidIndex(ParentIndex))
+			{
+				return INDEX_NONE;
+			}
+			const FNDRoomModuleDefinition& Near = bGoingUp ? *Bottom : *Top;
+			const FNDRoomModuleDefinition& Far = bGoingUp ? *Top : *Bottom;
+			const int32 FarFloor = Rooms[ParentIndex].Floor + (bGoingUp ? 1 : -1);
+			const int32 NearIndex = Attach(ParentIndex, Near, &Far, FarFloor);
+			if (NearIndex == INDEX_NONE)
+			{
+				return INDEX_NONE;
+			}
+			const int32 FarIndex = AddRoom(Far, Rooms[NearIndex].Grid, Rooms[NearIndex].YawSteps, FarFloor);
+			const int32 BottomIndex = bGoingUp ? NearIndex : FarIndex;
+			const int32 TopIndex = bGoingUp ? FarIndex : NearIndex;
+			Connect(BottomIndex, FindStairsSocket(*Bottom), TopIndex, FindStairsSocket(*Top), false);
+			return FarIndex;
+		}
+
+		/** Escalera desde cualquier sala de ese piso. */
+		int32 AttachStairsAnywhere(int32 Floor, bool bGoingUp)
+		{
+			for (const int32 Parent : GetParents(Floor))
+			{
+				if (Rooms[Parent].Def->StairPart != ENDStairPart::None)
+				{
+					continue;
+				}
+				const int32 FarIndex = AttachStairs(Parent, bGoingUp);
+				if (FarIndex != INDEX_NONE)
+				{
+					return FarIndex;
+				}
+			}
+			return INDEX_NONE;
+		}
+
+		int32 CountRoomsOnFloor(int32 Floor) const
+		{
+			return Rooms.FilterByPredicate([Floor](const FWorkRoom& R) { return R.Floor == Floor; }).Num();
 		}
 
 		/** Elige un módulo del grupo, evitando repetir tipo de sala salvo pasillos y almacenes. */
@@ -263,8 +353,11 @@ namespace NDHouseGenerator
 			return Source.Num() > 0 ? Source[Rand(0, Source.Num() - 1)] : nullptr;
 		}
 
-		/** Bucles: abre huecos enfrentados entre salas vecinas aún no unidas (nunca la entrada). */
-		int32 AddLoops(int32 Count)
+		/**
+		 * Bucles: abre huecos enfrentados entre salas vecinas del mismo piso aún no unidas (nunca la entrada).
+		 * Con OnlyRoom solo prueba puertas de esa sala.
+		 */
+		int32 AddLoops(int32 Count, int32 OnlyRoom = INDEX_NONE)
 		{
 			struct FLoopCandidate { int32 RoomA, SocketA, RoomB, SocketB; };
 			TArray<FLoopCandidate> Candidates;
@@ -278,8 +371,8 @@ namespace NDHouseGenerator
 					}
 					const ENDCellDirection DirA = GetSocketDirection(RoomA, SocketA);
 					const FIntPoint Outside = GetSocketCell(RoomA, SocketA) + NDHouseGen::DirectionToOffset(DirA);
-					const int32* RoomB = Occupancy.Find(Outside);
-					if (!RoomB || *RoomB <= RoomA)
+					const int32* RoomB = Occupancy.Find(FIntVector(Outside.X, Outside.Y, Rooms[RoomA].Floor));
+					if (!RoomB || *RoomB <= RoomA || (OnlyRoom != INDEX_NONE && RoomA != OnlyRoom && *RoomB != OnlyRoom))
 					{
 						continue;
 					}
@@ -313,12 +406,16 @@ namespace NDHouseGenerator
 			return Added;
 		}
 
-		/** Acceso secundario: un hueco libre que da a patio trasero o lateral dentro del lote. */
+		/** Acceso secundario: un hueco libre de la planta baja que da a patio trasero o lateral dentro del lote. */
 		void PickSecondaryExit()
 		{
 			TArray<FIntPoint> Candidates; // X = sala, Y = hueco
 			for (int32 RoomIndex = 1; RoomIndex < Rooms.Num(); ++RoomIndex)
 			{
+				if (Rooms[RoomIndex].Floor != NDHouseGen::GroundFloor)
+				{
+					continue;
+				}
 				for (int32 SocketIndex = 0; SocketIndex < Rooms[RoomIndex].Def->DoorSockets.Num(); ++SocketIndex)
 				{
 					const ENDRoomSocketType Type = Rooms[RoomIndex].Def->DoorSockets[SocketIndex].Type;
@@ -327,7 +424,7 @@ namespace NDHouseGenerator
 						continue;
 					}
 					const FIntPoint Outside = GetSocketCell(RoomIndex, SocketIndex) + NDHouseGen::DirectionToOffset(GetSocketDirection(RoomIndex, SocketIndex));
-					if (Params.Lot.IsBuildable(Outside) && !Occupancy.Contains(Outside))
+					if (Params.Lot.IsBuildable(Outside) && !Occupancy.Contains(FIntVector(Outside.X, Outside.Y, NDHouseGen::GroundFloor)))
 					{
 						Candidates.Add(FIntPoint(RoomIndex, SocketIndex));
 					}
@@ -379,7 +476,7 @@ namespace NDHouseGenerator
 				FNDHouseManifestRoom& Room = Out.Rooms.AddDefaulted_GetRef();
 				Room.InstanceId = Index;
 				Room.ModuleId = Rooms[Index].Def->RoomModuleId;
-				Room.Grid = FIntVector(Rooms[Index].Grid.X, Rooms[Index].Grid.Y, 0);
+				Room.Grid = FIntVector(Rooms[Index].Grid.X, Rooms[Index].Grid.Y, Rooms[Index].Floor);
 				Room.Yaw = Rooms[Index].YawSteps * 90;
 				Room.Depth = Depths[Index];
 			}
@@ -420,9 +517,16 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		  ENDRoomType::R11_Study, ENDRoomType::R13_Laundry, ENDRoomType::R14_Library, ENDRoomType::R15_Playroom }, 2);
 	const TArray<const FNDRoomModuleDefinition*> Fillers = MakePool(Params.District,
 		{ ENDRoomType::R02_Corridor, ENDRoomType::R03_LivingRoom, ENDRoomType::R04_Kitchen, ENDRoomType::R05_DiningRoom, ENDRoomType::R07_Bathroom,
-		  ENDRoomType::R08_Storage, ENDRoomType::R11_Study, ENDRoomType::R12_Pantry, ENDRoomType::R13_Laundry, ENDRoomType::R14_Library,
-		  ENDRoomType::R15_Playroom }, 1);
-	if (Entries.IsEmpty() || !Hub || Bedrooms.IsEmpty() || Objectives.IsEmpty() || Intermediates.IsEmpty() || Fillers.IsEmpty())
+		  ENDRoomType::R08_Storage, ENDRoomType::R10_KidsBedroom, ENDRoomType::R11_Study, ENDRoomType::R12_Pantry, ENDRoomType::R13_Laundry,
+		  ENDRoomType::R14_Library, ENDRoomType::R15_Playroom }, 1);
+	// Arriba, dormitorios y salas tranquilas; abajo, sótano, taller, almacén y lavandería.
+	const TArray<const FNDRoomModuleDefinition*> UpperRooms = MakePool(Params.District,
+		{ ENDRoomType::R02_Corridor, ENDRoomType::R07_Bathroom, ENDRoomType::R08_Storage, ENDRoomType::R10_KidsBedroom, ENDRoomType::R11_Study,
+		  ENDRoomType::R14_Library, ENDRoomType::R15_Playroom }, 1);
+	const TArray<const FNDRoomModuleDefinition*> BasementRooms = MakePool(Params.District,
+		{ ENDRoomType::R16_Basement, ENDRoomType::R08_Storage, ENDRoomType::R13_Laundry }, 1);
+	if (Entries.IsEmpty() || !Hub || Bedrooms.IsEmpty() || Objectives.IsEmpty() || Intermediates.IsEmpty() || Fillers.IsEmpty()
+		|| UpperRooms.IsEmpty() || BasementRooms.IsEmpty())
 	{
 		UE_LOG(LogNDHouseGen, Error, TEXT("Faltan modulos en el catalogo para el distrito %s"), *Params.District.ToString());
 		return false;
@@ -430,20 +534,51 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 
 	FRandomStream Stream(AttemptSeed);
 	FBuilder Builder(Params, &Stream);
+	using NDHouseGen::GroundFloor;
+	using NDHouseGen::UpperFloor;
+	using NDHouseGen::BasementFloor;
 
 	const int32 RoomCount = Builder.Rand(Params.MinRooms, FMath::Max(Params.MinRooms, Params.MaxRooms));
 	const FNDRoomModuleDefinition* Entry = Entries[Builder.Rand(0, Entries.Num() - 1)];
-	// Entrada + camino de BedroomDepth salas hasta el dormitorio + al menos una sala más (objetivo).
-	const int32 MaxBedroomDepth = FMath::Min(Params.MaxBedroomDepth, RoomCount - 2);
-	if (MaxBedroomDepth < Params.MinBedroomDepth)
+
+	// Pisos extra: cada uno cuesta una escalera (dos salas, una por piso) y al menos una sala más.
+	constexpr int32 RoomsPerExtraFloor = 3;
+	bool bUpper = Stream.FRand() < Params.UpperFloorChance;
+	bool bBasement = Stream.FRand() < Params.BasementChance;
+	bool bBedroomUpstairs = bUpper && Stream.FRand() < Params.UpstairsBedroomChance;
+	auto GroundBudget = [&]() { return RoomCount - (bUpper ? RoomsPerExtraFloor : 0) - (bBasement ? RoomsPerExtraFloor : 0); };
+	// Planta baja mínima: entrada, distribuidor, objetivo y el dormitorio si no está arriba.
+	auto GroundMinimum = [&]() { return bBedroomUpstairs ? 3 : 4; };
+	if (bBasement && GroundBudget() < GroundMinimum())
+	{
+		bBasement = false;
+	}
+	if (bUpper && GroundBudget() < GroundMinimum())
+	{
+		bUpper = false;
+		bBedroomUpstairs = false;
+	}
+
+	// Camino de planta baja: acaba en el dormitorio o, si el dormitorio está arriba, en el arranque de la
+	// escalera; entonces el dormitorio queda dos puertas más allá (llegada de la escalera y dormitorio).
+	const int32 StairDoors = bBedroomUpstairs ? 2 : 0;
+	const int32 MinSpineDepth = FMath::Max(2, Params.MinBedroomDepth - StairDoors);
+	// Salas de planta baja que gasta el camino: el arranque de escalera ya va en el coste del piso extra.
+	auto SpineGroundRooms = [&](int32 Depth) { return bBedroomUpstairs ? Depth - 1 : Depth; };
+	int32 MaxSpineDepth = Params.MaxBedroomDepth - StairDoors;
+	while (MaxSpineDepth >= MinSpineDepth && 1 + SpineGroundRooms(MaxSpineDepth) + 1 > GroundBudget())
+	{
+		--MaxSpineDepth;
+	}
+	if (MaxSpineDepth < MinSpineDepth)
 	{
 		return false;
 	}
-	const int32 BedroomDepth = Builder.Rand(Params.MinBedroomDepth, MaxBedroomDepth);
-	// El objetivo cuelga de una sala del camino (distribuidor incluido, dormitorio no).
-	const int32 BranchDepth = Builder.Rand(1, BedroomDepth - 1);
+	const int32 SpineDepth = Builder.Rand(MinSpineDepth, MaxSpineDepth);
+	// El objetivo cuelga de una sala del camino de planta baja (distribuidor incluido, final del camino no).
+	const int32 BranchDepth = Builder.Rand(1, SpineDepth - 1);
 	const int32 MinObjectiveDepth = FMath::Max(Params.MinObjectiveDepth, BranchDepth + 1);
-	const int32 MaxObjectiveDepth = FMath::Min(Params.MaxObjectiveDepth, BranchDepth + RoomCount - BedroomDepth - 1);
+	const int32 MaxObjectiveDepth = FMath::Min(Params.MaxObjectiveDepth, BranchDepth + GroundBudget() - 1 - SpineGroundRooms(SpineDepth));
 	if (MaxObjectiveDepth < MinObjectiveDepth)
 	{
 		return false;
@@ -455,12 +590,23 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		return false;
 	}
 	TArray<int32> Spine = { Builder.Attach(0, *Hub) };
-	for (int32 Depth = 2; Depth < BedroomDepth && Spine.Last() != INDEX_NONE; ++Depth)
+	for (int32 Depth = 2; Depth < SpineDepth && Spine.Last() != INDEX_NONE; ++Depth)
 	{
 		Spine.Add(Builder.Attach(Spine.Last(), *Builder.Pick(Intermediates)));
 	}
-	Spine.Add(Builder.Attach(Spine.Last(), *Builder.Pick(Bedrooms)));
 	if (Spine.Contains(INDEX_NONE))
+	{
+		return false;
+	}
+	if (bBedroomUpstairs)
+	{
+		const int32 StairsTop = Builder.AttachStairs(Spine.Last(), true);
+		if (StairsTop == INDEX_NONE || Builder.Attach(StairsTop, *Builder.Pick(Bedrooms)) == INDEX_NONE)
+		{
+			return false;
+		}
+	}
+	else if (Builder.Attach(Spine.Last(), *Builder.Pick(Bedrooms)) == INDEX_NONE)
 	{
 		return false;
 	}
@@ -475,8 +621,43 @@ bool FNDHouseGenerator::TryGenerateAttempt(const FNDHouseGenParams& Params, int3
 		return false;
 	}
 
+	// Piso superior con el dormitorio abajo: escalera desde cualquier sala y una sala arriba.
+	if (bUpper && !bBedroomUpstairs)
+	{
+		const int32 StairsTop = Builder.AttachStairsAnywhere(GroundFloor, true);
+		if (StairsTop == INDEX_NONE || Builder.Attach(StairsTop, *Builder.Pick(UpperRooms)) == INDEX_NONE)
+		{
+			return false;
+		}
+	}
+	// Sótano: bajo la planta baja, sin salida a la calle; se baja por una escalera desde la planta baja.
+	if (bBasement)
+	{
+		const int32 StairsBottom = Builder.AttachStairsAnywhere(GroundFloor, false);
+		if (StairsBottom == INDEX_NONE || Builder.Attach(StairsBottom, *Builder.Pick(BasementRooms)) == INDEX_NONE)
+		{
+			return false;
+		}
+	}
+	// Casa grande con piso superior: segunda escalera, a ser posible unida arriba para cerrar un bucle entre pisos.
+	if (bUpper && Params.HouseSize == ENDHouseSize::Large && Builder.Rooms.Num() + 2 <= RoomCount)
+	{
+		const int32 SecondTop = Builder.AttachStairsAnywhere(GroundFloor, true);
+		if (SecondTop != INDEX_NONE && Builder.AddLoops(1, SecondTop) == 0 && Builder.Rooms.Num() < RoomCount)
+		{
+			Builder.Attach(SecondTop, *Builder.Pick(UpperRooms));
+		}
+	}
+
+	// Resto de salas: sobre todo en planta baja, algunas arriba y pocas en el sótano.
 	while (Builder.Rooms.Num() < RoomCount)
 	{
+		const float Roll = Stream.FRand();
+		const int32 Floor = bUpper && Roll < 0.4f ? UpperFloor : (bBasement && Roll > 0.85f ? BasementFloor : GroundFloor);
+		if (Floor != GroundFloor && Builder.AttachAnywhere(*Builder.Pick(Floor == UpperFloor ? UpperRooms : BasementRooms), Floor) != INDEX_NONE)
+		{
+			continue;
+		}
 		if (Builder.AttachAnywhere(*Builder.Pick(Fillers)) == INDEX_NONE)
 		{
 			return false;

@@ -57,6 +57,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen", meta = (ClampMin = "0", ClampMax = "17"))
 	int32 MaxRooms = 0;
 
+	/** Piso superior: Auto según el tamaño, o siempre / nunca. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDFloorOption UpperFloor = ENDFloorOption::Auto;
+
+	/** Sótano: Auto según el tamaño, o siempre / nunca. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
+	ENDFloorOption Basement = ENDFloorOption::Auto;
+
 	/** Lote de prueba (tamaño y fachada). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "NDE|HouseGen")
 	FNDHouseLotInfo LotInfo;
