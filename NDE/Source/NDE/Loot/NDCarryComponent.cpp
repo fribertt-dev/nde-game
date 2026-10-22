@@ -227,6 +227,15 @@ void UNDCarryComponent::ServerThrow_Implementation(FVector_NetQuantizeNormal Dir
 	HeldLoot->RemoveCarrier(GetPawn(), Velocity);
 }
 
+void UNDCarryComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (GetOwner() && GetOwner()->HasAuthority() && (EndPlayReason == EEndPlayReason::Destroyed || EndPlayReason == EEndPlayReason::RemovedFromWorld))
+	{
+		DropEverything();
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void UNDCarryComponent::DropEverything()
 {
 	if (!GetOwner() || !GetOwner()->HasAuthority())

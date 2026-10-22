@@ -102,19 +102,37 @@ void ANDLootActor::OnRep_Condition()
 	OnConditionChanged.Broadcast(this, Condition);
 }
 
+void ANDLootActor::OnRep_Carriers()
+{
+	UpdateCarryAttachment();
+}
+
 void ANDLootActor::ApplyStateLocally()
 {
+	// Mientras alguien lo lleva el servidor no manda su posición: cada máquina lo coloca sola.
+	if (HasAuthority())
+	{
+		SetReplicateMovement(LootState == ENDLootState::WorldLoose);
+	}
+
 	switch (LootState)
 	{
 	case ENDLootState::WorldLoose:
+		// Se suelta donde se ve ahora (sin saltos) y solo entonces vuelve la física.
+		if (GetAttachParentActor())
+		{
+			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
 		SetActorHiddenInGame(false);
 		Mesh->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 		Mesh->SetSimulatePhysics(true);
+		SetActorTickInterval(0.2f);
 		break;
 	case ENDLootState::Carried:
 		SetActorHiddenInGame(false);
 		Mesh->SetSimulatePhysics(false);
 		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		UpdateCarryAttachment();
 		break;
 	case ENDLootState::Pocketed:
 	case ENDLootState::Deposited:
@@ -123,6 +141,61 @@ void ANDLootActor::ApplyStateLocally()
 		SetActorHiddenInGame(true);
 		break;
 	}
+}
+
+void ANDLootActor::UpdateCarryAttachment()
+{
+	if (LootState != ENDLootState::Carried)
+	{
+		return;
+	}
+	// Un cuerpo con física ignora el acople: en los clientes puede seguir activa si el estado aún no llegó.
+	Mesh->SetSimulatePhysics(false);
+
+	int32 ValidCarriers = 0;
+	for (const APawn* Carrier : Carriers)
+	{
+		ValidCarriers += Carrier ? 1 : 0;
+	}
+	if (ValidCarriers >= 2)
+	{
+		// Bulto compartido: suelto y colocado entre los dos cada frame.
+		if (GetAttachParentActor())
+		{
+			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+		SetActorTickInterval(0.f);
+		FTransform Shared;
+		if (GetSharedCarryTransform(Shared))
+		{
+			SetActorLocationAndRotation(Shared.GetLocation(), Shared.GetRotation());
+		}
+		return;
+	}
+	SetActorTickInterval(0.2f);
+	AttachToLeader();
+}
+
+bool ANDLootActor::GetSharedCarryTransform(FTransform& OutTransform) const
+{
+	FVector Sum = FVector::ZeroVector;
+	int32 Count = 0;
+	for (const APawn* Carrier : Carriers)
+	{
+		if (Carrier)
+		{
+			Sum += Carrier->GetActorLocation();
+			++Count;
+		}
+	}
+	const APawn* Leader = GetLeadCarrier();
+	if (Count < 2 || !Leader)
+	{
+		return false;
+	}
+	// Entre los portadores, a la altura de las manos, mirando hacia donde mira el primero.
+	OutTransform = FTransform(FRotator(0.f, Leader->GetActorRotation().Yaw, 0.f), Sum / Count + FVector(0.f, 0.f, GetCarryOffset().Z));
+	return true;
 }
 
 bool ANDLootActor::IsCarriedBy(const APawn* Pawn) const
@@ -194,7 +267,10 @@ bool ANDLootActor::AddCarrier(APawn* Pawn)
 	{
 		LootState = ENDLootState::Carried;
 		ApplyStateLocally();
-		AttachToLeader();
+	}
+	else
+	{
+		UpdateCarryAttachment();
 	}
 	return true;
 }
@@ -206,7 +282,6 @@ void ANDLootActor::RemoveCarrier(APawn* Pawn, const FVector& ReleaseVelocity)
 		return;
 	}
 
-	const bool bWasLeader = GetLeadCarrier() == Pawn;
 	Carriers.Remove(Pawn);
 	if (UNDCarryComponent* Carry = Pawn ? Pawn->FindComponentByClass<UNDCarryComponent>() : nullptr)
 	{
@@ -221,9 +296,10 @@ void ANDLootActor::RemoveCarrier(APawn* Pawn, const FVector& ReleaseVelocity)
 		}
 		ReleaseToWorld(ReleaseVelocity);
 	}
-	else if (bWasLeader)
+	else
 	{
-		AttachToLeader();
+		// Queda uno: vuelve a ir acoplado a él.
+		UpdateCarryAttachment();
 	}
 }
 
@@ -329,6 +405,13 @@ void ANDLootActor::ReleaseToWorld(const FVector& ReleaseVelocity)
 void ANDLootActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// Bulto compartido: todas las máquinas lo colocan entre los portadores.
+	FTransform Shared;
+	if (LootState == ENDLootState::Carried && !GetAttachParentActor() && GetSharedCarryTransform(Shared))
+	{
+		SetActorLocationAndRotation(Shared.GetLocation(), Shared.GetRotation());
+	}
 
 	if (!HasAuthority() || LootState != ENDLootState::Carried || Carriers.Num() < 2)
 	{

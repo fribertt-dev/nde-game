@@ -78,6 +78,9 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	/** Si el jugador desaparece (se desconecta, muere) lo que llevaba cae donde estaba. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 protected:
 	UFUNCTION(Server, Reliable)
 	void ServerGrab(ANDLootActor* Target);

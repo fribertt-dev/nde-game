@@ -30,7 +30,15 @@ Comandos de depuración (consola, `~`):
 | `nde.Expedition.ToVan [espera]` | Servidor: lleva a todos a la camioneta. |
 | `nde.Expedition.SkipTime <s> [espera]` | Servidor: adelanta el reloj de la noche. |
 | `nde.Expedition.ToLoot [n] [espera]` | Servidor: pone al jugador mirando el objeto de botín número n. |
-| `nde.Expedition.Shot [espera]` | Captura 1280x720 en `Saved/Screenshots`. |
+| `nde.Expedition.Shot [espera]` | Captura 1280x720 en `Saved/Screenshots` (también en un cliente que entra después). |
+| `nde.Expedition.Grab <L16 o n> [jugador] [espera]` | Servidor: el jugador coge el objeto como con E. Dos veces con jugadores distintos = bulto compartido. |
+| `nde.Expedition.Drop [jugador] [lanzar 0/1] [espera]` | Servidor: suelta o lanza. |
+| `nde.Expedition.Walk [jugador] [cm] [espera]` | Servidor: el jugador avanza chocando con las paredes. |
+| `nde.Expedition.Meet [cm] [espera]` | Servidor: pone al jugador 0 delante del 1, mirándose. |
+
+### Botín en red
+
+Cada máquina coloca lo que se lleva a partir del estado replicado (`Carriers` y `LootState` de `ANDLootActor`): con un portador va acoplado delante de él; con dos o más, entre ellos. La física solo corre cuando el objeto está suelto, y mientras alguien lo lleva el servidor no manda su posición. Al soltarlo o lanzarlo cae desde donde se ve. Si el portador desaparece (desconexión, muerte), lo que llevaba cae donde estaba. `nde.Expedition.Status` muestra en cada máquina dónde está cada objeto llevado y sus portadores.
 
 ## Controles del personaje provisional
 

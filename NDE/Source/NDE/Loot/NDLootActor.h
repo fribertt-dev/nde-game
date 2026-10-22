@@ -41,6 +41,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "NDE|Loot")
 	int32 GetCarrierCount() const { return Carriers.Num(); }
 
+	/** Portador número Index (0 = el primero), o nullptr. */
+	APawn* GetCarrierAt(int32 Index) const { return Carriers.IsValidIndex(Index) ? Carriers[Index].Get() : nullptr; }
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Loot")
 	APawn* GetLeadCarrier() const { return Carriers.Num() > 0 ? Carriers[0].Get() : nullptr; }
 
@@ -106,7 +109,8 @@ protected:
 	UPROPERTY(ReplicatedUsing = OnRep_Condition)
 	ENDLootCondition Condition = ENDLootCondition::Intact;
 
-	UPROPERTY(Replicated)
+	/** Quién lo lleva (el primero manda). Cada máquina lo acopla a partir de esto (ver UpdateCarryAttachment). */
+	UPROPERTY(ReplicatedUsing = OnRep_Carriers)
 	TArray<TObjectPtr<APawn>> Carriers;
 
 	UFUNCTION()
@@ -119,11 +123,23 @@ protected:
 	void OnRep_Condition();
 
 	UFUNCTION()
+	void OnRep_Carriers();
+
+	UFUNCTION()
 	void HandleMeshHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
 	void ApplyDefinitionVisuals();
 	void ApplyStateLocally();
 	void AttachToLeader();
+
+	/**
+	 * Coloca el objeto según quién lo lleva, en servidor y clientes: con un portador va acoplado a él;
+	 * con dos o más va entre ellos (lo coloca el Tick). La física solo corre cuando está suelto.
+	 */
+	void UpdateCarryAttachment();
+
+	/** Punto medio de los portadores (bulto compartido). */
+	bool GetSharedCarryTransform(FTransform& OutTransform) const;
 	void ReleaseToWorld(const FVector& ReleaseVelocity);
 	void SetCondition(ENDLootCondition NewCondition);
 	FVector GetCarryOffset() const;
