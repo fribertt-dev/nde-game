@@ -190,6 +190,7 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 	// pero no es imposible. Si no hay, en el propio dormitorio.
 	TArray<int32> Candidates;
 	const int32 BedNode = Layout.PatrolNodes.IndexOfByPredicate([&Layout](const FNDHousePatrolNode& N) { return N.Room == Layout.BedroomRoom; });
+	const int32 BedFloor = Layout.Rooms.IsValidIndex(Layout.BedroomRoom) ? Layout.Rooms[Layout.BedroomRoom].Floor : 0;
 	auto IsGoodRoom = [&Layout](int32 Room)
 	{
 		return Layout.Rooms.IsValidIndex(Room) && Room != Layout.EntryRoom && Room != Layout.BedroomRoom
@@ -215,7 +216,17 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 			}
 		}
 		const FVector BedLocation = Layout.PatrolNodes.IsValidIndex(BedNode) ? Layout.PatrolNodes[BedNode].Location : FVector::ZeroVector;
-		Candidates.Sort([&Layout, &BedLocation](int32 A, int32 B) { return FVector::DistSquared(Layout.PatrolNodes[A].Location, BedLocation) < FVector::DistSquared(Layout.PatrolNodes[B].Location, BedLocation); });
+		// Primero las salas del piso de la cama (una sala justo debajo está cerca en línea recta, pero lejos andando).
+		Candidates.Sort([&Layout, &BedLocation, BedFloor](int32 A, int32 B)
+		{
+			const bool bSameA = Layout.Rooms[Layout.PatrolNodes[A].Room].Floor == BedFloor;
+			const bool bSameB = Layout.Rooms[Layout.PatrolNodes[B].Room].Floor == BedFloor;
+			if (bSameA != bSameB)
+			{
+				return bSameA;
+			}
+			return FVector::DistSquared2D(Layout.PatrolNodes[A].Location, BedLocation) < FVector::DistSquared2D(Layout.PatrolNodes[B].Location, BedLocation);
+		});
 	}
 	if (Layout.PatrolNodes.IsValidIndex(BedNode))
 	{
