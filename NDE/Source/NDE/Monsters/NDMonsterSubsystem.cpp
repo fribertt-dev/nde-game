@@ -206,18 +206,19 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 			}
 		}
 	}
-	if (Candidates.IsEmpty())
+	// Si en las vecinas no cabe fuera del paso, las demás salas (primero las del piso de la cama).
 	{
+		TArray<int32> Others;
 		for (int32 Node = 0; Node < Layout.PatrolNodes.Num(); ++Node)
 		{
-			if (IsGoodRoom(Layout.PatrolNodes[Node].Room))
+			if (IsGoodRoom(Layout.PatrolNodes[Node].Room) && !Candidates.Contains(Node))
 			{
-				Candidates.Add(Node);
+				Others.Add(Node);
 			}
 		}
 		const FVector BedLocation = Layout.PatrolNodes.IsValidIndex(BedNode) ? Layout.PatrolNodes[BedNode].Location : FVector::ZeroVector;
 		// Primero las salas del piso de la cama (una sala justo debajo está cerca en línea recta, pero lejos andando).
-		Candidates.Sort([&Layout, &BedLocation, BedFloor](int32 A, int32 B)
+		Others.Sort([&Layout, &BedLocation, BedFloor](int32 A, int32 B)
 		{
 			const bool bSameA = Layout.Rooms[Layout.PatrolNodes[A].Room].Floor == BedFloor;
 			const bool bSameB = Layout.Rooms[Layout.PatrolNodes[B].Room].Floor == BedFloor;
@@ -227,24 +228,71 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 			}
 			return FVector::DistSquared2D(Layout.PatrolNodes[A].Location, BedLocation) < FVector::DistSquared2D(Layout.PatrolNodes[B].Location, BedLocation);
 		});
+		Candidates.Append(Others);
 	}
 	if (Layout.PatrolNodes.IsValidIndex(BedNode))
 	{
 		Candidates.Add(BedNode);
 	}
 
-	// La jaula no tapa escondites: ni el mueble ni su punto de entrada.
-	TArray<FVector> HidingPoints;
+	// La jaula no estorba: lejos de escondites, de los nodos de patrulla, de las puertas y del paso entre
+	// cada puerta y el nodo de su sala (si no, encierra el nodo y la criatura no llega).
+	constexpr float KeepAway = 250.f;
+	TArray<FVector> KeepPoints;
+	TArray<TPair<FVector, FVector>> KeepPaths;
 	for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
 	{
-		HidingPoints.Add(LotToWorld.TransformPosition(Spot.LotTransform.GetLocation()));
-		HidingPoints.Add(LotToWorld.TransformPosition(Spot.EntryPoint));
+		KeepPoints.Add(LotToWorld.TransformPosition(Spot.LotTransform.GetLocation()));
+		KeepPoints.Add(LotToWorld.TransformPosition(Spot.EntryPoint));
 	}
-	auto IsAwayFromHiding = [&HidingPoints](const FVector& Spot)
+	for (const FNDHousePatrolNode& PatrolNode : Layout.PatrolNodes)
 	{
-		for (const FVector& Point : HidingPoints)
+		const FVector NodeLocation = LotToWorld.TransformPosition(PatrolNode.Location);
+		KeepPoints.Add(NodeLocation);
+		if (!Layout.Rooms.IsValidIndex(PatrolNode.Room))
 		{
-			if (FVector::Dist2D(Point, Spot) < 250.f && FMath::Abs(Point.Z - Spot.Z) < 300.f)
+			continue;
+		}
+		const FNDHouseLayoutRoom& NodeRoom = Layout.Rooms[PatrolNode.Room];
+		for (int32 Socket = 0; Socket < NodeRoom.Sockets.Num(); ++Socket)
+		{
+			if (NodeRoom.Sockets[Socket].IsOpen())
+			{
+				const FVector Door = LotToWorld.TransformPosition(Layout.GetSocketLocation(PatrolNode.Room, Socket));
+				KeepPoints.Add(Door);
+				KeepPaths.Emplace(Door, NodeLocation);
+			}
+		}
+	}
+	auto IsOutOfTheWay = [&KeepPoints, &KeepPaths](const FVector& Spot)
+	{
+		for (const FVector& Point : KeepPoints)
+		{
+			if (FVector::Dist2D(Point, Spot) < KeepAway && FMath::Abs(Point.Z - Spot.Z) < 300.f)
+			{
+				return false;
+			}
+		}
+		for (const TPair<FVector, FVector>& Path : KeepPaths)
+		{
+			if (FMath::Abs(Path.Key.Z - Spot.Z) < 300.f)
+			{
+				const FVector Closest = FMath::ClosestPointOnSegment(FVector(Spot.X, Spot.Y, 0.f), FVector(Path.Key.X, Path.Key.Y, 0.f), FVector(Path.Value.X, Path.Value.Y, 0.f));
+				if (FVector::Dist2D(Closest, Spot) < KeepAway)
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+	// Toda la jaula dentro de la misma sala (con celdas de 8 m cabe de sobra en una de 1x1).
+	auto IsInsideRoom = [&Layout, &LotToWorld](const FVector& Spot, int32 Room)
+	{
+		const float Reach = 85.f + 40.f; // medio lado de la jaula y los barrotes
+		for (const FVector& Offset : { FVector::ZeroVector, FVector(Reach, Reach, 0.f), FVector(Reach, -Reach, 0.f), FVector(-Reach, Reach, 0.f), FVector(-Reach, -Reach, 0.f) })
+		{
+			if (Layout.FindRoomAt(LotToWorld.InverseTransformPosition(Spot + Offset) + FVector(0.f, 0.f, 50.f)) != Room)
 			{
 				return false;
 			}
@@ -252,24 +300,26 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 		return true;
 	};
 
-	// En cada sala candidata, el primer hueco libre en espiral alrededor de su centro.
+	// En cada sala candidata, el primer hueco libre en espiral alrededor de su nodo.
 	for (int32 Node : Candidates)
 	{
+		const int32 Room = Layout.PatrolNodes[Node].Room;
 		const FVector Center = LotToWorld.TransformPosition(Layout.PatrolNodes[Node].Location);
-		for (int32 Ring = 0; Ring <= 3; ++Ring)
+		for (int32 Ring = 4; Ring <= 8; ++Ring)
 		{
-			const int32 Steps = Ring == 0 ? 1 : 8;
+			const int32 Steps = Ring * 6;
 			for (int32 Step = 0; Step < Steps; ++Step)
 			{
 				const float Angle = 2.f * PI * Step / Steps;
-				const FVector Candidate = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * (Ring * 90.f);
-				if (IsAwayFromHiding(Candidate) && IsSpotFree(Candidate))
+				const FVector Candidate = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * (Ring * 60.f);
+				if (IsOutOfTheWay(Candidate) && IsInsideRoom(Candidate, Room) && IsSpotFree(Candidate))
 				{
 					return Candidate;
 				}
 			}
 		}
 	}
+	UE_LOG(LogNDMonster, Warning, TEXT("Sin hueco para la jaula fuera del paso: va junto a la cama."));
 	// Último recurso: junto a la cama.
 	const TArray<FTransform> Anchors = Lot->GetMarkerTransforms(ENDRoomMarkerType::MonsterAnchor);
 	return Anchors.IsEmpty() ? Lot->GetActorLocation() : Anchors[0].GetLocation() + Anchors[0].GetRotation().GetForwardVector() * 300.f;
