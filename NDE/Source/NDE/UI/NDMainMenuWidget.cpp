@@ -186,9 +186,9 @@ void UNDMainMenuWidget::BuildFallbackLayout()
 		const UNDLoadingScreenSubsystem* Loading = GI ? GI->GetSubsystem<UNDLoadingScreenSubsystem>() : nullptr;
 		Background = Loading ? Loading->GetRandomImage() : nullptr;
 	}
-	UBorder* Night = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Night"));
-	Night->SetBrushColor(NDUINativeStyle::Night);
-	UOverlaySlot* NightSlot = Root->AddChildToOverlay(Night);
+	UBorder* NightBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Night"));
+	NightBorder->SetBrushColor(Night);
+	UOverlaySlot* NightSlot = Root->AddChildToOverlay(NightBorder);
 	NightSlot->SetHorizontalAlignment(HAlign_Fill);
 	NightSlot->SetVerticalAlignment(VAlign_Fill);
 	if (Background)
@@ -204,22 +204,22 @@ void UNDMainMenuWidget::BuildFallbackLayout()
 	}
 
 	// Columna oscura a la izquierda con el título y los botones.
-	UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel"));
-	Panel->SetBrushColor(NDUINativeStyle::Panel);
-	Panel->SetPadding(FMargin(72.f, 0.f, 56.f, 0.f));
-	Panel->SetVerticalAlignment(VAlign_Center);
-	UOverlaySlot* PanelSlot = Root->AddChildToOverlay(Panel);
+	UBorder* PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel"));
+	PanelBorder->SetBrushColor(Panel);
+	PanelBorder->SetPadding(FMargin(72.f, 0.f, 56.f, 0.f));
+	PanelBorder->SetVerticalAlignment(VAlign_Center);
+	UOverlaySlot* PanelSlot = Root->AddChildToOverlay(PanelBorder);
 	PanelSlot->SetHorizontalAlignment(HAlign_Left);
 	PanelSlot->SetVerticalAlignment(VAlign_Fill);
 
 	USizeBox* PanelWidth = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("PanelWidth"));
 	PanelWidth->SetWidthOverride(460.f);
-	Panel->SetContent(PanelWidth);
+	PanelBorder->SetContent(PanelWidth);
 
 	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Botones"));
 	PanelWidth->SetContent(Box);
 
-	UTextBlock* Title = MakeText(*WidgetTree, TEXT("Titulo"), NSLOCTEXT("NDE", "MenuTitle", "No Despiertes Eso"), 46, NDUINativeStyle::Text, TEXT("Bold"));
+	UTextBlock* Title = MakeText(*WidgetTree, TEXT("Titulo"), NSLOCTEXT("NDE", "MenuTitle", "No Despiertes Eso"), 46, Text, TEXT("Bold"));
 	Title->SetAutoWrapText(true);
 	Box->AddChildToVerticalBox(Title)->SetPadding(FMargin(0.f, 0.f, 0.f, 4.f));
 	UTextBlock* Subtitle = MakeText(*WidgetTree, TEXT("Subtitulo"), NSLOCTEXT("NDE", "MenuSubtitle", "Una noche con Los Desvelados"), 18, Amber, TEXT("Italic"));
