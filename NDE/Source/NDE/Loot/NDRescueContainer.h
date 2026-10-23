@@ -32,6 +32,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Rescue")
 	TObjectPtr<UStaticMeshComponent> Lid;
 
+	/** El tarro usa la malla de arte (SM_Capture_Jar), que ya trae la tapa. */
+	UPROPERTY()
+	bool bHasJarArt = false;
+
 	/** Zona donde hay que quedarse para abrirlo. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Rescue")
 	TObjectPtr<USphereComponent> OpenZone;

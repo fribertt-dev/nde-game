@@ -44,6 +44,17 @@ ANDRescueContainer::ANDRescueContainer()
 	Lid->SetRelativeScale3D(FVector(0.66f, 0.66f, 0.08f));
 	Lid->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// Arte: SM_Capture_Jar (80 x 77 x 100 cm, con tapa) en lugar del cilindro y la tapa greybox.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> JarFinder(TEXT("/Game/_NDE_/Props/Hazards/SM_Capture_Jar/SM_Capture_Jar.SM_Capture_Jar"));
+	if (JarFinder.Succeeded())
+	{
+		Jar->SetStaticMesh(JarFinder.Object);
+		Jar->SetRelativeLocation(FVector::ZeroVector);
+		Jar->SetRelativeScale3D(FVector(0.8f));
+		Lid->SetVisibility(false);
+		bHasJarArt = true;
+	}
+
 	OpenZone = CreateDefaultSubobject<USphereComponent>(TEXT("OpenZone"));
 	OpenZone->SetupAttachment(Root);
 	OpenZone->SetSphereRadius(120.f);
@@ -69,8 +80,11 @@ void ANDRescueContainer::OnConstruction(const FTransform& Transform)
 			Mesh->SetMaterial(0, Material);
 		}
 	};
-	Paint(Jar, FLinearColor(0.55f, 0.75f, 0.85f));
-	Paint(Lid, FLinearColor(0.8f, 0.6f, 0.15f));
+	if (!bHasJarArt)
+	{
+		Paint(Jar, FLinearColor(0.55f, 0.75f, 0.85f));
+		Paint(Lid, FLinearColor(0.8f, 0.6f, 0.15f));
+	}
 }
 
 void ANDRescueContainer::BeginPlay()
@@ -134,5 +148,5 @@ void ANDRescueContainer::OnRep_Opened()
 void ANDRescueContainer::ApplyOpenedVisuals()
 {
 	Jar->SetVisibility(!bOpened);
-	Lid->SetVisibility(!bOpened);
+	Lid->SetVisibility(!bOpened && !bHasJarArt);
 }

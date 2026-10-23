@@ -540,6 +540,7 @@ void ANDHouseLot::BuildFromManifest()
 	}
 
 	BuildExterior(UsedCells);
+	BuildHazardArt();
 	for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
 	{
 		if (Marker.Type == ENDRoomMarkerType::Extraction)
@@ -922,5 +923,61 @@ void ANDHouseLot::BuildExterior(const TSet<FIntPoint>& UsedCells)
 				AddLotArt(PropPath(TEXT("Street"), TEXT("StreetLamp")), FTransform(CurbYaw, Center + ToRoad * (Cell * 0.5f - 150.f)));
 			}
 		}
+	}
+}
+
+void ANDHouseLot::BuildHazardArt()
+{
+	// Peligros con arte (solo se ven): tabla que cruje en el suelo, fila de botellas frágiles y juguete que chilla.
+	auto PropPath = [](const TCHAR* Folder, const TCHAR* Name)
+	{
+		return FString::Printf(TEXT("/Game/_NDE_/Props/%s/SM_%s/SM_%s.SM_%s"), Folder, Name, Name, Name);
+	};
+	const float Cell = NDHouseGen::CellSize;
+	const float Tile = NDHouseGen::ArtTileSize;
+	for (const FNDHouseHazard& Hazard : Layout.Hazards)
+	{
+		if (!Layout.Rooms.IsValidIndex(Hazard.Room) || Layout.Rooms[Hazard.Room].Floor > MaxVisibleFloor)
+		{
+			continue;
+		}
+		const FVector Location = Hazard.LotTransform.GetLocation();
+		switch (Hazard.Type)
+		{
+		case ENDHouseHazardType::CreakyFloor:
+		{
+			// La baldosa de 400 que contiene el peligro, un poco por encima del suelo de la sala.
+			const FIntPoint LotCell(FMath::FloorToInt(Location.X / Cell + Layout.Lot.SizeCells.X * 0.5f), FMath::FloorToInt(Location.Y / Cell + Layout.Lot.SizeCells.Y * 0.5f));
+			const FVector CellMin = Layout.Lot.GetCellCenter(LotCell) - FVector(Cell * 0.5f, Cell * 0.5f, 0.f);
+			const float TileX = CellMin.X + FMath::FloorToFloat((Location.X - CellMin.X) / Tile) * Tile;
+			const float TileY = CellMin.Y + FMath::FloorToFloat((Location.Y - CellMin.Y) / Tile) * Tile;
+			AddLotArt(PropPath(TEXT("Structure"), TEXT("Floor_Creaky_400")), FTransform(FVector(TileX, TileY + Tile, Location.Z + 0.5f)));
+			break;
+		}
+		case ENDHouseHazardType::FragileItem:
+			AddLotArt(PropPath(TEXT("Hazards"), TEXT("Bottles_Row")), Hazard.LotTransform);
+			break;
+		default:
+			AddLotArt(PropPath(TEXT("Hazards"), TEXT("Toy_Squeaky")), Hazard.LotTransform);
+			break;
+		}
+	}
+
+	// Herramientas de la banda junto a la zona de depósito de la camioneta.
+	static const TCHAR* Tools[] = { TEXT("Tool_FoldingCart"), TEXT("Tool_Flashlight"), TEXT("Tool_Lockpick_A"), TEXT("Tool_Lockpick_B"), TEXT("Tool_Lockpick_C"),
+		TEXT("Tool_Lockpick_D"), TEXT("Tool_SilentFoam"), TEXT("Tool_SnoreMeter"), TEXT("Tool_WindupMouse") };
+	for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
+	{
+		if (Marker.Type != ENDRoomMarkerType::Extraction)
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < UE_ARRAY_COUNT(Tools); ++Index)
+		{
+			const float Angle = FMath::DegreesToRadians(200.f + Index * 18.f);
+			const FVector Offset(FMath::Cos(Angle) * 180.f, FMath::Sin(Angle) * 180.f, 0.f);
+			AddLotArt(PropPath(TEXT("Tools"), Tools[Index]), FTransform(FRotator(0.f, Index * 40.f, 0.f), Marker.LotTransform.TransformPosition(Offset)));
+		}
+		break;
 	}
 }
