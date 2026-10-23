@@ -15,6 +15,7 @@
 #include "Monsters/NDMonsterCage.h"
 #include "Monsters/NDMonsterCharacter.h"
 #include "Monsters/NDMonsterSubsystem.h"
+#include "Monsters/NDMonsterUtils.h"
 #include "TimerManager.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNDMonsterDebug, Log, All);
@@ -138,6 +139,7 @@ namespace NDMonsterDebug
 		Run(World, Args, 2, [Loudness, Player](UWorld* Server)
 		{
 			APawn* Pawn = GetPlayerPawn(Server, Player);
+			UNDMonsterSubsystem* Monsters = UNDMonsterSubsystem::Get(Server);
 			if (!Pawn)
 			{
 				UE_LOG(LogNDMonsterDebug, Warning, TEXT("No hay jugador %d."), Player);
@@ -147,7 +149,13 @@ namespace NDMonsterDebug
 			{
 				Brain.HearNoise(Pawn->GetActorLocation(), Loudness, Pawn, TEXT("NDE.Noise.Debug"));
 			});
-			UE_LOG(LogNDMonsterDebug, Display, TEXT("Ruido %.0f en %s."), Loudness, *Pawn->GetActorLocation().ToString());
+			for (ANDMonsterCharacter* Monster : Monsters ? Monsters->GetMonsters() : TArray<ANDMonsterCharacter*>())
+			{
+				const float Transmission = NDMonsterUtils::GetSoundTransmission(Server, Pawn->GetActorLocation(), Monster->GetActorLocation());
+				UE_LOG(LogNDMonsterDebug, Display, TEXT("Ruido %.0f en %s: a %.0f cm de %s, paso por puertas %.2f%s."), Loudness, *Pawn->GetActorLocation().ToString(),
+					FVector::Dist(Pawn->GetActorLocation(), Monster->GetActorLocation()), *Monster->GetName(), Transmission,
+					Transmission <= 0.f ? TEXT(" (no llega: el jugador o la criatura está fuera de la casa o sin camino)") : TEXT(""));
+			}
 		});
 	}
 
@@ -165,7 +173,21 @@ namespace NDMonsterDebug
 				return;
 			}
 			const FTransform Bed = All[0]->GetBedTransform();
-			const FVector Spot = Bed.GetLocation() + Bed.GetRotation().GetForwardVector() * 450.f + FVector(0.f, 0.f, Pawn->GetSimpleCollisionHalfHeight() + 10.f);
+			// Hacia el centro del dormitorio (la cama puede mirar a una pared y delante quedaría fuera de la casa).
+			FVector Direction = Bed.GetRotation().GetForwardVector();
+			float Distance = 450.f;
+			const ANDHouseLot* Lot = ANDHouseLot::FindLot(Server);
+			if (Lot && Lot->IsHouseBuilt() && Lot->GetLayout().Rooms.IsValidIndex(Lot->GetLayout().BedroomRoom))
+			{
+				const FVector RoomCenter = Lot->GetLotToWorld().TransformPosition(Lot->GetLayout().GetRoomCenter(Lot->GetLayout().BedroomRoom));
+				const FVector ToCenter = RoomCenter - Bed.GetLocation();
+				if (ToCenter.SizeSquared2D() > 100.f * 100.f)
+				{
+					Direction = ToCenter.GetSafeNormal2D();
+					Distance = FMath::Min(Distance, static_cast<float>(ToCenter.Size2D()) + 100.f);
+				}
+			}
+			const FVector Spot = Bed.GetLocation() + Direction * Distance + FVector(0.f, 0.f, Pawn->GetSimpleCollisionHalfHeight() + 10.f);
 			Pawn->SetActorLocation(Spot, false, nullptr, ETeleportType::TeleportPhysics);
 			if (AController* Controller = Pawn->GetController())
 			{
