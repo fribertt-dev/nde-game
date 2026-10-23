@@ -71,7 +71,10 @@ void UNDNoiseEmitterComponent::EmitNoise(FVector Location, float Loudness, FName
 	if (NDNoise::CVarDebug.GetValueOnGameThread() != 0)
 	{
 		const FColor Color = Tag == LandTag ? FColor::Orange : (Final >= SprintStepLoudness ? FColor::Red : FColor::Yellow);
-		DrawDebugCircle(GetWorld(), Location + FVector(0.f, 0.f, 2.f), Range, 32, Color, false, 0.6f, 0, 1.5f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		// En primer plano (se ve a través de paredes y muebles), con el punto de origen marcado.
+		const FVector Center = Location + FVector(0.f, 0.f, 5.f);
+		DrawDebugCircle(GetWorld(), Center, Range, 48, Color, false, 2.f, SDPG_Foreground, 4.f, FVector(1, 0, 0), FVector(0, 1, 0), false);
+		DrawDebugSphere(GetWorld(), Center, 12.f, 8, Color, false, 2.f, SDPG_Foreground, 2.f);
 	}
 }
 
