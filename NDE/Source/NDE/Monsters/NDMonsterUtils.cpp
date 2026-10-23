@@ -88,22 +88,20 @@ namespace NDMonsterUtils
 		{
 			return 0.f;
 		}
+		// El personaje ya cuenta postura, movimiento, escondite y linterna (UNDHidingComponent).
 		double FromCharacter = 1.0;
-		float Visibility = 1.f;
 		if (CallComponentGetter(Pawn, TEXT("GetVisibilityFactor"), FromCharacter))
 		{
-			Visibility = static_cast<float>(FromCharacter);
+			return FMath::Clamp(static_cast<float>(FromCharacter), 0.f, 1.5f);
 		}
-		else if (const ACharacter* Character = Cast<ACharacter>(Pawn))
+		// Sin ese componente: agachado se ve menos; correr y la linterna delatan (GDD 9.5).
+		float Visibility = 1.f;
+		if (const ACharacter* Character = Cast<ACharacter>(Pawn))
 		{
 			if (Character->bIsCrouched)
 			{
 				Visibility = Def.CrouchedVisibility;
 			}
-		}
-		if (Visibility <= 0.f)
-		{
-			return 0.f;
 		}
 		if (const ANDCharacter* Desvelado = Cast<ANDCharacter>(Pawn))
 		{
@@ -111,7 +109,6 @@ namespace NDMonsterUtils
 			{
 				Visibility *= 1.25f;
 			}
-			// La linterna encendida delata (GDD 9.5).
 			if (Desvelado->Flashlight && Desvelado->Flashlight->IsVisible())
 			{
 				Visibility *= 1.5f;
