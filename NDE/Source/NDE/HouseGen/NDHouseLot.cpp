@@ -13,6 +13,8 @@
 #include "EngineUtils.h"
 #include "Containers/Ticker.h"
 #include "Engine/Engine.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenDebug.h"
 #include "HouseGen/NDHouseFurniture.h"
@@ -124,12 +126,18 @@ namespace NDHouseLot
 		const float Yaw = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
 		// Con "pie" se queda a la altura del jugador, como lo ve en la partida.
 		const bool bEyeLevel = Args.Num() > 2 && Args[2].Equals(TEXT("pie"), ESearchCase::IgnoreCase);
-		const FRotator View(bEyeLevel ? 8.f : -55.f, Yaw, 0.f);
+		const FRotator View(bEyeLevel ? 8.f : -40.f, Yaw, 0.f);
 		const FVector Center = Lot->GetLotToWorld().TransformPosition(Layout.GetRoomCenter(RoomIndex));
 		// Detrás del centro y cerca del techo, para ver la sala entera (o a ras de suelo).
-		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * (NDHouseGen::CellSize * 0.35f)
-			+ FVector(0.f, 0.f, bEyeLevel ? 60.f : NDHouseGen::WallHeight - 120.f);
-		Pawn->TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
+		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * (NDHouseGen::CellSize * (bEyeLevel ? 0.35f : 0.45f))
+			+ FVector(0.f, 0.f, bEyeLevel ? 60.f : NDHouseGen::WallHeight - 60.f);
+		// Como fantasma (volando y sin colisión), para que los muebles y la escalera no lo empujen fuera de la vista.
+		if (ACharacter* Character = Cast<ACharacter>(Pawn))
+		{
+			Character->GetCharacterMovement()->SetMovementMode(MOVE_Flying);
+			Character->SetActorEnableCollision(false);
+		}
+		Pawn->SetActorLocationAndRotation(Location, FRotator(0.f, Yaw, 0.f));
 		PC->SetControlRotation(View);
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.ViewRoom: sala %d %s (%s), piso %d"), RoomIndex, *NDHouseGen::GetRoomTypeName(Layout.Rooms[RoomIndex].Def->RoomType),
 			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
@@ -173,7 +181,7 @@ namespace NDHouseLot
 		}));
 
 	FAutoConsoleCommandWithWorldAndArgs ViewRoomCommand(TEXT("nde.HouseGen.ViewRoom"),
-		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw]"),
+		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles (queda como fantasma: volando y sin colisión). Con pie, a la altura del jugador. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw] [pie]"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ViewRoom));
 
 	void DebugPoints(const TArray<FString>& Args, UWorld* World)
@@ -521,7 +529,7 @@ void ANDHouseLot::BuildFromManifest()
 								FTransform(RoofYaw, EdgeStart + Tangent * Along));
 						}
 					}
-					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Room.Floor < NDHouseGen::GroundFloor ? ENDWallStyle::Basement : Pick < 4 ? ENDWallStyle::Window : Pick < 7 ? ENDWallStyle::FacadeWindow : ENDWallStyle::Facade);
+					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Room.Floor < NDHouseGen::GroundFloor ? ENDWallStyle::Basement : Pick < 6 ? ENDWallStyle::Window : ENDWallStyle::Facade);
 				}
 			}
 		}

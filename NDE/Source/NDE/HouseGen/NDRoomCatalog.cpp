@@ -53,6 +53,9 @@ namespace NDRoomCatalog
 		constexpr float W = C - 2.f * NDHouseGen::WallThickness;
 		constexpr float Lane = (C - 3.f * NDHouseGen::WallThickness) * 0.5f;
 		constexpr float LaneY = (NDHouseGen::WallThickness + Lane) * 0.5f;
+		// Grosor del descansillo de arriba y alto de la barandilla.
+		constexpr float Slab = NDHouseGen::WallThickness;
+		constexpr float Rail = 100.f;
 
 		{
 			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Entry_A"), ENDRoomType::R01_Entry, 1, 1);
@@ -275,33 +278,39 @@ namespace NDRoomCatalog
 			Segment.Width = Width;
 			Segment.Height = Height;
 		};
+		// Escaleras con la proporción de la malla de arte (SM_Stairs_Giant sube 600 en 800): los tramos suben 600 en 800
+		// (recta) o 300 en 400 (U y L). Arriba, un descansillo lleva del final del tramo a la puerta; el resto es hueco.
 		{
-			// Recta 2x1: una rampa de punta a punta; se sale arriba por el otro extremo (N1). Abajo, N1 es un paso
-			// bajo el final de la rampa: ahí va la sala que sostiene la llegada si hace falta (no pasa la criatura).
+			// Recta 2x1: suelo hasta el tramo, tramo de 8 m en el centro y descansillo arriba hasta la salida (N1).
+			// Abajo, N1 queda bajo el descansillo (paso para la sala que sostiene la llegada).
 			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_Stairs_Bottom"), TEXT("D01_Stairs_Top"), 2, 1);
 			FNDRoomModuleDefinition& Bottom = Stairs.Key;
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			AddSocket(Bottom, TEXT("N1"), 1, 0, EDir::North);
 			Bottom.DoorSockets.Last().bLowClearance = true;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::West, ESock::Stairs);
-			AddSegment(Bottom, FVector(-C, 0.f, 0.f), FVector(C, 0.f, H), W);
+			AddSegment(Bottom, FVector(-C * 0.5f, 0.f, 0.f), FVector(C * 0.5f, 0.f, H), W);
+			AddSegment(Stairs.Value, FVector(C * 0.5f, 0.f, -Slab), FVector(C, 0.f, -Slab), W, Slab);
 			AddSocket(Stairs.Value, TEXT("N1"), 1, 0, EDir::North);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);
 			Modules.Add(Stairs.Value);
 		}
 		{
-			// En U 2x1: dos carriles (media celda cada uno) separados por un murete. Se sube por el carril -Y hasta el rellano
-			// del fondo y se vuelve por el carril +Y: la llegada queda sobre la entrada, encima de la sala de la que sale.
+			// En U 2x1: se sube por el carril -Y hasta el rellano macizo del fondo y se vuelve por el carril +Y; arriba
+			// se sale por el descansillo del carril +Y, encima de la entrada. Murete entre carriles y barandilla en el
+			// borde del descansillo.
 			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_StairsU_Bottom"), TEXT("D01_StairsU_Top"), 2, 1);
 			FNDRoomModuleDefinition& Bottom = Stairs.Key;
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			Bottom.DoorSockets.Last().Offset = LaneY;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-C, -LaneY, 0.f), FVector(C * 0.5f, -LaneY, Half), Lane);
-			AddSegment(Bottom, FVector(C * 0.5f, 0.f, Half), FVector(C, 0.f, Half), W);
-			AddSegment(Bottom, FVector(C * 0.5f, LaneY, Half), FVector(-C, LaneY, H), Lane);
-			AddSegment(Bottom, FVector(-C, 0.f, 0.f), FVector(C * 0.5f, 0.f, 0.f), NDHouseGen::WallThickness, H * 1.25f);
+			AddSegment(Bottom, FVector(-C * 0.5f, -LaneY, 0.f), FVector(0.f, -LaneY, Half), Lane);
+			AddSegment(Bottom, FVector(0.f, 0.f, 0.f), FVector(C, 0.f, 0.f), W, Half);
+			AddSegment(Bottom, FVector(0.f, LaneY, Half), FVector(-C * 0.5f, LaneY, H), Lane);
+			AddSegment(Bottom, FVector(-C * 0.5f, 0.f, 0.f), FVector(0.f, 0.f, 0.f), NDHouseGen::WallThickness, H + Rail);
+			AddSegment(Stairs.Value, FVector(-C, LaneY, -Slab), FVector(-C * 0.5f, LaneY, -Slab), Lane, Slab);
+			AddSegment(Stairs.Value, FVector(-C, 0.f, 0.f), FVector(-C * 0.5f, 0.f, 0.f), NDHouseGen::WallThickness, Rail);
 			AddSocket(Stairs.Value, TEXT("S0"), 0, 0, EDir::South);
 			Stairs.Value.DoorSockets.Last().Offset = -LaneY;
 			AddSocket(Stairs.Value, TEXT("Down"), 1, 0, EDir::North, ESock::Stairs);
@@ -309,16 +318,18 @@ namespace NDRoomCatalog
 			Modules.Add(Stairs.Value);
 		}
 		{
-			// En L (2x2 sin la celda 0,1): tramo por X, rellano y tramo por Y; se sale arriba por el lado de la celda 1,1.
+			// En L (2x2 sin la celda 0,1): tramo por X, rellano macizo en la celda 1,0 y tramo por Y; arriba se sale
+			// por el descansillo de la celda 1,1.
 			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_StairsL_Bottom"), TEXT("D01_StairsL_Top"), 2, 2);
 			FNDRoomModuleDefinition& Bottom = Stairs.Key;
 			Bottom.BlockedCells = { FIntPoint(0, 1) };
 			Stairs.Value.BlockedCells = { FIntPoint(0, 1) };
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-C, -C * 0.5f, 0.f), FVector(0.f, -C * 0.5f, Half), W);
-			AddSegment(Bottom, FVector(0.f, -C * 0.5f, Half), FVector(C, -C * 0.5f, Half), W);
-			AddSegment(Bottom, FVector(C * 0.5f, 0.f, Half), FVector(C * 0.5f, C, H), W);
+			AddSegment(Bottom, FVector(-C * 0.5f, -C * 0.5f, 0.f), FVector(0.f, -C * 0.5f, Half), W);
+			AddSegment(Bottom, FVector(0.f, -C * 0.5f, 0.f), FVector(C, -C * 0.5f, 0.f), W, Half);
+			AddSegment(Bottom, FVector(C * 0.5f, 0.f, Half), FVector(C * 0.5f, C * 0.5f, H), W);
+			AddSegment(Stairs.Value, FVector(C * 0.5f, C * 0.5f, -Slab), FVector(C * 0.5f, C, -Slab), W, Slab);
 			AddSocket(Stairs.Value, TEXT("E11"), 1, 1, EDir::East);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);
