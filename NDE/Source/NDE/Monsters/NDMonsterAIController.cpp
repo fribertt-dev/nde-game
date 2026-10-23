@@ -1068,6 +1068,13 @@ void ANDMonsterAIController::OnMoveCompleted(FAIRequestID RequestID, const FPath
 
 void ANDMonsterAIController::UpdateStuck()
 {
+	// Si el motor ya no mueve a la criatura pero no avisó (petición sustituida o perdida), lo damos por terminado.
+	if (bMoving && GetMoveStatus() == EPathFollowingStatus::Idle)
+	{
+		bMoving = false;
+		bChaseFollowingActor = false;
+		bMoveFailed = true;
+	}
 	if (!bMoving)
 	{
 		StuckCheckLocation = Monster->GetActorLocation();
@@ -1198,9 +1205,9 @@ FString ANDMonsterAIController::GetDebugStatus() const
 		return TEXT("sin criatura");
 	}
 	const APawn* Target = ChaseTarget.Get();
-	return FString::Printf(TEXT("%s | %s | sospecha %.0f | vista %.2f | ronquido %s | objetivo %s | moviendo %d | amanecer %d"),
+	return FString::Printf(TEXT("%s | %s | sospecha %.0f | vista %.2f | ronquido %s | objetivo %s | moviendo %d (motor %s, %.0f cm/s) | amanecer %d"),
 		*Monster->GetName(), *NDMonsterBrain::GetStateLabel(State), Suspicion, Monster->GetSightAlert(),
-		Monster->IsSnoreMaskActive() ? TEXT("SI") : TEXT("no"), Target ? *Target->GetName() : TEXT("-"), bMoving ? 1 : 0, bDawn ? 1 : 0);
+		Monster->IsSnoreMaskActive() ? TEXT("SI") : TEXT("no"), Target ? *Target->GetName() : TEXT("-"), bMoving ? 1 : 0, *UEnum::GetValueAsString(GetMoveStatus()), Monster->GetVelocity().Size2D(), bDawn ? 1 : 0);
 }
 
 void ANDMonsterAIController::DrawDebug() const
