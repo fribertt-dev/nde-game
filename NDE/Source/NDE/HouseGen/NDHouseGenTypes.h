@@ -32,7 +32,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.5");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.6");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */

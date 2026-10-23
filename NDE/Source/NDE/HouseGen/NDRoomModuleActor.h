@@ -12,12 +12,11 @@ class UMaterialInterface;
 class UPointLightComponent;
 class UStaticMesh;
 
-/** Pared de un borde de sala: interior, o exterior con fachada (lisa, con ventana de fachada o con ventana real). */
+/** Pared de un borde de sala: interior, o exterior (lisa o con ventana real). Por fuera se ve la misma pared que por dentro. */
 enum class ENDWallStyle : uint8
 {
 	Interior,
 	Facade,
-	FacadeWindow,
 	Window,
 	/** Sótano: pared contra la tierra, con ventanuco bajo el techo. */
 	Basement
@@ -100,7 +99,6 @@ protected:
 	/** Sala que se está construyendo y adornos que van una sola vez por sala. */
 	ENDRoomType CurrentRoomType = ENDRoomType::R03_LivingRoom;
 	bool bGratePlaced = false;
-	bool bFrontDoorPlaced = false;
 
 private:
 	void ClearGreybox();
