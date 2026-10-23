@@ -5,6 +5,7 @@
 #include "UI/Widgets/NDUIBaseScreen.h"
 #include "NDUIExpeditionHUD.generated.h"
 
+class UBorder;
 class UProgressBar;
 class UTextBlock;
 class UVerticalBox;
@@ -12,7 +13,8 @@ class UVerticalBox;
 /**
  * HUD de la expedición (UI.Screen.ExpeditionHUD, GDD 32.6), hecho en C++ hasta tener su WBP.
  * Arriba en el centro, el reloj de la noche con su fase; arriba a la izquierda, el contrato, el
- * objetivo y el botín asegurado; abajo a la derecha, manos y mochila; en medio, los avisos.
+ * objetivo y el botín asegurado; abajo a la derecha, manos y mochila; en medio, la retícula con
+ * el texto de interacción del personaje, y encima los avisos. Abajo a la izquierda, las teclas.
  * Solo lee view models del proveedor de datos. Al cerrarse la noche abre UI.Screen.Results.
  */
 UCLASS()
@@ -42,6 +44,9 @@ protected:
 	void ShowNextToast();
 	void HideToast();
 
+	/** Texto de interacción del personaje ("E  Coger...") y si está escondido. */
+	void UpdateInteraction();
+
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> PhaseText;
 
@@ -69,10 +74,20 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ToastText;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UBorder> ToastPanel;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> PromptText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> HiddenText;
+
 	FNDNightClockVM Clock;
 	TArray<FNDUIToast> PendingToasts;
 	bool bShowingToast = false;
 	bool bResultsShown = false;
 	FTimerHandle ClockTimer;
 	FTimerHandle ToastTimer;
+	FTimerHandle InteractionTimer;
 };
