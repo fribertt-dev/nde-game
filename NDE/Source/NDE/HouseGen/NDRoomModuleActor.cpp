@@ -314,18 +314,6 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 				bGratePlaced = true;
 				AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Grate")), FTransform(Yaw, Inside - Normal * 2.f + Tangent * (S + 170.f) + FVector(0.f, 0.f, 40.f)));
 			}
-			// Fachada por fuera: piezas macizas con la cara de fuera (-Y de la malla) hacia la calle; la ventana real
-			// queda sin fachada para verse desde fuera. En la entrada, una de ellas es la puerta de fachada.
-			if (Style == ENDWallStyle::Facade || Style == ENDWallStyle::FacadeWindow || (Style == ENDWallStyle::Window && !bWindow))
-			{
-				const TCHAR* Facade = Style == ENDWallStyle::FacadeWindow && bFull ? TEXT("Facade_Window_400") : TEXT("Facade_Wall_400");
-				if (bFull && !bFrontDoorPlaced && CurrentRoomType == ENDRoomType::R01_Entry)
-				{
-					bFrontDoorPlaced = true;
-					Facade = TEXT("Facade_FrontDoor");
-				}
-				AddArt(NDHouseArt::GetStructurePath(Facade), FTransform(Yaw, Outside + Tangent * S, FVector(Length / ArtTileSize, 1.f, 1.f)));
-			}
 		}
 		return bAll;
 	};
@@ -399,7 +387,6 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	bUseArt = NDHouseArt::IsEnabled();
 	CurrentRoomType = Definition.RoomType;
 	bGratePlaced = false;
-	bFrontDoorPlaced = false;
 	FloorMeshes->SetVisibility(!bUseArt);
 	WallMeshes->SetVisibility(!bUseArt);
 	CeilingMeshes->SetVisibility(!bUseArt);
@@ -555,7 +542,13 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			const float Bottom = FMath::Min(Segment.Start.Z, Segment.End.Z);
 			const FRotator SegmentYaw(0.f, Yaw, 0.f);
 			bool bArt = false;
-			if (Segment.Width <= WallThickness + 1.f)
+			if (Segment.Width <= WallThickness + 1.f && Segment.Height <= 150.f)
+			{
+				// Barandilla del descansillo: SM_Stairs_Ramp_Helper (de 0 a 400 en X, 60 de grueso y 90 de alto).
+				bArt = AddArt(NDHouseArt::GetStructurePath(TEXT("Stairs_Ramp_Helper")), FTransform(SegmentYaw, FVector(Segment.Start.X, Segment.Start.Y, Bottom),
+					FVector(Horizontal / ArtTileSize, Segment.Width / 60.f, Segment.Height / 90.f)));
+			}
+			else if (Segment.Width <= WallThickness + 1.f)
 			{
 				// Murete: pared de arte estrechada (va de 0 a 400 en X, 30 de grueso y 600 de alto).
 				bArt = AddArt(NDHouseArt::GetStructurePath(TEXT("Wall_400")), FTransform(SegmentYaw, FVector(Segment.Start.X, Segment.Start.Y, Bottom),

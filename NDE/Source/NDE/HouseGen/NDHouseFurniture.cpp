@@ -29,6 +29,14 @@ namespace NDHouseFurniture
 		return Art;
 	}
 
+	/** Copia con otro nombre y otros acompañantes (grupos por función). */
+	FNDFurnitureArt MakeNamed(FNDFurnitureArt Art, FName Id, TArray<FNDFurnitureCompanion> Companions)
+	{
+		Art.Id = Id;
+		Art.Companions = MoveTemp(Companions);
+		return Art;
+	}
+
 	/** Malla con el frente en otro eje (MeshYaw); Size va ya en el marco del mueble. */
 	FNDFurnitureArt MakeTurned(FNDFurnitureArt Art, float MeshYaw, FName Id = NAME_None)
 	{
@@ -42,6 +50,20 @@ namespace NDHouseFurniture
 		// Tamaños medidos de las mallas importadas (bounds), a escala de la casa del gigante.
 		const FNDFurnitureCompanion LampOnTop{ TEXT("TableLamp"), FVector(0.f, 0.f, 140.f) };
 		return {
+			// Grupos por función: un mueble principal con los demás alrededor, colocados como conjunto.
+			// Sala: alfombra en el centro con mesa baja, sofá enfrente de la tele y un sillón a cada lado.
+			MakeNamed(MakeScaled(MakeArt(TEXT("Entry_Common"), TEXT("Rug_A"), FVector(400.f, 318.f, 21.f), EKind::Rug), FVector(0.75f, 0.75f, 0.2f)), TEXT("Living_Set"),
+				{ { TEXT("CoffeeTable"), FVector(0.f, 0.f, 0.f), 0.f, false }, { TEXT("Sofa_A"), FVector(0.f, 270.f, 0.f), 0.f, false },
+				  { TEXT("TVStand"), FVector(0.f, -300.f, 0.f), 180.f, false }, { TEXT("TV_Old"), FVector(0.f, -318.f, 109.f), 180.f },
+				  { TEXT("Armchair_A"), FVector(340.f, 0.f, 0.f), -90.f, false }, { TEXT("Armchair_A"), FVector(-340.f, 0.f, 0.f), 90.f, false } }),
+			// Cocina: encimera, fregadero y horno en línea contra la pared (cabe en una celda); la nevera va aparte.
+			MakeNamed(MakeArt(TEXT("Kitchen"), TEXT("Counter_Sink"), FVector(206.f, 163.f, 225.f), EKind::Appliance), TEXT("Kitchen_Line"),
+				{ { TEXT("Counter_Base"), FVector(-216.f, 29.f, 0.f), 0.f, false }, { TEXT("Kettle"), FVector(-216.f, 40.f, 225.f), 30.f }, { TEXT("Stove_Oven"), FVector(206.f, 1.5f, 0.f), 0.f, false } }),
+			// Baño: lavamanos con espejo y el WC al lado, contra la misma pared.
+			MakeNamed(MakeArt(TEXT("Bathroom"), TEXT("Sink_Bathroom"), FVector(179.f, 118.f, 210.f), EKind::Appliance), TEXT("Bath_Set"),
+				{ { TEXT("BathMirror_Cabinet"), FVector(0.f, 16.f, 300.f) }, { TEXT("SoapBar"), FVector(-65.f, 20.f, 210.f) },
+				  { TEXT("Toothbrush_Cup"), FVector(65.f, 20.f, 210.f) }, { TEXT("Toilet"), FVector(185.f, -25.5f, 0.f), 0.f, false },
+				  { TEXT("ToiletPaper"), FVector(280.f, 20.f, 0.f) } }),
 			// Sala de estar
 			MakeArt(TEXT("Living"), TEXT("Sofa_A"), FVector(500.f, 195.f, 146.f), EKind::Armchair),
 			MakeArt(TEXT("Living"), TEXT("Armchair_A"), FVector(225.f, 204.f, 167.f), EKind::Armchair),
@@ -92,9 +114,13 @@ namespace NDHouseFurniture
 			MakeArt(TEXT("Dining"), TEXT("Sideboard"), FVector(400.f, 116.f, 176.f), EKind::Shelf),
 			MakeArt(TEXT("Dining"), TEXT("DisplayCabinet"), FVector(261.f, 125.f, 450.f), EKind::Shelf),
 			// Dormitorios
-			MakeArt(TEXT("Bedroom"), TEXT("Bed_Double"), FVector(475.f, 472.f, 266.f), EKind::Bed),
-			MakeArt(TEXT("Bedroom"), TEXT("Bed_Single"), FVector(283.f, 475.f, 219.f), EKind::Bed),
-			MakeTurned(MakeArt(TEXT("Bedroom"), TEXT("Bed_Single"), FVector(475.f, 283.f, 219.f), EKind::Bed), 90.f, TEXT("Bed_Single_Side")),
+			MakeArt(TEXT("Bedroom"), TEXT("Bed_Double"), FVector(475.f, 472.f, 266.f), EKind::Bed,
+				{ { TEXT("Nightstand"), FVector(304.f, 180.5f, 0.f), 0.f, false }, { TEXT("Nightstand"), FVector(-304.f, 180.5f, 0.f), 0.f, false },
+				  { TEXT("TableLamp"), FVector(304.f, 180.5f, 140.f) }, { TEXT("TableLamp"), FVector(-304.f, 180.5f, 140.f) } }),
+			MakeArt(TEXT("Bedroom"), TEXT("Bed_Single"), FVector(283.f, 475.f, 219.f), EKind::Bed,
+				{ { TEXT("Nightstand"), FVector(225.f, 182.f, 0.f), 0.f, false }, { TEXT("TableLamp"), FVector(225.f, 182.f, 140.f) } }),
+			MakeTurned(MakeArt(TEXT("Bedroom"), TEXT("Bed_Single"), FVector(475.f, 283.f, 219.f), EKind::Bed,
+				{ { TEXT("Nightstand"), FVector(321.f, 86.f, 0.f), 0.f, false }, { TEXT("TableLamp"), FVector(321.f, 86.f, 140.f) } }), 90.f, TEXT("Bed_Single_Side")),
 			MakeArt(TEXT("Bedroom"), TEXT("Wardrobe"), FVector(298.f, 179.f, 500.f), EKind::Wardrobe),
 			MakeArt(TEXT("Bedroom"), TEXT("Dresser"), FVector(250.f, 115.f, 164.f), EKind::Appliance, { { TEXT("Radio_Old"), FVector(60.f, 20.f, 164.f) } }),
 			MakeArt(TEXT("Living"), TEXT("Radio_Old"), FVector(75.f, 41.f, 46.f), EKind::Rug),
@@ -151,21 +177,22 @@ namespace NDHouseFurniture
 		const FNDRoomFurniture Stool{ TEXT("Stool"), EPlace::Wall, 1, 0.8f };
 		TMap<ERoom, TArray<FNDRoomFurniture>> Rooms;
 		Rooms.Add(ERoom::R01_Entry, { { TEXT("ShoeRack") }, { TEXT("CoatRack"), EPlace::Wall, 1, 0.8f }, { TEXT("Boot_Giant"), EPlace::Flat, 1, 0.6f }, Rug });
-		Rooms.Add(ERoom::R03_LivingRoom, { { TEXT("Sofa_A") }, { TEXT("Fireplace"), EPlace::Wall, 1, 0.7f }, { TEXT("TVStand"), EPlace::Wall, 1, 0.8f },
-			{ TEXT("Armchair_A"), EPlace::Wall, 2 }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.6f }, { TEXT("SideTable"), EPlace::Wall, 1, 0.7f },
-			{ TEXT("CoffeeTable"), EPlace::Center }, Rug });
-		Rooms.Add(ERoom::R04_Kitchen, { { TEXT("Fridge") }, { TEXT("Stove_Oven") }, { TEXT("Counter_Sink") }, { TEXT("Counter_Base"), EPlace::Wall, 2 }, { TEXT("Counter_Corner"), EPlace::Wall, 1, 0.6f },
-			{ TEXT("Counter_Straight"), EPlace::Wall, 1, 0.6f }, { TEXT("TrashBin_Kitchen"), EPlace::Wall, 1, 0.8f }, { TEXT("KitchenTable"), EPlace::Center, 1, 0.8f },
-			{ TEXT("PetBowl"), EPlace::Flat, 1, 0.5f } });
-		Rooms.Add(ERoom::R05_DiningRoom, { { TEXT("DiningTable_Cloth"), EPlace::Center, 1, 0.5f }, { TEXT("DiningTable"), EPlace::Center }, { TEXT("Sideboard") }, { TEXT("DisplayCabinet"), EPlace::Wall, 1, 0.8f },
-			{ TEXT("DiningChair"), EPlace::Wall, 2, 0.6f }, Stool });
-		Rooms.Add(ERoom::R06_MasterBedroom, { { TEXT("Wardrobe") }, { TEXT("Nightstand"), EPlace::Wall, 2 }, { TEXT("Dresser") },
-			{ TEXT("LaundryHamper"), EPlace::Wall, 1, 0.6f }, Stool, { TEXT("Slipper_Giant"), EPlace::Flat, 1, 0.7f } });
-		Rooms.Add(ERoom::R07_Bathroom, { { TEXT("Toilet") }, { TEXT("Sink_Bathroom") }, { TEXT("Bathtub") }, { TEXT("LaundryHamper"), EPlace::Wall, 1, 0.6f }, { TEXT("Towel_Hanging"), EPlace::Wall, 1, 0.7f }, Bin,
-			{ TEXT("BathMat"), EPlace::Flat } });
+		// Primero el grupo principal (punto focal) y luego pocas piezas sueltas contra las paredes.
+		Rooms.Add(ERoom::R03_LivingRoom, { { TEXT("Living_Set"), EPlace::Flat }, { TEXT("Fireplace"), EPlace::Wall, 1, 0.7f },
+			{ TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.6f }, { TEXT("SideTable"), EPlace::Wall, 1, 0.6f } });
+		Rooms.Add(ERoom::R04_Kitchen, { { TEXT("Kitchen_Line") }, { TEXT("Fridge") }, { TEXT("KitchenTable"), EPlace::Center, 1, 0.8f },
+			{ TEXT("Counter_Straight"), EPlace::Wall, 1, 0.5f }, { TEXT("TrashBin_Kitchen"), EPlace::Wall, 1, 0.6f },
+			{ TEXT("PetBowl"), EPlace::Flat, 1, 0.4f } });
+		Rooms.Add(ERoom::R05_DiningRoom, { { TEXT("DiningTable"), EPlace::Center }, { TEXT("Sideboard") }, { TEXT("DisplayCabinet"), EPlace::Wall, 1, 0.8f } });
+		// La cama de la criatura (con sus mesillas, si caben) la pone el generador sobre su ancla; si no, una mesilla suelta.
+		Rooms.Add(ERoom::R06_MasterBedroom, { { TEXT("Wardrobe") }, { TEXT("Nightstand"), EPlace::Wall, 1, 0.8f }, { TEXT("Dresser") }, { TEXT("LaundryHamper"), EPlace::Wall, 1, 0.5f },
+			{ TEXT("Slipper_Giant"), EPlace::Flat, 1, 0.7f } });
+		Rooms.Add(ERoom::R07_Bathroom, { { TEXT("Bath_Set") }, { TEXT("Bathtub") }, { TEXT("Towel_Hanging"), EPlace::Wall, 1, 0.7f },
+			{ TEXT("LaundryHamper"), EPlace::Wall, 1, 0.4f }, { TEXT("BathMat"), EPlace::Flat } });
 		Rooms.Add(ERoom::R08_Storage, { Boxes, { TEXT("Pantry_Shelf"), EPlace::Wall, 2 }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.5f }, Bin, Stool });
-		Rooms.Add(ERoom::R09_Objective, { { TEXT("DisplayCabinet") }, { TEXT("SideTable") }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 2 }, { TEXT("Armchair_A"), EPlace::Wall, 1, 0.6f }, Stool, RugB });
-		Rooms.Add(ERoom::R10_KidsBedroom, { { TEXT("Bed_Single") }, { TEXT("Bed_Single_Side") }, { TEXT("Nightstand") }, { TEXT("Wardrobe") }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.5f }, RugB });
+		Rooms.Add(ERoom::R09_Objective, { { TEXT("DiningTable_Cloth"), EPlace::Center, 1, 0.6f }, { TEXT("DisplayCabinet") }, { TEXT("SideTable") },
+			{ TEXT("Bookshelf_Tall"), EPlace::Wall, 2 }, RugB });
+		Rooms.Add(ERoom::R10_KidsBedroom, { { TEXT("Bed_Single") }, { TEXT("Bed_Single_Side") }, { TEXT("Wardrobe") }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.5f }, RugB });
 		Rooms.Add(ERoom::R11_Study, { { TEXT("KitchenTable"), EPlace::Wall }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 2 }, { TEXT("Armchair_A") },
 			{ TEXT("SideTable"), EPlace::Wall, 1, 0.7f }, Stool, { TEXT("BookStack"), EPlace::Flat, 1, 0.7f } });
 		Rooms.Add(ERoom::R12_Pantry, { { TEXT("Pantry_Shelf"), EPlace::Wall, 2 }, Boxes, { TEXT("TrashBin_Kitchen"), EPlace::Wall, 1, 0.6f } });

@@ -598,12 +598,19 @@ void FNDHouseLayout::BuildDecorations()
 			}
 			return true;
 		};
-		auto OverlapsFurniture = [this, RoomIndex](const FBox2D& Box)
+		// Los acompañantes de un grupo van pegados a su pieza principal: esa no cuenta como estorbo.
+		int32 GroupParent = INDEX_NONE;
+		auto OverlapsFurniture = [this, RoomIndex, &GroupParent](const FBox2D& Box)
 		{
-			return Decorations.ContainsByPredicate([&Box, RoomIndex](const FNDHouseDecoration& Other)
+			for (int32 Index = 0; Index < Decorations.Num(); ++Index)
 			{
-				return Other.Room == RoomIndex && Other.Kind != ENDDecorationKind::Rug && Box.ExpandBy(Gap).Intersect(Other.GetFootprint());
-			});
+				const FNDHouseDecoration& Other = Decorations[Index];
+				if (Index != GroupParent && Other.Room == RoomIndex && Other.Kind != ENDDecorationKind::Rug && Box.ExpandBy(Gap).Intersect(Other.GetFootprint()))
+				{
+					return true;
+				}
+			}
+			return false;
 		};
 		// Sitio libre para un mueble con colisión: no tapa puertas, rutas, el centro ni puntos reservados.
 		auto IsFree = [&](const FBox2D& Box)
@@ -753,6 +760,62 @@ void FNDHouseLayout::BuildDecorations()
 			Hide.EntryPoint = Entry;
 		};
 
+		// Cuántas veces se puso cada malla en la sala (también como acompañante): los muebles que la comparten comparten el máximo.
+		TMap<FString, int32> PlacedByMesh;
+		// Acompañantes de un mueble (grupos por función): sillas, mesillas, sofá y tele alrededor de la alfombra...
+		// con colisión si caben, y adornos encima (sin colisión), salvo los que iban sobre un mueble que no cupo.
+		auto AddCompanions = [&](const FNDFurnitureArt& Art, const FTransform& PieceTransform)
+		{
+			GroupParent = Decorations.Num() - 1;
+			TArray<FBox2D> Missing;
+			for (const FNDFurnitureCompanion& Companion : Art.Companions)
+			{
+				const int32 CompanionArt = NDHouseFurniture::FindArt(Companion.Id);
+				if (!ArtList.IsValidIndex(CompanionArt))
+				{
+					continue;
+				}
+				const FTransform Placed = FTransform(FRotator(0.f, Companion.Yaw, 0.f), Companion.Offset) * PieceTransform;
+				const FBox2D Box = MakeFootprint(Placed.GetLocation(), Placed.Rotator().Yaw, ArtList[CompanionArt].Size);
+				if (Companion.bDecor)
+				{
+					if (Missing.ContainsByPredicate([&Placed](const FBox2D& Base) { return Base.IsInside(FVector2D(Placed.GetLocation())); }))
+					{
+						continue;
+					}
+					AddDecoration(CompanionArt, Placed, false);
+					++PlacedByMesh.FindOrAdd(ArtList[CompanionArt].MeshPath);
+				}
+				else if (IsFree(Box))
+				{
+					AddDecoration(CompanionArt, Placed, true);
+					++PlacedByMesh.FindOrAdd(ArtList[CompanionArt].MeshPath);
+					AddHidingSpot(Decorations.Num() - 1, Placed.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f)));
+				}
+				else
+				{
+					Missing.Add(Box);
+				}
+			}
+			GroupParent = INDEX_NONE;
+		};
+		// El grupo entero cabe: todos los acompañantes con colisión quedan libres alrededor de la pieza.
+		auto CompanionsFit = [&](const FNDFurnitureArt& Art, const FTransform& PieceTransform)
+		{
+			return !Art.Companions.ContainsByPredicate([&](const FNDFurnitureCompanion& Companion)
+			{
+				const int32 CompanionArt = NDHouseFurniture::FindArt(Companion.Id);
+				if (Companion.bDecor || !ArtList.IsValidIndex(CompanionArt))
+				{
+					return false;
+				}
+				const FTransform Placed = FTransform(FRotator(0.f, Companion.Yaw, 0.f), Companion.Offset) * PieceTransform;
+				return !IsFree(MakeFootprint(Placed.GetLocation(), Placed.Rotator().Yaw, ArtList[CompanionArt].Size));
+			});
+		};
+		// Los grupos del centro miran a lo largo de la sala (su eje X por el lado largo).
+		const float LongYaw = (Max.X - Min.X) >= (Max.Y - Min.Y) ? 0.f : 90.f;
+
 		// Cama de la criatura (dormitorio principal): pegada a la pared, sobre su ancla. Sin colisión hasta
 		// que la criatura tenga su arte (el borde de la cama guarda el objetivo de C05).
 		if (Room.Def->RoomType == ENDRoomType::R06_MasterBedroom)
@@ -767,22 +830,29 @@ void FNDHouseLayout::BuildDecorations()
 			{
 				AddWallCandidates(ArtList[BedArt].Size, Candidates);
 			}
-			for (const FTransform& Candidate : Candidates)
+			// Primero donde caben también las mesillas.
+			const FTransform* Chosen = nullptr;
+			for (const bool bWithNightstands : { true, false })
 			{
-				const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, ArtList[BedArt].Size);
-				const bool bClearsDoors = !Doors.ContainsByPredicate([&Box](const FDoorPoint& Door) { return DistanceToBox(Box, Door.Point) < Door.HalfWidth + DoorClearance; });
-				if (Box.IsInside(FVector2D(Anchor->LotTransform.GetLocation())) && FitsInRoom(Box) && bClearsDoors)
+				Chosen = Chosen ? Chosen : Candidates.FindByPredicate([&](const FTransform& Candidate)
 				{
-					AddDecoration(BedArt, Candidate, false).Kind = ENDDecorationKind::Bed;
-					break;
-				}
+					const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, ArtList[BedArt].Size);
+					const bool bClearsDoors = !Doors.ContainsByPredicate([&Box](const FDoorPoint& Door) { return DistanceToBox(Box, Door.Point) < Door.HalfWidth + DoorClearance; });
+					return Box.IsInside(FVector2D(Anchor->LotTransform.GetLocation())) && FitsInRoom(Box) && bClearsDoors
+						&& (!bWithNightstands || CompanionsFit(ArtList[BedArt], Candidate));
+				});
+			}
+			if (Chosen)
+			{
+				const FTransform BedTransform = *Chosen;
+				AddDecoration(BedArt, BedTransform, false).Kind = ENDDecorationKind::Bed;
+				AddCompanions(ArtList[BedArt], BedTransform);
 			}
 		}
 
 		// Muebles de la sala, por orden de prioridad. Los que comparten malla comparten el máximo.
 		const int32 MaxPieces = FMath::Min(5 + 3 * (Cells.Num() - 1), 12);
 		int32 Pieces = 0;
-		TMap<FString, int32> PlacedByMesh;
 		for (const FNDRoomFurniture& Entry : NDHouseFurniture::GetRoomFurniture(Room.Def->RoomType))
 		{
 			const int32 ArtIndex = NDHouseFurniture::FindArt(Entry.Id);
@@ -816,7 +886,12 @@ void FNDHouseLayout::BuildDecorations()
 					AddCenterCandidates(Candidates);
 				}
 				Shuffle(Candidates);
-				const FTransform* Chosen = Candidates.FindByPredicate([&](const FTransform& Candidate)
+				// Las mesas y alfombras van primero en el centro exacto de la sala, a lo largo: son el punto focal.
+				if (Entry.Placement != ENDFurniturePlacement::Wall && Cells.Num() > 1)
+				{
+					Candidates.Insert(FTransform(FRotator(0.f, LongYaw, 0.f), FVector(RoomCenter, FloorZ)), 0);
+				}
+				auto Fits = [&](const FTransform& Candidate)
 				{
 					const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, Art.Size);
 					if (bFlat)
@@ -830,7 +905,16 @@ void FNDHouseLayout::BuildDecorations()
 						});
 					}
 					return IsFree(Box);
-				});
+				};
+				// Primero donde cabe el grupo entero (cocina en línea, cama con mesillas, sofá y tele...); si no, la pieza sola.
+				const bool bGroup = Art.Companions.ContainsByPredicate([](const FNDFurnitureCompanion& Companion) { return !Companion.bDecor; });
+				const FTransform* Chosen = bGroup
+					? Candidates.FindByPredicate([&](const FTransform& Candidate) { return Fits(Candidate) && CompanionsFit(Art, Candidate); })
+					: nullptr;
+				if (!Chosen)
+				{
+					Chosen = Candidates.FindByPredicate(Fits);
+				}
 				if (!Chosen)
 				{
 					break;
@@ -840,6 +924,7 @@ void FNDHouseLayout::BuildDecorations()
 				++PlacedByMesh.FindOrAdd(Art.MeshPath);
 				if (bFlat)
 				{
+					AddCompanions(Art, PieceTransform);
 					continue;
 				}
 				++Pieces;
@@ -848,25 +933,7 @@ void FNDHouseLayout::BuildDecorations()
 					: PieceTransform.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f));
 				AddHidingSpot(Decorations.Num() - 1, Front);
 
-				// Acompañantes: sillas (con colisión, si caben) y adornos encima (sin colisión).
-				for (const FNDFurnitureCompanion& Companion : Art.Companions)
-				{
-					const int32 CompanionArt = NDHouseFurniture::FindArt(Companion.Id);
-					if (!ArtList.IsValidIndex(CompanionArt))
-					{
-						continue;
-					}
-					const FTransform Placed = FTransform(FRotator(0.f, Companion.Yaw, 0.f), Companion.Offset) * PieceTransform;
-					if (Companion.bDecor)
-					{
-						AddDecoration(CompanionArt, Placed, false);
-					}
-					else if (IsFree(MakeFootprint(Placed.GetLocation(), Placed.Rotator().Yaw, ArtList[CompanionArt].Size)))
-					{
-						AddDecoration(CompanionArt, Placed, true);
-						AddHidingSpot(Decorations.Num() - 1, Placed.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f)));
-					}
-				}
+				AddCompanions(Art, PieceTransform);
 			}
 		}
 
