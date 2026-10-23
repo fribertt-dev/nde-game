@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Networking/NDLobbyGameState.h"
 #include "Networking/NDNetworkSettings.h"
@@ -17,6 +18,24 @@
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
 #include "UI/NDHUD.h"
+
+namespace NDLobbyGameMode
+{
+	FAutoConsoleCommandWithWorld StartCommand(
+		TEXT("nde.Lobby.Start"),
+		TEXT("Solo host, en La Madriguera: sale ya hacia la casa con el contrato más votado, sin esperar a la zona de salida."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			if (ANDLobbyGameMode* GameMode = World ? World->GetAuthGameMode<ANDLobbyGameMode>() : nullptr)
+			{
+				GameMode->DebugStartExpedition();
+			}
+			else
+			{
+				UE_LOG(LogNDNet, Warning, TEXT("nde.Lobby.Start: solo funciona en el host, en La Madriguera."));
+			}
+		}));
+}
 
 ANDLobbyGameMode::ANDLobbyGameMode()
 {
