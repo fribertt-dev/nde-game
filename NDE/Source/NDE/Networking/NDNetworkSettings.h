@@ -36,9 +36,16 @@ public:
 	UPROPERTY(Config, EditAnywhere, Category = "Maps")
 	TSoftObjectPtr<UWorld> LobbyMap;
 
-	/** Casa de pruebas hasta que exista el generador procedural. */
+	/** Mapa de la expedición: la casa generada (L_CasaPrueba). */
 	UPROPERTY(Config, EditAnywhere, Category = "Maps")
 	TSoftObjectPtr<UWorld> ExpeditionTestMap;
+
+	/**
+	 * Alias del GameMode con el que se abre la expedición (?game=...). Los alias están en
+	 * DefaultEngine.ini: House = casa generada con botín y camioneta; Expedition = mapa hecho a mano.
+	 */
+	UPROPERTY(Config, EditAnywhere, Category = "Maps")
+	FString ExpeditionGameAlias = TEXT("House");
 
 	/** Widget del menú principal. Cambiar por un WBP con estilo propio. */
 	UPROPERTY(Config, EditAnywhere, Category = "UI")

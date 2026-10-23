@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Core/NDDesveladoTypes.h"
 #include "GameFramework/Character.h"
 #include "NDCharacter.generated.h"
 
@@ -16,13 +17,18 @@ class UNDCarryComponent;
 class UNDLoadoutComponent;
 class UNDExpeditionPlayerComponent;
 class UNDToolDefinition;
+class UNDInteractionComponent;
+class UNDHidingComponent;
+class UNDNoiseEmitterComponent;
+class UNDDesveladoBodyComponent;
 struct FInputActionValue;
 
 /**
  * Personaje base de un Desvelado: movimiento replicado y cámara en primera persona (en los ojos) o en
  * tercera (nde.Camera.FirstPerson). La escala sale de UNDScaleSettings.
  * Lleva la carga de botín, las herramientas y las acciones de la expedición.
- * BP_Desvelado hereda de aquí; la cápsula con nariz es provisional hasta tener el skeletal mesh.
+ * BP_Desvelado hereda de aquí. Hasta tener skeletal mesh se ve el cuerpo provisional de su especie
+ * (UNDDesveladoBodyComponent); la cápsula con nariz solo queda si ese cuerpo no se puede crear.
  * Crea sus acciones de Enhanced Input en tiempo de ejecución para no depender de assets.
  */
 UCLASS()
@@ -62,6 +68,38 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Character")
 	TObjectPtr<UNDExpeditionPlayerComponent> ExpeditionPlayer;
+
+	/** Acción contextual de E y su texto para la UI. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Character")
+	TObjectPtr<UNDInteractionComponent> Interaction;
+
+	/** Esconderse en los muebles de la casa. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Character")
+	TObjectPtr<UNDHidingComponent> Hiding;
+
+	/** Pasos y aterrizajes que oye la criatura. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Character")
+	TObjectPtr<UNDNoiseEmitterComponent> NoiseEmitter;
+
+	/** Cuerpo provisional por especie (formas básicas) hasta tener skeletal mesh. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Character")
+	TObjectPtr<UNDDesveladoBodyComponent> Body;
+
+	/** Especie del Desvelado (solo estética, GDD 3.1). La elige el servidor al poseerlo. */
+	UFUNCTION(BlueprintPure, Category = "NDE|Personaje")
+	ENDDesveladoSpecies GetSpecies() const { return Species; }
+
+	/** Solo servidor: cambia la especie (se replica y rehace el cuerpo en todas las máquinas). */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "NDE|Personaje")
+	void SetSpecies(ENDDesveladoSpecies NewSpecies);
+
+	/** Usar siempre ForcedSpecies en vez de una especie distinta por jugador. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
+	bool bForceSpecies = false;
+
+	/** Especie fija para probar (si Force Species está marcado). La consola nde.Character.Species manda sobre esto. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Personaje", meta = (EditCondition = "bForceSpecies"))
+	ENDDesveladoSpecies ForcedSpecies = ENDDesveladoSpecies::Raccoon;
 
 	/** Velocidad al andar (GDD 3.3). Viene de Project Settings > Game > NDE Scale. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Personaje")
@@ -103,6 +141,9 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** Depuración: anda hacia delante durante unos segundos con el movimiento real (pasos y ruido incluidos). Solo el dueño. */
+	void StartAutoWalk(float Seconds) { AutoWalkRemaining = FMath::Max(0.f, Seconds); }
 
 	/** true si la cámara del dueño está en los ojos (primera persona). */
 	UFUNCTION(BlueprintPure, Category = "NDE|Personaje")
@@ -168,6 +209,18 @@ protected:
 	/** Aplica correr, agacharse y el peso de lo que se carga. */
 	void UpdateMovementSpeed();
 
+	UFUNCTION()
+	void OnRep_Species();
+
+	/** Rehace el cuerpo de la especie y oculta el placeholder si el cuerpo existe. */
+	void ApplySpecies();
+
+	/** Especie para un jugador recién poseído: forzada, la de la consola o una por puesto en la partida. */
+	ENDDesveladoSpecies PickSpecies(const AController* NewController) const;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Species)
+	ENDDesveladoSpecies Species = ENDDesveladoSpecies::None;
+
 	/** El dueño lo predice al pulsar; el servidor lo confirma y lo reparte a los demás. */
 	UPROPERTY(Replicated)
 	bool bIsSprinting = false;
@@ -185,4 +238,7 @@ protected:
 	TMap<FName, TObjectPtr<UInputAction>> Actions;
 
 	double ThrowStartTime = -1.0;
+
+	/** Segundos que quedan de nde.Character.AutoWalk. */
+	float AutoWalkRemaining = 0.f;
 };
