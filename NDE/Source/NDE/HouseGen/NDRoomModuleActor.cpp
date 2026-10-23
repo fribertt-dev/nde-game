@@ -340,6 +340,11 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 		const float PieceStart = FMath::Clamp(OpeningOffset - ArtTileSize * 0.5f, -CellSize * 0.5f, CellSize * 0.5f - ArtTileSize);
 		bArt = AddPiece(NDHouseArt::GetStructurePath(WallArt.Mesh), PieceStart, ArtTileSize);
 		// Puerta a la calle: hoja abierta hacia fuera, junto al hueco (de 0 a 160 en X, 40 de grueso).
+		// Puerta mediana interior: marco de 180 centrado en el hueco.
+		if (Style == ENDWallStyle::Interior && FCString::Strcmp(WallArt.Mesh, TEXT("Wall_Door_M_400")) == 0)
+		{
+			AddArt(NDHouseArt::GetStructurePath(TEXT("DoorFrame_M")), FTransform(Yaw, WallCenter + Tangent * (PieceStart + ArtTileSize * 0.5f - 90.f)));
+		}
 		if (Style != ENDWallStyle::Interior && Style != ENDWallStyle::Basement)
 		{
 			const FRotator LeafYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Normal.Y, Normal.X)), 0.f);
@@ -456,6 +461,12 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 					{
 						AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Duct_Straight")), FTransform(CellCenter + FVector(X, CellSize * 0.35f, WallHeight - 75.f)));
 					}
+					if (NDRoomModuleActor::HasVents(Type) && Piece == 0 && CellIndex == 0)
+					{
+						// Derivación en T y codo al principio del ducto.
+						AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Duct_T")), FTransform(CellCenter + FVector(0.f, CellSize * 0.35f, WallHeight - 75.f)));
+						AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Duct_Corner")), FTransform(FRotator(0.f, 180.f, 0.f), CellCenter + FVector(-CellSize * 0.5f + 130.f, CellSize * 0.35f, WallHeight - 75.f)));
+					}
 				}
 			}
 			for (const FIntPoint Corner : { FIntPoint(1, 1), FIntPoint(1, -1), FIntPoint(-1, 1), FIntPoint(-1, -1) })
@@ -517,6 +528,18 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 			const ENDWallStyle Style = WallStyles && WallStyles->IsValidIndex(StyleIndex) ? static_cast<ENDWallStyle>((*WallStyles)[StyleIndex]) : ENDWallStyle::Interior;
 			const float WindowCenter = ((CellIndex + DirIndex) % 2 == 0 ? -1.f : 1.f) * CellSize * 0.25f;
 			BuildEdge(CellCenter + FVector(Offset.X, Offset.Y, 0.f) * (CellSize * 0.5f), Direction, Opening, HoleOffset, Style, WindowCenter);
+			// Hueco del módulo que la casa no abrió: puerta cerrada con marco (solo se ve; la pared sigue entera).
+			if (bUseArt && SocketIndex != INDEX_NONE && Opening <= 0.f)
+			{
+				const ENDRoomSocketType SocketType = Definition.DoorSockets[SocketIndex].Type;
+				if (SocketType != ENDRoomSocketType::Stairs && SocketType != ENDRoomSocketType::Vent)
+				{
+					const FVector Normal(Offset.X, Offset.Y, 0.f);
+					const FVector Tangent(-Normal.Y, Normal.X, 0.f);
+					const FVector ClosedCenter = CellCenter + Normal * (CellSize * 0.5f - WallThickness * 0.5f) + Tangent * HoleOffset;
+					AddArt(NDHouseArt::GetStructurePath(TEXT("Door_M_Framed")), FTransform(FRotator(0.f, FMath::RadiansToDegrees(FMath::Atan2(Tangent.Y, Tangent.X)), 0.f), ClosedCenter - Tangent * 90.f));
+				}
+			}
 		}
 	}
 

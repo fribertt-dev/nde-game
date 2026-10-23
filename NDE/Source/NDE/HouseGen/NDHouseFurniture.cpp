@@ -61,6 +61,7 @@ namespace NDHouseFurniture
 			MakeArt(TEXT("Kitchen"), TEXT("Fridge"), FVector(169.f, 195.f, 450.f), EKind::Appliance),
 			MakeArt(TEXT("Kitchen"), TEXT("Stove_Oven"), FVector(182.f, 160.f, 225.f), EKind::Appliance),
 			MakeArt(TEXT("Kitchen"), TEXT("Counter_Sink"), FVector(206.f, 163.f, 225.f), EKind::Appliance),
+			MakeArt(TEXT("Kitchen"), TEXT("Counter_Corner"), FVector(119.f, 141.f, 185.f), EKind::Appliance),
 			MakeArt(TEXT("Kitchen"), TEXT("Counter_Base"), FVector(202.f, 105.f, 225.f), EKind::Appliance, { { TEXT("Kettle"), FVector(-40.f, 10.f, 225.f), 30.f } }),
 			MakeArt(TEXT("Kitchen"), TEXT("Counter_Straight"), FVector(150.f, 67.f, 185.f), EKind::Appliance,
 				{ { TEXT("Pot"), FVector(-35.f, 0.f, 185.f) }, { TEXT("Pan"), FVector(35.f, 0.f, 185.f), 20.f } }),
@@ -153,7 +154,7 @@ namespace NDHouseFurniture
 		Rooms.Add(ERoom::R03_LivingRoom, { { TEXT("Sofa_A") }, { TEXT("Fireplace"), EPlace::Wall, 1, 0.7f }, { TEXT("TVStand"), EPlace::Wall, 1, 0.8f },
 			{ TEXT("Armchair_A"), EPlace::Wall, 2 }, { TEXT("Bookshelf_Tall"), EPlace::Wall, 1, 0.6f }, { TEXT("SideTable"), EPlace::Wall, 1, 0.7f },
 			{ TEXT("CoffeeTable"), EPlace::Center }, Rug });
-		Rooms.Add(ERoom::R04_Kitchen, { { TEXT("Fridge") }, { TEXT("Stove_Oven") }, { TEXT("Counter_Sink") }, { TEXT("Counter_Base"), EPlace::Wall, 2 },
+		Rooms.Add(ERoom::R04_Kitchen, { { TEXT("Fridge") }, { TEXT("Stove_Oven") }, { TEXT("Counter_Sink") }, { TEXT("Counter_Base"), EPlace::Wall, 2 }, { TEXT("Counter_Corner"), EPlace::Wall, 1, 0.6f },
 			{ TEXT("Counter_Straight"), EPlace::Wall, 1, 0.6f }, { TEXT("TrashBin_Kitchen"), EPlace::Wall, 1, 0.8f }, { TEXT("KitchenTable"), EPlace::Center, 1, 0.8f },
 			{ TEXT("PetBowl"), EPlace::Flat, 1, 0.5f } });
 		Rooms.Add(ERoom::R05_DiningRoom, { { TEXT("DiningTable_Cloth"), EPlace::Center, 1, 0.5f }, { TEXT("DiningTable"), EPlace::Center }, { TEXT("Sideboard") }, { TEXT("DisplayCabinet"), EPlace::Wall, 1, 0.8f },

@@ -475,6 +475,22 @@ void ANDHouseLot::BuildFromManifest()
 				{
 					const uint32 Hash = HashCombineFast(GetTypeHash(Manifest.RunSeed), HashCombineFast(GetTypeHash(Cells[CellIndex]), GetTypeHash(static_cast<int32>(LotDir) + Room.Floor * 4)));
 					const uint32 Pick = Hash % 10;
+					// Alero de tejado sobre las paredes exteriores sin piso encima; frontón sobre la entrada, hacia la calle.
+					if (bBuildCeiling && CeilingPerCell[CellIndex] && Room.Floor >= NDHouseGen::GroundFloor)
+					{
+						const FIntPoint OutStep = NDHouseGen::DirectionToOffset(LotDir);
+						const FVector Normal(OutStep.X, OutStep.Y, 0.f);
+						const FVector Tangent(-Normal.Y, Normal.X, 0.f);
+						const FRotator RoofYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Tangent.Y, Tangent.X)), 0.f);
+						const FVector EdgeStart = Layout.Lot.GetCellCenter(Cells[CellIndex]) + Normal * (NDHouseGen::CellSize * 0.5f) - Tangent * (NDHouseGen::CellSize * 0.5f)
+							+ FVector(0.f, 0.f, Room.Floor * NDHouseGen::FloorHeight + NDHouseGen::FloorHeight);
+						const bool bFront = LotDir == Layout.Lot.FrontDirection && RoomIndex == Layout.EntryRoom;
+						for (float Along = 0.f; Along < NDHouseGen::CellSize - 1.f; Along += NDHouseGen::ArtTileSize)
+						{
+							AddLotArt(FString::Printf(TEXT("/Game/_NDE_/Props/Structure/%s"), bFront ? TEXT("SM_Roof_Gable_400/SM_Roof_Gable_400.SM_Roof_Gable_400") : TEXT("SM_Roof_Edge_400/SM_Roof_Edge_400.SM_Roof_Edge_400")),
+								FTransform(RoofYaw, EdgeStart + Tangent * Along));
+						}
+					}
 					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Room.Floor < NDHouseGen::GroundFloor ? ENDWallStyle::Basement : Pick < 4 ? ENDWallStyle::Window : Pick < 7 ? ENDWallStyle::FacadeWindow : ENDWallStyle::Facade);
 				}
 			}
