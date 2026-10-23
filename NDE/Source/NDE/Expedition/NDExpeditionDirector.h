@@ -55,7 +55,7 @@ public:
 
 	/** Segundos mostrando el resultado antes de pedir la vuelta a La Madriguera. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|Expedition")
-	float ResultsDisplaySeconds = 4.f;
+	float ResultsDisplaySeconds = 8.f;
 
 	UFUNCTION(BlueprintPure, Category = "NDE|Expedition", meta = (WorldContext = "WorldContextObject"))
 	static ANDExpeditionDirector* Get(const UObject* WorldContextObject);

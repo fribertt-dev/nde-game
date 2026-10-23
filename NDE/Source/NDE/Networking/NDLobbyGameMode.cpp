@@ -7,6 +7,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Networking/NDLobbyGameState.h"
 #include "Networking/NDNetworkSettings.h"
@@ -16,6 +17,25 @@
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
+#include "UI/NDHUD.h"
+
+namespace NDLobbyGameMode
+{
+	FAutoConsoleCommandWithWorld StartCommand(
+		TEXT("nde.Lobby.Start"),
+		TEXT("Solo host, en La Madriguera: sale ya hacia la casa con el contrato más votado, sin esperar a la zona de salida."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			if (ANDLobbyGameMode* GameMode = World ? World->GetAuthGameMode<ANDLobbyGameMode>() : nullptr)
+			{
+				GameMode->DebugStartExpedition();
+			}
+			else
+			{
+				UE_LOG(LogNDNet, Warning, TEXT("nde.Lobby.Start: solo funciona en el host, en La Madriguera."));
+			}
+		}));
+}
 
 ANDLobbyGameMode::ANDLobbyGameMode()
 {
@@ -23,6 +43,8 @@ ANDLobbyGameMode::ANDLobbyGameMode()
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
 	DefaultPawnClass = ANDCharacter::StaticClass();
+	// Inicializa la UI del jugador local (menú de pausa); el panel de la sala lo pone el PlayerController.
+	HUDClass = ANDLobbyHUD::StaticClass();
 	bUseSeamlessTravel = true;
 }
 
@@ -255,5 +277,5 @@ void ANDLobbyGameMode::TravelToExpedition()
 
 	UE_LOG(LogNDNet, Log, TEXT("Saliendo de expedicion con %d jugadores a %s, contrato %s"),
 		LobbyState->PlayerArray.Num(), *MapPackage, *ContractId.ToString());
-	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?game=Expedition?Contract=%s"), *MapPackage, *ContractId.ToString()));
+	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?game=%s?Contract=%s"), *MapPackage, *UNDNetworkSettings::Get()->ExpeditionGameAlias, *ContractId.ToString()));
 }
