@@ -2,10 +2,29 @@
 
 #include "Components/InputComponent.h"
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "UI/NDUIManagerSubsystem.h"
 #include "UI/NDUITags.h"
+
+namespace NDHUD
+{
+	FAutoConsoleCommandWithWorld TogglePauseCommand(
+		TEXT("nde.UI.TogglePause"),
+		TEXT("Abre o cierra el menú de pausa del jugador local, como la tecla P."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			APlayerController* PlayerController = World ? World->GetFirstPlayerController() : nullptr;
+			UNDUIManagerSubsystem* UIManager = PlayerController && PlayerController->GetLocalPlayer()
+				? ULocalPlayer::GetSubsystem<UNDUIManagerSubsystem>(PlayerController->GetLocalPlayer()) : nullptr;
+			if (UIManager)
+			{
+				UIManager->TogglePause();
+			}
+		}));
+}
 
 void ANDHUD::BeginPlay()
 {
