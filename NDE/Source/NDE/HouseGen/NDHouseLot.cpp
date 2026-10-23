@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenDebug.h"
+#include "HouseGen/NDHouseFurniture.h"
 #include "HouseGen/NDHouseGenerator.h"
 #include "HouseGen/NDRoomModuleActor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -99,6 +100,42 @@ namespace NDHouseLot
 			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.Decorations.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
 	}
 
+	/** nde.HouseGen.ViewRoom <sala> [yaw]: pone al jugador en lo alto de una sala, mirando hacia abajo (capturas de los muebles). */
+	void ViewRoom(const TArray<FString>& Args, UWorld* World)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		int32 RoomIndex = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 0;
+		// También por tipo de sala, p. ej. "Living" o "Kitchen".
+		if (Lot && Args.Num() > 0 && !Args[0].IsNumeric())
+		{
+			RoomIndex = Lot->GetLayout().Rooms.IndexOfByPredicate([&Args](const FNDHouseLayoutRoom& Room)
+			{
+				return NDHouseGen::GetRoomTypeName(Room.Def->RoomType).Contains(Args[0]);
+			});
+		}
+		if (!Lot || !Lot->IsHouseBuilt() || !Pawn || !Pawn->HasAuthority() || !Lot->GetLayout().Rooms.IsValidIndex(RoomIndex))
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.ViewRoom: uso nde.HouseGen.ViewRoom <sala> [yaw] (en el servidor, con la casa construida)"));
+			return;
+		}
+		const FNDHouseLayout& Layout = Lot->GetLayout();
+		const float Yaw = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
+		const FRotator View(-55.f, Yaw, 0.f);
+		const FVector Center = Lot->GetLotToWorld().TransformPosition(Layout.GetRoomCenter(RoomIndex));
+		// Detrás del centro y cerca del techo, para ver la sala entera.
+		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * 250.f + FVector(0.f, 0.f, NDHouseGen::WallHeight - 120.f);
+		Pawn->TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
+		PC->SetControlRotation(View);
+		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.ViewRoom: sala %d %s (%s), piso %d"), RoomIndex, *NDHouseGen::GetRoomTypeName(Layout.Rooms[RoomIndex].Def->RoomType),
+			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs ViewRoomCommand(TEXT("nde.HouseGen.ViewRoom"),
+		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ViewRoom));
+
 	void DebugPoints(const TArray<FString>& Args, UWorld* World)
 	{
 		const float Duration = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 30.f;
@@ -178,6 +215,13 @@ ANDHouseLot::ANDHouseLot()
 	DecorationMeshes->SetMobility(EComponentMobility::Movable);
 	DecorationMeshes->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 
+	DecorationFallbackMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("DecorationFallback"));
+	DecorationFallbackMeshes->SetupAttachment(Root);
+	DecorationFallbackMeshes->SetStaticMesh(CubeFinder.Object);
+	DecorationFallbackMeshes->SetMobility(EComponentMobility::Movable);
+	DecorationFallbackMeshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	DecorationFallbackMeshes->SetCanEverAffectNavigation(false);
+
 	UpdateEditorBounds();
 }
 
@@ -215,6 +259,7 @@ void ANDHouseLot::BeginPlay()
 	NDHouseLot::SetColor(GroundMeshes, BaseMaterial, this, FLinearColor(0.18f, 0.35f, 0.12f));
 	NDHouseLot::SetColor(ExtractionMeshes, BaseMaterial, this, FLinearColor(0.1f, 0.9f, 0.2f));
 	NDHouseLot::SetColor(DecorationMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
+	NDHouseLot::SetColor(DecorationFallbackMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
 	if (HasAuthority())
 	{
 		if (bGenerateOnBeginPlay)
@@ -321,6 +366,14 @@ void ANDHouseLot::ClearHouse()
 	GroundMeshes->ClearInstances();
 	ExtractionMeshes->ClearInstances();
 	DecorationMeshes->ClearInstances();
+	DecorationFallbackMeshes->ClearInstances();
+	for (const TPair<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>>& Art : DecorationArtMeshes)
+	{
+		if (Art.Value)
+		{
+			Art.Value->ClearInstances();
+		}
+	}
 	bHouseBuilt = false;
 	bNavPathVerified = false;
 }
@@ -418,12 +471,44 @@ void ANDHouseLot::BuildFromManifest()
 		}
 	}
 
-	// Muebles greybox: el cubo del motor mide 100 cm y se apoya en el suelo. nde.HouseGen.Furniture 0 los quita (depuración).
+	// Muebles: caja greybox con colisión (el cubo del motor mide 100 cm y se apoya en el suelo) y, encima, su
+	// malla de arte; con arte la caja no se ve. nde.HouseGen.Furniture 0 los quita (depuración).
+	const bool bArt = NDHouseArt::IsEnabled();
+	DecorationMeshes->SetVisibility(!bArt);
 	for (const FNDHouseDecoration& Decoration : NDHouseLot::CVarFurniture.GetValueOnGameThread() != 0 ? Layout.Decorations : TArray<FNDHouseDecoration>())
 	{
+		if (Layout.Rooms[Decoration.Room].Floor > MaxVisibleFloor)
+		{
+			continue;
+		}
 		const FTransform& Base = Decoration.LotTransform;
-		DecorationMeshes->AddInstance(FTransform(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z),
-			Decoration.HalfExtent * 2.f / 100.f));
+		const FTransform Box(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z), Decoration.HalfExtent * 2.f / 100.f);
+		const TArray<FNDFurnitureArt>& ArtList = NDHouseFurniture::GetArt();
+		const FNDFurnitureArt* Art = ArtList.IsValidIndex(Decoration.Art) ? &ArtList[Decoration.Art] : nullptr;
+		UStaticMesh* Mesh = bArt && Art ? NDHouseArt::LoadMesh(Art->MeshPath) : nullptr;
+		if (Mesh)
+		{
+			TObjectPtr<UInstancedStaticMeshComponent>& Meshes = DecorationArtMeshes.FindOrAdd(Mesh);
+			if (!Meshes)
+			{
+				Meshes = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
+				Meshes->SetupAttachment(Root);
+				Meshes->SetStaticMesh(Mesh);
+				Meshes->SetMobility(EComponentMobility::Movable);
+				Meshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+				Meshes->SetCanEverAffectNavigation(false);
+				Meshes->RegisterComponent();
+			}
+			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f)) * Base);
+		}
+		if (Decoration.bCollision)
+		{
+			DecorationMeshes->AddInstance(Box);
+			if (bArt && !Mesh)
+			{
+				DecorationFallbackMeshes->AddInstance(Box);
+			}
+		}
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.

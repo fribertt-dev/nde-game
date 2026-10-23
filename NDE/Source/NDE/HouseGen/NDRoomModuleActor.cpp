@@ -6,6 +6,7 @@
 #include "Components/PointLightComponent.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
+#include "HouseGen/NDHouseFurniture.h"
 #include "HouseGen/NDRoomCatalog.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -37,6 +38,66 @@ namespace NDRoomModuleActor
 		Meshes->SetCanEverAffectNavigation(bCollision);
 		return Meshes;
 	}
+
+	/** Pared de arte para un hueco centrado: malla y tamaño real de su hueco (medido en la malla). */
+	struct FWallArt
+	{
+		const TCHAR* Mesh = nullptr;
+		float HoleWidth = 0.f;
+		float HoleHeight = 0.f;
+	};
+
+	FWallArt GetWallArt(float OpeningWidth)
+	{
+		// Los nombres de las mallas no coinciden con su hueco: la "Door_L" es la más estrecha (134 cm)
+		// y la "Door_S" la más ancha (244 cm). La colisión va 2 cm dentro del hueco de la malla.
+		if (OpeningWidth <= 0.f)
+		{
+			return { TEXT("Wall_400") };
+		}
+		if (OpeningWidth <= 120.f)
+		{
+			return { TEXT("Wall_Door_L_400"), 130.f, 479.f };
+		}
+		if (OpeningWidth <= 190.f)
+		{
+			return { TEXT("Wall_Door_M_400"), 164.f, 500.f };
+		}
+		if (OpeningWidth <= 240.f)
+		{
+			return { TEXT("Wall_Door_S_400"), 240.f, 473.f };
+		}
+		if (OpeningWidth <= 270.f)
+		{
+			// Arco: se estrecha arriba; la colisión deja el paso recto de abajo.
+			return { TEXT("Wall_Arch_L_400"), 252.f, 400.f };
+		}
+		return {};
+	}
+
+	/** Suelo de arte según la sala. */
+	const TCHAR* GetFloorArt(ENDRoomType RoomType)
+	{
+		switch (RoomType)
+		{
+		case ENDRoomType::R04_Kitchen:
+		case ENDRoomType::R07_Bathroom:
+		case ENDRoomType::R12_Pantry:
+		case ENDRoomType::R13_Laundry:
+			return TEXT("Floor_Tile_400");
+		case ENDRoomType::R08_Storage:
+		case ENDRoomType::R16_Basement:
+		case ENDRoomType::R18_Garden:
+			return TEXT("Floor_Concrete_400");
+		case ENDRoomType::R06_MasterBedroom:
+		case ENDRoomType::R10_KidsBedroom:
+		case ENDRoomType::R14_Library:
+		case ENDRoomType::R15_Playroom:
+			return TEXT("Floor_Carpet_400");
+		default:
+			return TEXT("Floor_Wood_400");
+		}
+	}
 }
 
 ANDRoomModuleActor::ANDRoomModuleActor()
@@ -58,6 +119,7 @@ ANDRoomModuleActor::ANDRoomModuleActor()
 	FloorMeshes = NDRoomModuleActor::CreateMeshes(this, TEXT("Floor"), Root, CubeFinder.Object, true);
 	WallMeshes = NDRoomModuleActor::CreateMeshes(this, TEXT("Walls"), Root, CubeFinder.Object, true);
 	CeilingMeshes = NDRoomModuleActor::CreateMeshes(this, TEXT("Ceiling"), Root, CubeFinder.Object, true);
+	FallbackMeshes = NDRoomModuleActor::CreateMeshes(this, TEXT("Fallback"), Root, CubeFinder.Object, false);
 }
 
 void ANDRoomModuleActor::OnConstruction(const FTransform& Transform)
@@ -82,6 +144,14 @@ void ANDRoomModuleActor::ClearGreybox()
 	FloorMeshes->ClearInstances();
 	WallMeshes->ClearInstances();
 	CeilingMeshes->ClearInstances();
+	FallbackMeshes->ClearInstances();
+	for (const TPair<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>>& Art : ArtMeshes)
+	{
+		if (Art.Value)
+		{
+			Art.Value->ClearInstances();
+		}
+	}
 	for (UInstancedStaticMeshComponent* Meshes : MarkerMeshes)
 	{
 		if (Meshes)
@@ -95,6 +165,38 @@ void ANDRoomModuleActor::AddBox(UInstancedStaticMeshComponent* Target, const FVe
 {
 	// El cubo del motor mide 100 cm y tiene el pivote en el centro.
 	Target->AddInstance(FTransform(Rotation, Center, Size / 100.f));
+}
+
+void ANDRoomModuleActor::AddCollisionBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, bool bArtCovers, const FRotator& Rotation)
+{
+	AddBox(Target, Center, Size, Rotation);
+	if (bUseArt && !bArtCovers)
+	{
+		AddBox(FallbackMeshes, Center, Size, Rotation);
+	}
+}
+
+bool ANDRoomModuleActor::AddArt(const FString& MeshPath, const FTransform& Transform)
+{
+	UStaticMesh* Mesh = bUseArt ? NDHouseArt::LoadMesh(MeshPath) : nullptr;
+	if (!Mesh)
+	{
+		return false;
+	}
+	TObjectPtr<UInstancedStaticMeshComponent>& Meshes = ArtMeshes.FindOrAdd(Mesh);
+	if (!Meshes)
+	{
+		Meshes = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
+		Meshes->SetupAttachment(Root);
+		Meshes->SetStaticMesh(Mesh);
+		Meshes->SetMobility(EComponentMobility::Static);
+		// Solo se ve: la colisión y la navegación son del greybox invisible.
+		Meshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Meshes->SetCanEverAffectNavigation(false);
+		Meshes->RegisterComponent();
+	}
+	Meshes->AddInstance(Transform);
+	return true;
 }
 
 void ANDRoomModuleActor::SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color)
@@ -150,9 +252,25 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 			Height);
 	};
 
+	// Arte: la malla de pared va de 0 a 400 en X (a lo largo) y la colisión sigue su hueco real.
+	// Los huecos desplazados (escaleras en U) no tienen malla: se ve el greybox.
+	float DoorTop = DoorHeight;
+	bool bArt = false;
+	const NDRoomModuleActor::FWallArt WallArt = NDRoomModuleActor::GetWallArt(OpeningWidth);
+	if (WallArt.Mesh && FMath::Abs(OpeningOffset) < 1.f)
+	{
+		const FRotator Yaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Tangent.Y, Tangent.X)), 0.f);
+		bArt = AddArt(NDHouseArt::GetStructurePath(WallArt.Mesh), FTransform(Yaw, WallCenter - Tangent * (CellSize * 0.5f)));
+		if (bArt && OpeningWidth > 0.f)
+		{
+			OpeningWidth = WallArt.HoleWidth;
+			DoorTop = WallArt.HoleHeight;
+		}
+	}
+
 	if (OpeningWidth <= 0.f)
 	{
-		AddBox(WallMeshes, WallCenter + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(CellSize, WallHeight));
+		AddCollisionBox(WallMeshes, WallCenter + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(CellSize, WallHeight), bArt);
 		return;
 	}
 
@@ -166,11 +284,11 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 		const float Length = Ends[Piece] - Starts[Piece];
 		if (Length > 1.f)
 		{
-			AddBox(WallMeshes, WallCenter + Tangent * ((Starts[Piece] + Ends[Piece]) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Length, WallHeight));
+			AddCollisionBox(WallMeshes, WallCenter + Tangent * ((Starts[Piece] + Ends[Piece]) * 0.5f) + FVector(0.f, 0.f, WallHeight * 0.5f), MakeSize(Length, WallHeight), bArt);
 		}
 	}
-	const float LintelHeight = WallHeight - DoorHeight;
-	AddBox(WallMeshes, WallCenter + Tangent * Center + FVector(0.f, 0.f, DoorHeight + LintelHeight * 0.5f), MakeSize(Door, LintelHeight));
+	const float LintelHeight = WallHeight - DoorTop;
+	AddCollisionBox(WallMeshes, WallCenter + Tangent * Center + FVector(0.f, 0.f, DoorTop + LintelHeight * 0.5f), MakeSize(Door, LintelHeight), bArt);
 }
 
 void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
@@ -184,6 +302,14 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	SetColor(FloorMeshes, FLinearColor(GetRoomTypeColor(Definition.RoomType)) * 0.6f);
 	SetColor(WallMeshes, NDRoomModuleActor::WallColor);
 	SetColor(CeilingMeshes, NDRoomModuleActor::CeilingColor);
+	SetColor(FallbackMeshes, NDRoomModuleActor::WallColor);
+	// Con arte, el greybox sigue dando colisión y navegación, pero no se ve.
+	bUseArt = NDHouseArt::IsEnabled();
+	FloorMeshes->SetVisibility(!bUseArt);
+	WallMeshes->SetVisibility(!bUseArt);
+	CeilingMeshes->SetVisibility(!bUseArt);
+	const FString FloorArt = NDHouseArt::GetStructurePath(NDRoomModuleActor::GetFloorArt(Definition.RoomType));
+	const FString CeilingArt = NDHouseArt::GetStructurePath(TEXT("Ceiling_400"));
 
 	// Por celda (las salas en L no llenan su rectángulo): suelo con la cara de arriba en Z = 0,
 	// techo opcional y paredes en cada borde que no da a otra celda de la sala.
@@ -196,12 +322,15 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 		// La llegada de una escalera es un hueco en el forjado: no lleva suelo.
 		if (Definition.StairPart != ENDStairPart::Top)
 		{
-			AddBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+			// Las baldosas de arte tienen el pivote en una esquina y van de 0 a 400 en X y de 0 a -400 en Y.
+			const bool bArt = AddArt(FloorArt, FTransform(CellCenter + FVector(-CellSize * 0.5f, CellSize * 0.5f, 0.f)));
+			AddCollisionBox(FloorMeshes, CellCenter - FVector(0.f, 0.f, WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness), bArt);
 		}
 		const bool bCeilingHere = !CeilingPerCell || !CeilingPerCell->IsValidIndex(CellIndex) || (*CeilingPerCell)[CellIndex];
 		if (bBuildCeiling && bCeilingHere)
 		{
-			AddBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness));
+			const bool bArt = AddArt(CeilingArt, FTransform(CellCenter + FVector(-CellSize * 0.5f, CellSize * 0.5f, WallHeight)));
+			AddCollisionBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness), bArt);
 		}
 
 		for (int32 DirIndex = 0; DirIndex < 4; ++DirIndex)
@@ -250,13 +379,20 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 		if (Segment.Height > 0.f)
 		{
 			const float Bottom = FMath::Min(Segment.Start.Z, Segment.End.Z);
-			AddBox(FloorMeshes, FVector(Middle.X, Middle.Y, Bottom + Segment.Height * 0.5f), FVector(Horizontal, Segment.Width, Segment.Height), FRotator(0.f, Yaw, 0.f));
+			AddCollisionBox(FloorMeshes, FVector(Middle.X, Middle.Y, Bottom + Segment.Height * 0.5f), FVector(Horizontal, Segment.Width, Segment.Height), false, FRotator(0.f, Yaw, 0.f));
 		}
 		else
 		{
+			// La escalera de arte sube un piso entero en 8 m (de 0 a -800 en Y, de 0 a 400 en X): solo la recta.
+			bool bArt = false;
+			if (FMath::IsNearlyEqual(Horizontal, 2.f * CellSize, 1.f) && FMath::IsNearlyEqual(Delta.Z, FloorHeight, 1.f))
+			{
+				const FRotator ArtYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Delta.X, -Delta.Y)), 0.f);
+				bArt = AddArt(NDHouseArt::GetStructurePath(TEXT("Stairs_Giant")), FTransform(ArtYaw, Segment.Start - ArtYaw.RotateVector(FVector(CellSize * 0.5f, 0.f, 0.f))));
+			}
 			const FRotator Rotation(FMath::RadiansToDegrees(FMath::Atan2(Delta.Z, Horizontal)), Yaw, 0.f);
 			const FVector Center = Middle - Rotation.RotateVector(FVector::UpVector) * (WallThickness * 0.5f);
-			AddBox(FloorMeshes, Center, FVector(Delta.Size(), Segment.Width, WallThickness), Rotation);
+			AddCollisionBox(FloorMeshes, Center, FVector(Delta.Size(), Segment.Width, WallThickness), bArt, Rotation);
 		}
 	}
 

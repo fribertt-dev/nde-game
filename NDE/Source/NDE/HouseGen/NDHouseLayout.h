@@ -222,6 +222,19 @@ struct FNDHouseDecoration
 	FTransform LotTransform;
 	/** Medio tamaño en cm (sin girar). */
 	FVector HalfExtent = FVector(35.f);
+	/** Mueble de arte (índice en NDHouseFurniture::GetArt), o INDEX_NONE si es una caja greybox. */
+	int32 Art = INDEX_NONE;
+	/** Sin colisión: alfombras y adornos encima de otro mueble. */
+	bool bCollision = true;
+
+	/** Huella en planta (relativa al lote), con el giro aplicado. */
+	FBox2D GetFootprint() const
+	{
+		const bool bTurned = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(LotTransform.Rotator().Yaw))) > 0.5f;
+		const FVector2D Half = bTurned ? FVector2D(HalfExtent.Y, HalfExtent.X) : FVector2D(HalfExtent.X, HalfExtent.Y);
+		const FVector2D Center(LotTransform.GetLocation());
+		return FBox2D(Center - Half, Center + Half);
+	}
 };
 
 /** Cuánto sonido pasa por una puerta entre dos salas (0 = nada, 1 = todo). */

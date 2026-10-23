@@ -3,6 +3,8 @@
 
 #include "HouseGen/NDHouseLayout.h"
 
+#include "HouseGen/NDHouseFurniture.h"
+
 namespace NDHouseGameplay
 {
 	/** Ancho del bulto por defecto (FNDHouseGenParams::CarryEnvelopeWidth). */
@@ -55,36 +57,6 @@ namespace NDHouseGameplay
 			const FVector Tangent(-Out.Y, Out.X, 0.f);
 			OutPoints.Add(Center + Tangent * Offset);
 			OutPoints.Add(Center - Tangent * Offset);
-		}
-	}
-
-	/** Mueble según la sala (el dormitorio principal no: allí irá la cama de la criatura con su arte). */
-	ENDDecorationKind GetDecorationKind(ENDRoomType RoomType, FRandomStream& Rng)
-	{
-		switch (RoomType)
-		{
-		case ENDRoomType::R03_LivingRoom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Armchair : ENDDecorationKind::Table;
-		case ENDRoomType::R04_Kitchen:
-		case ENDRoomType::R05_DiningRoom: return Rng.FRand() < 0.6f ? ENDDecorationKind::Table : ENDDecorationKind::Shelf;
-		case ENDRoomType::R06_MasterBedroom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Wardrobe : ENDDecorationKind::Armchair;
-		case ENDRoomType::R10_KidsBedroom: return Rng.FRand() < 0.5f ? ENDDecorationKind::Bed : ENDDecorationKind::Wardrobe;
-		case ENDRoomType::R11_Study:
-		case ENDRoomType::R14_Library: return Rng.FRand() < 0.6f ? ENDDecorationKind::Shelf : ENDDecorationKind::Armchair;
-		default: return Rng.FRand() < 0.5f ? ENDDecorationKind::Crate : ENDDecorationKind::Shelf;
-		}
-	}
-
-	/** Medio tamaño de cada mueble greybox, en cm (a escala de la casa del gigante). */
-	FVector GetDecorationHalfExtent(ENDDecorationKind Kind)
-	{
-		switch (Kind)
-		{
-		case ENDDecorationKind::Table: return FVector(60.f, 45.f, 38.f);
-		case ENDDecorationKind::Armchair: return FVector(45.f, 45.f, 45.f);
-		case ENDDecorationKind::Wardrobe: return FVector(30.f, 55.f, 100.f);
-		case ENDDecorationKind::Shelf: return FVector(20.f, 55.f, 90.f);
-		case ENDDecorationKind::Bed: return FVector(55.f, 50.f, 25.f);
-		default: return FVector(35.f, 35.f, 35.f);
 		}
 	}
 
@@ -371,11 +343,80 @@ void FNDHouseLayout::BuildGameplayPoints()
 	BuildDecorations();
 }
 
+namespace NDHouseDecorations
+{
+	/** El arte de las paredes mide 30 cm y va 10 cm dentro de la sala: su cara interior queda a 25 cm del borde. */
+	constexpr float WallInset = 27.f;
+	/** Paso libre alrededor del centro de la sala (nodo de patrulla) y a cada lado de la ruta puerta-centro:
+	 * más que el radio del agente del NavMesh (34 cm), o la patrulla de la criatura no pasa. */
+	constexpr float HubClearance = 45.f;
+	constexpr float RouteClearance = 45.f;
+	/** Paso libre a los lados del hueco de una puerta. */
+	constexpr float DoorClearance = 20.f;
+	/** Distancia a botín, spawns, escondites y peligros. */
+	constexpr float ReservedClearance = 35.f;
+	/** Hueco entre dos muebles. */
+	constexpr float Gap = 10.f;
+	/** Radio con el que se comprueba el paso por la sala (algo más que el agente del NavMesh) y paso de la rejilla. */
+	constexpr float PathAgent = 40.f;
+	constexpr float PathStep = 25.f;
+
+	struct FDoorPoint
+	{
+		FVector2D Point;
+		float HalfWidth = 0.f;
+		/** Hacia dentro de la sala. */
+		FVector2D Inward = FVector2D::ZeroVector;
+	};
+
+	/** Tramo recto de pared de una sala, con los sitios donde probar un mueble. */
+	struct FWallRun
+	{
+		FVector2D Along;
+		FVector2D WallPoint;
+		FIntPoint Out;
+		float Start = 0.f;
+		float End = 0.f;
+		TArray<float> Stops;
+	};
+
+	/** Giro que lleva el respaldo (+Y local) hacia la pared de normal Out. */
+	float GetWallYaw(const FIntPoint& Out)
+	{
+		return FMath::RadiansToDegrees(FMath::Atan2(-static_cast<float>(Out.X), static_cast<float>(Out.Y)));
+	}
+
+	float DistanceToBox(const FBox2D& Box, const FVector2D& Point)
+	{
+		return FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(Point));
+	}
+
+	float DistanceToSegment(const FBox2D& Box, const FVector2D& A, const FVector2D& B)
+	{
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(FVector2D::Distance(A, B) / 20.f));
+		float Best = UE_BIG_NUMBER;
+		for (int32 Step = 0; Step <= Steps; ++Step)
+		{
+			Best = FMath::Min(Best, DistanceToBox(Box, FMath::Lerp(A, B, Step / static_cast<float>(Steps))));
+		}
+		return Best;
+	}
+
+	FBox2D MakeFootprint(const FVector& Center, float Yaw, const FVector& Size)
+	{
+		const bool bTurned = FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Yaw))) > 0.5f;
+		const FVector2D Half = bTurned ? FVector2D(Size.Y, Size.X) * 0.5f : FVector2D(Size.X, Size.Y) * 0.5f;
+		return FBox2D(FVector2D(Center) - Half, FVector2D(Center) + Half);
+	}
+}
+
 void FNDHouseLayout::BuildDecorations()
 {
 	using namespace NDHouseGameplay;
+	using namespace NDHouseDecorations;
 	Decorations.Reset();
 	FRandomStream Rng(static_cast<int32>(HashCombineFast(GetTypeHash(RunSeed), GetTypeHash(FString(TEXT("Decorations"))))));
+	const TArray<FNDFurnitureArt>& ArtList = NDHouseFurniture::GetArt();
 
 	// Puntos que un mueble no puede tapar: botín, spawns, criatura, escondites, peligros.
 	TArray<FVector> Reserved;
@@ -401,76 +442,294 @@ void FNDHouseLayout::BuildDecorations()
 	for (int32 RoomIndex = 0; RoomIndex < Rooms.Num(); ++RoomIndex)
 	{
 		const FNDHouseLayoutRoom& Room = Rooms[RoomIndex];
-		if (RoomIndex == EntryRoom || Room.Def->StairPart != ENDStairPart::None || Room.Def->RoomType == ENDRoomType::R02_Corridor)
+		if (Room.Def->StairPart != ENDStairPart::None || Room.Def->RoomType == ENDRoomType::R02_Corridor)
 		{
 			continue;
 		}
-		// Rutas de la sala: de cada puerta abierta a su nodo de patrulla (el centro libre).
-		const FVector Hub = PatrolNodes[RoomIndex].Location;
-		TArray<FVector> Doors;
+		const float FloorZ = Room.Floor * NDHouseGen::FloorHeight;
+		const FVector2D Hub(PatrolNodes[RoomIndex].Location);
+		// Puertas abiertas con su medio ancho; la ruta de cada una va al nodo de patrulla (el centro libre).
+		TArray<FDoorPoint> Doors;
 		for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
 		{
-			if (Room.Sockets[SocketIndex].IsOpen())
-			{
-				AddDoorPoints(*this, RoomIndex, SocketIndex, Doors);
-			}
-		}
-		// Candidatas: las cuatro esquinas de cada celda, barajadas con la semilla.
-		TArray<FIntPoint> Cells;
-		GetRoomCells(RoomIndex, Cells);
-		TArray<FVector> Spots;
-		for (const FIntPoint& Cell : Cells)
-		{
-			const FVector Center = Lot.GetCellCenter(Cell) + FVector(0.f, 0.f, Room.Floor * NDHouseGen::FloorHeight);
-			// Esquinas y mitad de cada pared de la celda (pegado a la pared, dejando libre el centro).
-			for (const FVector2D Corner : { FVector2D(1, 1), FVector2D(1, -1), FVector2D(-1, 1), FVector2D(-1, -1),
-				FVector2D(1, 0), FVector2D(-1, 0), FVector2D(0, 1), FVector2D(0, -1) })
-			{
-				Spots.Add(Center + FVector(Corner.X * 125.f, Corner.Y * 125.f, 0.f));
-			}
-		}
-		for (int32 Index = Spots.Num() - 1; Index > 0; --Index)
-		{
-			Spots.Swap(Index, Rng.RandRange(0, Index));
-		}
-
-		const int32 Wanted = Rng.RandRange(2, 3);
-		int32 Placed = 0;
-		for (const FVector& Spot : Spots)
-		{
-			if (Placed >= Wanted)
-			{
-				break;
-			}
-			const ENDDecorationKind Kind = GetDecorationKind(Room.Def->RoomType, Rng);
-			const FVector Half = GetDecorationHalfExtent(Kind);
-			const float Radius = FMath::Max(Half.X, Half.Y);
-			const float Clearance = Radius + DecorationRouteClearance;
-			const bool bBlocked = FindRoomAt(Spot) != RoomIndex
-				|| Doors.ContainsByPredicate([&](const FVector& Door)
-					{
-						return FVector::Dist2D(Door, Spot) < Clearance + 40.f
-							|| FMath::PointDistToSegment(FVector(Spot.X, Spot.Y, 0.f), FVector(Door.X, Door.Y, 0.f), FVector(Hub.X, Hub.Y, 0.f)) < Clearance;
-					})
-				|| FVector::Dist2D(Hub, Spot) < Clearance
-				|| Reserved.ContainsByPredicate([&](const FVector& Point) { return FMath::Abs(Point.Z - Spot.Z) < 200.f && FVector::Dist2D(Point, Spot) < Radius + 60.f; })
-				|| Decorations.ContainsByPredicate([&](const FNDHouseDecoration& Other) { return Other.Room == RoomIndex && FVector::Dist2D(Other.LotTransform.GetLocation(), Spot) < 160.f; });
-			if (bBlocked)
+			const FNDHouseLayoutSocket& Socket = Room.Sockets[SocketIndex];
+			if (!Socket.IsOpen())
 			{
 				continue;
 			}
+			const float Width = Socket.Connection != INDEX_NONE ? Connections[Socket.Connection].OpeningWidth : Socket.Width;
+			TArray<FVector> Points;
+			AddDoorPoints(*this, RoomIndex, SocketIndex, Points);
+			for (const FVector& Point : Points)
+			{
+				Doors.Add({ FVector2D(Point), Width * 0.5f, -FVector2D(NDHouseGen::DirectionToOffset(Socket.LotDirection)) });
+			}
+		}
+		TArray<FIntPoint> Cells;
+		GetRoomCells(RoomIndex, Cells);
+		const TSet<FIntPoint> RoomCells(Cells);
+		auto IsInRoom = [this, &RoomCells](const FVector2D& Point)
+		{
+			return RoomCells.Contains(FIntPoint(
+				FMath::FloorToInt(Point.X / NDHouseGen::CellSize + Lot.SizeCells.X * 0.5f),
+				FMath::FloorToInt(Point.Y / NDHouseGen::CellSize + Lot.SizeCells.Y * 0.5f)));
+		};
+		// La huella, con el grosor de las paredes, cae entera dentro de la sala.
+		auto FitsInRoom = [&IsInRoom](const FBox2D& Box)
+		{
+			const FBox2D Outer = Box.ExpandBy(WallInset);
+			const FVector2D Size = Outer.GetSize();
+			const int32 StepsX = FMath::Max(1, FMath::CeilToInt(Size.X / 50.f));
+			const int32 StepsY = FMath::Max(1, FMath::CeilToInt(Size.Y / 50.f));
+			for (int32 X = 0; X <= StepsX; ++X)
+			{
+				for (int32 Y = 0; Y <= StepsY; ++Y)
+				{
+					// Un poco hacia dentro: el borde exterior cae justo en la línea entre celdas.
+					const FVector2D Point = Outer.Min + FVector2D(Size.X * X / StepsX, Size.Y * Y / StepsY);
+					if (!IsInRoom(FMath::Lerp(Point, Outer.GetCenter(), 0.001f)))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
+		};
+		// Paso de la criatura y del bulto: con el radio del agente del NavMesh, desde el centro de la sala se llega
+		// a cada puerta sin chocar con paredes ni muebles. Se mira en una rejilla; lo que ya no se alcanzaba sin
+		// muebles (p. ej. una puerta tras un murete) no cuenta.
+		FVector2D GridMin(UE_BIG_NUMBER), GridMax(-UE_BIG_NUMBER);
+		for (const FIntPoint& Cell : Cells)
+		{
+			const FVector2D Center(Lot.GetCellCenter(Cell));
+			GridMin = FVector2D::Min(GridMin, Center - FVector2D(NDHouseGen::CellSize * 0.5f));
+			GridMax = FVector2D::Max(GridMax, Center + FVector2D(NDHouseGen::CellSize * 0.5f));
+		}
+		const int32 GridX = FMath::CeilToInt((GridMax.X - GridMin.X) / PathStep);
+		const int32 GridY = FMath::CeilToInt((GridMax.Y - GridMin.Y) / PathStep);
+		auto GridPoint = [&GridMin](int32 X, int32 Y) { return GridMin + FVector2D(X + 0.5f, Y + 0.5f) * PathStep; };
+		auto GridIndex = [&GridMin, GridX, GridY](const FVector2D& Point)
+		{
+			const int32 X = FMath::FloorToInt((Point.X - GridMin.X) / PathStep);
+			const int32 Y = FMath::FloorToInt((Point.Y - GridMin.Y) / PathStep);
+			return X >= 0 && Y >= 0 && X < GridX && Y < GridY ? X + Y * GridX : INDEX_NONE;
+		};
+		// Sin muebles: dentro de la sala y lejos de sus paredes.
+		TArray<bool> WallFree;
+		WallFree.SetNumUninitialized(GridX * GridY);
+		const float WallReach = PathAgent + NDHouseGen::WallThickness;
+		for (int32 Y = 0; Y < GridY; ++Y)
+		{
+			for (int32 X = 0; X < GridX; ++X)
+			{
+				const FVector2D Point = GridPoint(X, Y);
+				WallFree[X + Y * GridX] = IsInRoom(Point) && IsInRoom(Point + FVector2D(WallReach, 0.f)) && IsInRoom(Point - FVector2D(WallReach, 0.f))
+					&& IsInRoom(Point + FVector2D(0.f, WallReach)) && IsInRoom(Point - FVector2D(0.f, WallReach));
+			}
+		}
+		// Puertas a las que hay que llegar: delante del hueco, ya lejos de la pared.
+		TArray<int32> DoorTargets;
+		for (const FDoorPoint& Door : Doors)
+		{
+			DoorTargets.Add(GridIndex(Door.Point + Door.Inward * (WallReach + PathStep)));
+		}
+		auto ReachedDoors = [&](const FBox2D* Extra)
+		{
+			TArray<FBox2D> Blocks;
+			for (const FNDHouseDecoration& Other : Decorations)
+			{
+				if (Other.Room == RoomIndex && Other.bCollision)
+				{
+					Blocks.Add(Other.GetFootprint());
+				}
+			}
+			if (Extra)
+			{
+				Blocks.Add(*Extra);
+			}
+			auto IsWalkable = [&](int32 Index)
+			{
+				const FVector2D Point = GridPoint(Index % GridX, Index / GridX);
+				return WallFree[Index] && !Blocks.ContainsByPredicate([&Point](const FBox2D& Block) { return DistanceToBox(Block, Point) <= PathAgent; });
+			};
+			TArray<bool> Visited;
+			Visited.SetNumZeroed(GridX * GridY);
+			TArray<int32> Open;
+			const int32 Start = GridIndex(Hub);
+			if (Start != INDEX_NONE && IsWalkable(Start))
+			{
+				Visited[Start] = true;
+				Open.Add(Start);
+			}
+			while (Open.Num() > 0)
+			{
+				const int32 Index = Open.Pop(EAllowShrinking::No);
+				const int32 X = Index % GridX;
+				const int32 Y = Index / GridX;
+				for (const FIntPoint& Step : { FIntPoint(1, 0), FIntPoint(-1, 0), FIntPoint(0, 1), FIntPoint(0, -1) })
+				{
+					const int32 NextX = X + Step.X;
+					const int32 NextY = Y + Step.Y;
+					const int32 Next = NextX + NextY * GridX;
+					if (NextX >= 0 && NextY >= 0 && NextX < GridX && NextY < GridY && !Visited[Next] && IsWalkable(Next))
+					{
+						Visited[Next] = true;
+						Open.Add(Next);
+					}
+				}
+			}
+			TArray<bool> Reached;
+			for (const int32 Target : DoorTargets)
+			{
+				Reached.Add(Target != INDEX_NONE && Visited[Target]);
+			}
+			return Reached;
+		};
+		const TArray<bool> ReachedWithoutFurniture = ReachedDoors(nullptr);
+		auto KeepsPaths = [&](const FBox2D& Box)
+		{
+			const TArray<bool> Reached = ReachedDoors(&Box);
+			for (int32 Index = 0; Index < Reached.Num(); ++Index)
+			{
+				if (ReachedWithoutFurniture[Index] && !Reached[Index])
+				{
+					return false;
+				}
+			}
+			return true;
+		};
+		auto OverlapsFurniture = [this, RoomIndex](const FBox2D& Box)
+		{
+			return Decorations.ContainsByPredicate([&Box, RoomIndex](const FNDHouseDecoration& Other)
+			{
+				return Other.Room == RoomIndex && Other.Kind != ENDDecorationKind::Rug && Box.ExpandBy(Gap).Intersect(Other.GetFootprint());
+			});
+		};
+		// Sitio libre para un mueble con colisión: no tapa puertas, rutas, el centro ni puntos reservados.
+		auto IsFree = [&](const FBox2D& Box)
+		{
+			if (!FitsInRoom(Box) || OverlapsFurniture(Box) || DistanceToBox(Box, Hub) < HubClearance)
+			{
+				return false;
+			}
+			for (const FDoorPoint& Door : Doors)
+			{
+				if (DistanceToBox(Box, Door.Point) < Door.HalfWidth + DoorClearance || DistanceToSegment(Box, Door.Point, Hub) < RouteClearance)
+				{
+					return false;
+				}
+			}
+			return !Reserved.ContainsByPredicate([&Box, FloorZ](const FVector& Point)
+			{
+				return FMath::Abs(Point.Z - FloorZ) < 200.f && DistanceToBox(Box, FVector2D(Point)) < ReservedClearance;
+			}) && KeepsPaths(Box);
+		};
+
+		// Tramos rectos de pared: celdas seguidas con pared al mismo lado.
+		TArray<FWallRun> WallRuns;
+		for (int32 Dir = 0; Dir < 4; ++Dir)
+		{
+			const FIntPoint Out = NDHouseGen::DirectionToOffset(static_cast<ENDCellDirection>(Dir));
+			const FIntPoint AlongCell(FMath::Abs(Out.Y), FMath::Abs(Out.X));
+			TArray<FIntPoint> Edge = Cells.FilterByPredicate([&RoomCells, &Out](const FIntPoint& Cell) { return !RoomCells.Contains(Cell + Out); });
+			// Por la línea de la pared y luego a lo largo.
+			auto SortKey = [&AlongCell](const FIntPoint& Cell)
+			{
+				return (Cell.X * AlongCell.Y + Cell.Y * AlongCell.X) * 1000 + Cell.X * AlongCell.X + Cell.Y * AlongCell.Y;
+			};
+			Edge.Sort([&SortKey](const FIntPoint& A, const FIntPoint& B) { return SortKey(A) < SortKey(B); });
+			for (int32 Index = 0; Index < Edge.Num();)
+			{
+				int32 Last = Index;
+				while (Last + 1 < Edge.Num() && Edge[Last + 1] == Edge[Last] + AlongCell)
+				{
+					++Last;
+				}
+				FWallRun& Run = WallRuns.AddDefaulted_GetRef();
+				Run.Along = FVector2D(AlongCell.X, AlongCell.Y);
+				Run.Out = Out;
+				Run.WallPoint = FVector2D(Lot.GetCellCenter(Edge[Index])) + FVector2D(Out.X, Out.Y) * (NDHouseGen::CellSize * 0.5f);
+				Run.Start = -NDHouseGen::CellSize * 0.5f + WallInset;
+				Run.End = (Last - Index + 0.5f) * NDHouseGen::CellSize - WallInset;
+				for (int32 Cell = 0; Cell <= Last - Index; ++Cell)
+				{
+					Run.Stops.Add(Cell * NDHouseGen::CellSize);
+				}
+				Index = Last + 1;
+			}
+		}
+		// Pegado a la pared: al principio y al final de cada tramo (esquinas), en medio y en cada celda.
+		auto AddWallCandidates = [&WallRuns, FloorZ](const FVector& Size, TArray<FTransform>& Out)
+		{
+			for (const FWallRun& Run : WallRuns)
+			{
+				if (Run.End - Run.Start < Size.X)
+				{
+					continue;
+				}
+				TArray<float> Stops = Run.Stops;
+				const float HalfWidth = static_cast<float>(Size.X) * 0.5f;
+				Stops.Append({ Run.Start + HalfWidth, Run.End - HalfWidth, (Run.Start + Run.End) * 0.5f });
+				const float Yaw = GetWallYaw(Run.Out);
+				for (const float Stop : Stops)
+				{
+					if (Stop - Size.X * 0.5f < Run.Start - 0.5f || Stop + Size.X * 0.5f > Run.End + 0.5f)
+					{
+						continue;
+					}
+					const FVector2D Center = Run.WallPoint + Run.Along * Stop - FVector2D(Run.Out.X, Run.Out.Y) * (WallInset + Size.Y * 0.5f);
+					Out.Add(FTransform(FRotator(0.f, Yaw, 0.f), FVector(Center, FloorZ)));
+				}
+			}
+		};
+		// Centro: el centro de la sala y desplazado en pasos, para dejar libre el nodo de patrulla.
+		FVector2D Min(UE_BIG_NUMBER), Max(-UE_BIG_NUMBER);
+		for (const FIntPoint& Cell : Cells)
+		{
+			const FVector2D Center(Lot.GetCellCenter(Cell));
+			Min = FVector2D::Min(Min, Center);
+			Max = FVector2D::Max(Max, Center);
+		}
+		const FVector2D RoomCenter = (Min + Max) * 0.5f;
+		auto AddCenterCandidates = [&RoomCenter, FloorZ](TArray<FTransform>& Out)
+		{
+			for (const float X : { 0.f, -75.f, 75.f, -150.f, 150.f })
+			{
+				for (const float Y : { 0.f, -75.f, 75.f, -150.f, 150.f })
+				{
+					for (const float Yaw : { 0.f, 90.f })
+					{
+						Out.Add(FTransform(FRotator(0.f, Yaw, 0.f), FVector(RoomCenter + FVector2D(X, Y), FloorZ)));
+					}
+				}
+			}
+		};
+		auto Shuffle = [&Rng](TArray<FTransform>& Candidates)
+		{
+			for (int32 Index = Candidates.Num() - 1; Index > 0; --Index)
+			{
+				Candidates.Swap(Index, Rng.RandRange(0, Index));
+			}
+		};
+		auto AddDecoration = [this, RoomIndex, &ArtList](int32 ArtIndex, const FTransform& Transform, bool bCollision) -> FNDHouseDecoration&
+		{
 			FNDHouseDecoration& Decoration = Decorations.AddDefaulted_GetRef();
 			Decoration.StableId = Decorations.Num() - 1;
 			Decoration.Room = RoomIndex;
-			Decoration.Kind = Kind;
-			Decoration.HalfExtent = Half;
-			Decoration.LotTransform = FTransform(FRotator(0.f, Rng.RandRange(0, 1) * 90.f, 0.f), Spot);
-			++Placed;
-
-			// Algunos muebles son escondites (cuentan como cobertura).
+			Decoration.Art = ArtIndex;
+			Decoration.Kind = bCollision ? ArtList[ArtIndex].Kind : ENDDecorationKind::Rug;
+			Decoration.HalfExtent = ArtList[ArtIndex].Size * 0.5f;
+			Decoration.LotTransform = Transform;
+			Decoration.bCollision = bCollision;
+			return Decoration;
+		};
+		// Algunos muebles son escondites (cuentan como cobertura); la entrada va delante, dentro de la sala.
+		auto AddHidingSpot = [this, RoomIndex](int32 DecorationIndex, const FVector& Front)
+		{
+			const FNDHouseDecoration& Decoration = Decorations[DecorationIndex];
 			int32 Capacity = 0;
 			ENDHidingSpotKind HideKind = ENDHidingSpotKind::BehindFurniture;
-			switch (Kind)
+			switch (Decoration.Kind)
 			{
 			case ENDDecorationKind::Table:
 			case ENDDecorationKind::Bed: Capacity = 2; HideKind = ENDHidingSpotKind::UnderFurniture; break;
@@ -478,17 +737,145 @@ void FNDHouseLayout::BuildDecorations()
 			case ENDDecorationKind::Armchair: Capacity = 1; HideKind = ENDHidingSpotKind::BehindFurniture; break;
 			default: break;
 			}
-			if (Capacity > 0)
+			const FVector2D Extent = Decoration.GetFootprint().GetExtent();
+			const float Reach = FMath::Abs(Front.X) * Extent.X + FMath::Abs(Front.Y) * Extent.Y;
+			const FVector Entry = Decoration.LotTransform.GetLocation() + Front * (Reach + 40.f);
+			if (Capacity == 0 || FindRoomAt(Entry) != RoomIndex)
 			{
-				FNDHouseHidingSpot& Hide = HidingSpots.AddDefaulted_GetRef();
-				Hide.StableId = HidingSpots.Num() - 1;
-				Hide.Room = RoomIndex;
-				Hide.LotTransform = Decoration.LotTransform;
-				Hide.Kind = HideKind;
-				Hide.Capacity = Capacity;
-				const FVector ToHub = (Hub - Spot).GetSafeNormal2D();
-				Hide.EntryPoint = Spot + ToHub * (Radius + 40.f);
+				return;
 			}
+			FNDHouseHidingSpot& Hide = HidingSpots.AddDefaulted_GetRef();
+			Hide.StableId = HidingSpots.Num() - 1;
+			Hide.Room = RoomIndex;
+			Hide.LotTransform = Decoration.LotTransform;
+			Hide.Kind = HideKind;
+			Hide.Capacity = Capacity;
+			Hide.EntryPoint = Entry;
+		};
+
+		// Cama de la criatura (dormitorio principal): pegada a la pared, sobre su ancla. Sin colisión hasta
+		// que la criatura tenga su arte (el borde de la cama guarda el objetivo de C05).
+		if (Room.Def->RoomType == ENDRoomType::R06_MasterBedroom)
+		{
+			const int32 BedArt = NDHouseFurniture::FindArt(NDHouseFurniture::GetCreatureBedId());
+			const FNDHouseLayoutMarker* Anchor = Markers.FindByPredicate([RoomIndex](const FNDHouseLayoutMarker& Marker)
+			{
+				return Marker.Type == ENDRoomMarkerType::MonsterAnchor && Marker.Room == RoomIndex;
+			});
+			TArray<FTransform> Candidates;
+			if (Anchor && ArtList.IsValidIndex(BedArt))
+			{
+				AddWallCandidates(ArtList[BedArt].Size, Candidates);
+			}
+			for (const FTransform& Candidate : Candidates)
+			{
+				const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, ArtList[BedArt].Size);
+				const bool bClearsDoors = !Doors.ContainsByPredicate([&Box](const FDoorPoint& Door) { return DistanceToBox(Box, Door.Point) < Door.HalfWidth + DoorClearance; });
+				if (Box.IsInside(FVector2D(Anchor->LotTransform.GetLocation())) && FitsInRoom(Box) && bClearsDoors)
+				{
+					AddDecoration(BedArt, Candidate, false).Kind = ENDDecorationKind::Bed;
+					break;
+				}
+			}
+		}
+
+		// Muebles de la sala, por orden de prioridad. Los que comparten malla comparten el máximo.
+		const int32 MaxPieces = FMath::Min(3 + 2 * (Cells.Num() - 1), 8);
+		int32 Pieces = 0;
+		TMap<FString, int32> PlacedByMesh;
+		for (const FNDRoomFurniture& Entry : NDHouseFurniture::GetRoomFurniture(Room.Def->RoomType))
+		{
+			const int32 ArtIndex = NDHouseFurniture::FindArt(Entry.Id);
+			if (!ArtList.IsValidIndex(ArtIndex))
+			{
+				continue;
+			}
+			const FNDFurnitureArt& Art = ArtList[ArtIndex];
+			const bool bFlat = Entry.Placement == ENDFurniturePlacement::Flat;
+			for (int32 Copy = 0; Copy < Entry.MaxCount; ++Copy)
+			{
+				if (PlacedByMesh.FindRef(Art.MeshPath) >= Entry.MaxCount || (!bFlat && Pieces >= MaxPieces) || Rng.FRand() > Entry.Chance)
+				{
+					break;
+				}
+				TArray<FTransform> Candidates;
+				if (Entry.Placement == ENDFurniturePlacement::Wall)
+				{
+					AddWallCandidates(Art.Size, Candidates);
+				}
+				else if (bFlat)
+				{
+					for (const FIntPoint& Cell : Cells)
+					{
+						Candidates.Add(FTransform(FRotator(0.f, Rng.RandRange(0, 1) * 90.f, 0.f), Lot.GetCellCenter(Cell) + FVector(0.f, 0.f, FloorZ)));
+					}
+					Candidates.Add(FTransform(FRotator(0.f, Rng.RandRange(0, 1) * 90.f, 0.f), FVector(RoomCenter, FloorZ)));
+				}
+				else if (Cells.Num() > 1)
+				{
+					AddCenterCandidates(Candidates);
+				}
+				Shuffle(Candidates);
+				const FTransform* Chosen = Candidates.FindByPredicate([&](const FTransform& Candidate)
+				{
+					const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, Art.Size);
+					if (bFlat)
+					{
+						// En el suelo: dentro de la sala y sin pisar otra pieza del suelo.
+						return FitsInRoom(Box) && !Decorations.ContainsByPredicate([&Box, RoomIndex, FloorZ](const FNDHouseDecoration& Other)
+						{
+							return Other.Room == RoomIndex && !Other.bCollision && FMath::IsNearlyEqual(Other.LotTransform.GetLocation().Z, FloorZ, 1.f)
+								&& Box.Intersect(Other.GetFootprint());
+						});
+					}
+					return IsFree(Box);
+				});
+				if (!Chosen)
+				{
+					break;
+				}
+				const FTransform PieceTransform = *Chosen;
+				AddDecoration(ArtIndex, PieceTransform, !bFlat);
+				++PlacedByMesh.FindOrAdd(Art.MeshPath);
+				if (bFlat)
+				{
+					continue;
+				}
+				++Pieces;
+				const FVector Front = Entry.Placement == ENDFurniturePlacement::Center
+					? FVector(Hub - FVector2D(PieceTransform.GetLocation()), 0.f).GetSafeNormal2D()
+					: PieceTransform.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f));
+				AddHidingSpot(Decorations.Num() - 1, Front);
+
+				// Acompañantes: sillas (con colisión, si caben) y adornos encima (sin colisión).
+				for (const FNDFurnitureCompanion& Companion : Art.Companions)
+				{
+					const int32 CompanionArt = NDHouseFurniture::FindArt(Companion.Id);
+					if (!ArtList.IsValidIndex(CompanionArt))
+					{
+						continue;
+					}
+					const FTransform Placed = FTransform(FRotator(0.f, Companion.Yaw, 0.f), Companion.Offset) * PieceTransform;
+					if (Companion.bDecor)
+					{
+						AddDecoration(CompanionArt, Placed, false);
+					}
+					else if (IsFree(MakeFootprint(Placed.GetLocation(), Placed.Rotator().Yaw, ArtList[CompanionArt].Size)))
+					{
+						AddDecoration(CompanionArt, Placed, true);
+						AddHidingSpot(Decorations.Num() - 1, Placed.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f)));
+					}
+				}
+			}
+		}
+
+		// Felpudo junto a la puerta de la casa, por dentro.
+		const int32 MatArt = NDHouseFurniture::FindArt(TEXT("Doormat"));
+		if (RoomIndex == EntryRoom && Room.Sockets.IsValidIndex(EntryExitSocket) && ArtList.IsValidIndex(MatArt))
+		{
+			const FIntPoint Out = NDHouseGen::DirectionToOffset(Room.Sockets[EntryExitSocket].LotDirection);
+			const FVector Door = GetSocketLocation(RoomIndex, EntryExitSocket);
+			AddDecoration(MatArt, FTransform(FRotator(0.f, GetWallYaw(Out), 0.f), Door - FVector(Out.X, Out.Y, 0.f) * (WallInset + 60.f)), false);
 		}
 	}
 }

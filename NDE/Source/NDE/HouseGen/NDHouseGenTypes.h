@@ -11,14 +11,16 @@ namespace NDHouseGen
 	/** Lado de una celda de la rejilla de casas, en cm (GDD 15). */
 	constexpr float CellSize = 400.f;
 	/**
-	 * Altura de cada piso, en cm: la planta 0 tiene el suelo en Z = 0, la 1 en Z = 400 y el sótano (-1)
-	 * en Z = -400. Las paredes llegan justo al forjado del piso de arriba (380 + 20 de forjado).
+	 * Altura de cada piso, en cm: la planta 0 tiene el suelo en Z = 0, la 1 en Z = 600 y el sótano (-1)
+	 * en Z = -600. Las paredes llegan justo al forjado del piso de arriba (580 + 20 de forjado). Es la
+	 * escala de los meshes de arte (paredes de 6 m: casa de gigante para Desvelados de 68 cm).
 	 */
-	constexpr float FloorHeight = 400.f;
+	constexpr float FloorHeight = 600.f;
 	constexpr float WallThickness = 20.f;
 	/** Alto de pared y de hueco de puerta de los módulos greybox, en cm. */
 	constexpr float WallHeight = FloorHeight - WallThickness;
-	constexpr float DoorHeight = 220.f;
+	/** Las puertas de arte miden 4,8 m de alto. */
+	constexpr float DoorHeight = 480.f;
 	/** Pisos posibles: sótano, planta baja y piso superior. */
 	constexpr int32 BasementFloor = -1;
 	constexpr int32 GroundFloor = 0;
@@ -26,7 +28,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.3");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.4");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */
@@ -145,7 +147,9 @@ enum class ENDDecorationKind : uint8
 	Wardrobe UMETA(ToolTip = "Armario: uno dentro."),
 	Shelf UMETA(ToolTip = "Estantería: solo cobertura."),
 	Bed UMETA(ToolTip = "Cama pequeña: dos debajo."),
-	Crate UMETA(ToolTip = "Caja o baúl: solo cobertura.")
+	Crate UMETA(ToolTip = "Caja o baúl: solo cobertura."),
+	Appliance UMETA(ToolTip = "Mueble fijo o electrodoméstico (encimera, váter, chimenea...): solo cobertura."),
+	Rug UMETA(ToolTip = "Alfombra o adorno sin colisión: no tapa el paso.")
 };
 
 /** Dónde va el objetivo de un contrato dentro de la casa. */

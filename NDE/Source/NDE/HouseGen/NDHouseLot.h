@@ -12,6 +12,7 @@ class UArrowComponent;
 class UBoxComponent;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
+class UStaticMesh;
 class ANDHouseLot;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FNDOnHouseBuilt, ANDHouseLot*, Lot);
@@ -181,6 +182,14 @@ protected:
 	/** Muebles greybox (mesas, armarios...) con colisión: cobertura y algunos escondites. */
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<UInstancedStaticMeshComponent> DecorationMeshes;
+
+	/** Muebles greybox visibles sin colisión: los que no tienen malla de arte. */
+	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
+	TObjectPtr<UInstancedStaticMeshComponent> DecorationFallbackMeshes;
+
+	/** Muebles de arte sin colisión, una por malla (la colisión es la del greybox invisible). */
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>> DecorationArtMeshes;
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;

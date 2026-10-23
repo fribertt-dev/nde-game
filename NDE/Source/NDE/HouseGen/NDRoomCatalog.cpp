@@ -45,6 +45,9 @@ namespace NDRoomCatalog
 	{
 		TArray<FNDRoomModuleDefinition> Modules;
 		constexpr float SpawnZ = 60.f;
+		// Escaleras: suben un piso (H) con un rellano a media altura (Half) en las de U y L.
+		constexpr float H = NDHouseGen::FloorHeight;
+		constexpr float Half = NDHouseGen::FloorHeight * 0.5f;
 
 		{
 			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Entry_A"), ENDRoomType::R01_Entry, 1, 1);
@@ -276,7 +279,7 @@ namespace NDRoomCatalog
 			AddSocket(Bottom, TEXT("N1"), 1, 0, EDir::North);
 			Bottom.DoorSockets.Last().bLowClearance = true;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::West, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(400.f, 0.f, 400.f), 360.f);
+			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(400.f, 0.f, H), 360.f);
 			AddSocket(Stairs.Value, TEXT("N1"), 1, 0, EDir::North);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);
@@ -290,10 +293,10 @@ namespace NDRoomCatalog
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			Bottom.DoorSockets.Last().Offset = 95.f;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, -95.f, 0.f), FVector(200.f, -95.f, 200.f), 170.f);
-			AddSegment(Bottom, FVector(200.f, 0.f, 200.f), FVector(400.f, 0.f, 200.f), 360.f);
-			AddSegment(Bottom, FVector(200.f, 95.f, 200.f), FVector(-400.f, 95.f, 400.f), 170.f);
-			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(200.f, 0.f, 0.f), 20.f, 500.f);
+			AddSegment(Bottom, FVector(-400.f, -95.f, 0.f), FVector(200.f, -95.f, Half), 170.f);
+			AddSegment(Bottom, FVector(200.f, 0.f, Half), FVector(400.f, 0.f, Half), 360.f);
+			AddSegment(Bottom, FVector(200.f, 95.f, Half), FVector(-400.f, 95.f, H), 170.f);
+			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(200.f, 0.f, 0.f), 20.f, H * 1.25f);
 			AddSocket(Stairs.Value, TEXT("S0"), 0, 0, EDir::South);
 			Stairs.Value.DoorSockets.Last().Offset = -95.f;
 			AddSocket(Stairs.Value, TEXT("Down"), 1, 0, EDir::North, ESock::Stairs);
@@ -308,9 +311,9 @@ namespace NDRoomCatalog
 			Stairs.Value.BlockedCells = { FIntPoint(0, 1) };
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, -200.f, 0.f), FVector(0.f, -200.f, 200.f), 360.f);
-			AddSegment(Bottom, FVector(0.f, -200.f, 200.f), FVector(400.f, -200.f, 200.f), 360.f);
-			AddSegment(Bottom, FVector(200.f, 0.f, 200.f), FVector(200.f, 400.f, 400.f), 360.f);
+			AddSegment(Bottom, FVector(-400.f, -200.f, 0.f), FVector(0.f, -200.f, Half), 360.f);
+			AddSegment(Bottom, FVector(0.f, -200.f, Half), FVector(400.f, -200.f, Half), 360.f);
+			AddSegment(Bottom, FVector(200.f, 0.f, Half), FVector(200.f, 400.f, H), 360.f);
 			AddSocket(Stairs.Value, TEXT("E11"), 1, 1, EDir::East);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);
