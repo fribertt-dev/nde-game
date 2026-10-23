@@ -122,15 +122,45 @@ namespace NDHouseLot
 		}
 		const FNDHouseLayout& Layout = Lot->GetLayout();
 		const float Yaw = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
-		const FRotator View(-55.f, Yaw, 0.f);
+		// Con "pie" se queda a la altura del jugador, como lo ve en la partida.
+		const bool bEyeLevel = Args.Num() > 2 && Args[2].Equals(TEXT("pie"), ESearchCase::IgnoreCase);
+		const FRotator View(bEyeLevel ? 8.f : -55.f, Yaw, 0.f);
 		const FVector Center = Lot->GetLotToWorld().TransformPosition(Layout.GetRoomCenter(RoomIndex));
-		// Detrás del centro y cerca del techo, para ver la sala entera.
-		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * (NDHouseGen::CellSize * 0.35f) + FVector(0.f, 0.f, NDHouseGen::WallHeight - 120.f);
+		// Detrás del centro y cerca del techo, para ver la sala entera (o a ras de suelo).
+		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * (NDHouseGen::CellSize * 0.35f)
+			+ FVector(0.f, 0.f, bEyeLevel ? 60.f : NDHouseGen::WallHeight - 120.f);
 		Pawn->TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
 		PC->SetControlRotation(View);
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.ViewRoom: sala %d %s (%s), piso %d"), RoomIndex, *NDHouseGen::GetRoomTypeName(Layout.Rooms[RoomIndex].Def->RoomType),
 			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
 	}
+
+	/** nde.HouseGen.ViewOutside [distancia en celdas]: el jugador en el camino, delante de la puerta de la calle, mirando la casa. */
+	void ViewOutside(const TArray<FString>& Args, UWorld* World)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		const FNDHouseLayout* Layout = Lot && Lot->IsHouseBuilt() ? &Lot->GetLayout() : nullptr;
+		if (!Layout || !Pawn || !Pawn->HasAuthority() || !Layout->Rooms.IsValidIndex(Layout->EntryRoom) || !Layout->Rooms[Layout->EntryRoom].Sockets.IsValidIndex(Layout->EntryExitSocket))
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.ViewOutside: hace falta la casa construida (en el servidor)"));
+			return;
+		}
+		const FNDHouseLayoutSocket& Exit = Layout->Rooms[Layout->EntryRoom].Sockets[Layout->EntryExitSocket];
+		const FIntPoint Out = NDHouseGen::DirectionToOffset(Exit.LotDirection);
+		const float Distance = (Args.Num() > 0 ? FCString::Atof(*Args[0]) : 1.5f) * NDHouseGen::CellSize;
+		const FVector Door = Layout->GetSocketLocation(Layout->EntryRoom, Layout->EntryExitSocket);
+		const FVector LotLocation = Door + FVector(Out.X, Out.Y, 0.f) * Distance + FVector(0.f, 0.f, 60.f);
+		const FVector WorldLocation = Lot->GetLotToWorld().TransformPosition(LotLocation);
+		const FRotator Look = (Lot->GetLotToWorld().TransformPosition(Door + FVector(0.f, 0.f, 300.f)) - WorldLocation).Rotation();
+		Pawn->TeleportTo(WorldLocation, FRotator(0.f, Look.Yaw, 0.f));
+		PC->SetControlRotation(Look);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs ViewOutsideCommand(TEXT("nde.HouseGen.ViewOutside"),
+		TEXT("Solo servidor: pone al jugador fuera, delante de la puerta de la calle, mirando la casa. Uso: nde.HouseGen.ViewOutside [distancia en celdas]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ViewOutside));
 
 	FAutoConsoleCommandWithWorld CheckNavCommand(TEXT("nde.HouseGen.CheckNav"),
 		TEXT("Solo servidor: repite la comprobación de la patrulla de la criatura sobre el NavMesh."),
