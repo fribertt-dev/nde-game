@@ -142,6 +142,9 @@ public:
 	virtual void PostInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Depuración: anda hacia delante durante unos segundos con el movimiento real (pasos y ruido incluidos). Solo el dueño. */
+	void StartAutoWalk(float Seconds) { AutoWalkRemaining = FMath::Max(0.f, Seconds); }
+
 	/** true si la cámara del dueño está en los ojos (primera persona). */
 	UFUNCTION(BlueprintPure, Category = "NDE|Personaje")
 	bool IsFirstPerson() const { return bFirstPersonActive; }
@@ -235,4 +238,7 @@ protected:
 	TMap<FName, TObjectPtr<UInputAction>> Actions;
 
 	double ThrowStartTime = -1.0;
+
+	/** Segundos que quedan de nde.Character.AutoWalk. */
+	float AutoWalkRemaining = 0.f;
 };
