@@ -17,12 +17,40 @@
 #include "Core/NDGameInstance.h"
 #include "Core/NDLog.h"
 #include "Engine/Texture2D.h"
+#include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Networking/NDNetworkSettings.h"
 #include "UI/Loading/NDLoadingScreenSubsystem.h"
 #include "UI/NDUISettings.h"
 #include "UI/Screens/NDUINativeStyle.h"
+
+namespace NDMainMenu
+{
+	/** Abre la casa generada como host, sin pasar por La Madriguera. */
+	void OpenHouse(UObject* WorldContext)
+	{
+		const FString HousePackage = UNDNetworkSettings::Get()->ExpeditionTestMap.ToSoftObjectPath().GetLongPackageName();
+		const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+		if (HousePackage.IsEmpty() || !World)
+		{
+			UE_LOG(LogNDNet, Warning, TEXT("ExpeditionTestMap no está configurado en Project Settings > NDE Network."));
+			return;
+		}
+		if (UNDLoadingScreenSubsystem* Loading = World->GetGameInstance() ? World->GetGameInstance()->GetSubsystem<UNDLoadingScreenSubsystem>() : nullptr)
+		{
+			Loading->ShowTransition(NSLOCTEXT("NDE", "MenuQuickPlayLoading", "Rumbo a la casa..."));
+		}
+		// listen: los amigos pueden entrar después; la casa admite clientes si se abre sin La Madriguera.
+		UGameplayStatics::OpenLevel(WorldContext, FName(*HousePackage), true, TEXT("listen?game=House"));
+	}
+
+	FAutoConsoleCommandWithWorld QuickPlayCommand(
+		TEXT("nde.UI.QuickPlay"),
+		TEXT("Igual que el botón del menú \"Prueba rápida: ir a la casa\": abre la casa generada como host."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World) { OpenHouse(World); }));
+}
 
 void UNDMainMenuWidget::NativeOnInitialized()
 {
@@ -205,7 +233,7 @@ void UNDMainMenuWidget::BuildFallbackLayout()
 
 	// Columna oscura a la izquierda con el título y los botones.
 	UBorder* PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel"));
-	PanelBorder->SetBrushColor(Panel);
+	PanelBorder->SetBrushColor(FLinearColor(Panel.R, Panel.G, Panel.B, 0.5f));
 	PanelBorder->SetPadding(FMargin(72.f, 0.f, 56.f, 0.f));
 	PanelBorder->SetVerticalAlignment(VAlign_Center);
 	UOverlaySlot* PanelSlot = Root->AddChildToOverlay(PanelBorder);
@@ -303,16 +331,8 @@ void UNDMainMenuWidget::HideTransition()
 
 void UNDMainMenuWidget::QuickPlayHouse()
 {
-	const FString HousePackage = UNDNetworkSettings::Get()->ExpeditionTestMap.ToSoftObjectPath().GetLongPackageName();
-	if (HousePackage.IsEmpty())
-	{
-		SetStatus(TEXT("ExpeditionTestMap no está configurado en Project Settings > NDE Network."));
-		return;
-	}
-	ShowTransition(NSLOCTEXT("NDE", "MenuQuickPlayLoading", "Rumbo a la casa..."));
 	SetStatus(TEXT("Abriendo la casa..."));
-	// listen: los amigos pueden entrar después; la casa admite clientes si se abre sin La Madriguera.
-	UGameplayStatics::OpenLevel(this, FName(*HousePackage), true, TEXT("listen?game=House"));
+	NDMainMenu::OpenHouse(this);
 }
 
 void UNDMainMenuWidget::SetStatus(const FString& Message)
