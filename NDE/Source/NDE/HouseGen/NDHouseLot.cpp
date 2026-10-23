@@ -125,12 +125,22 @@ namespace NDHouseLot
 		const FRotator View(-55.f, Yaw, 0.f);
 		const FVector Center = Lot->GetLotToWorld().TransformPosition(Layout.GetRoomCenter(RoomIndex));
 		// Detrás del centro y cerca del techo, para ver la sala entera.
-		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * 250.f + FVector(0.f, 0.f, NDHouseGen::WallHeight - 120.f);
+		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * (NDHouseGen::CellSize * 0.35f) + FVector(0.f, 0.f, NDHouseGen::WallHeight - 120.f);
 		Pawn->TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
 		PC->SetControlRotation(View);
 		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.ViewRoom: sala %d %s (%s), piso %d"), RoomIndex, *NDHouseGen::GetRoomTypeName(Layout.Rooms[RoomIndex].Def->RoomType),
 			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
 	}
+
+	FAutoConsoleCommandWithWorld CheckNavCommand(TEXT("nde.HouseGen.CheckNav"),
+		TEXT("Solo servidor: repite la comprobación de la patrulla de la criatura sobre el NavMesh."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			if (ANDHouseLot* Lot = ANDHouseLot::FindLot(World))
+			{
+				Lot->RecheckNavigation();
+			}
+		}));
 
 	FAutoConsoleCommandWithWorldAndArgs ViewRoomCommand(TEXT("nde.HouseGen.ViewRoom"),
 		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw]"),
@@ -451,8 +461,42 @@ void ANDHouseLot::BuildFromManifest()
 		{
 			CeilingPerCell.Add(!Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Room.Floor + 1)));
 		}
+		// Paredes exteriores (sin sala al otro lado en el mismo piso): fachada lisa, fachada con ventana o ventana
+		// real, elegidas con la semilla. En el sótano, ventanucos.
+		TArray<uint8> WallStyles;
+		WallStyles.SetNumZeroed(Cells.Num() * 4);
+		for (int32 CellIndex = 0; CellIndex < Cells.Num(); ++CellIndex)
+		{
+			for (int32 LocalDir = 0; LocalDir < 4; ++LocalDir)
+			{
+				const ENDCellDirection LotDir = NDHouseGen::RotateDirection(static_cast<ENDCellDirection>(LocalDir), Room.YawSteps);
+				const FIntPoint Outside = Cells[CellIndex] + NDHouseGen::DirectionToOffset(LotDir);
+				if (!Occupancy.Contains(FIntVector(Outside.X, Outside.Y, Room.Floor)))
+				{
+					const uint32 Hash = HashCombineFast(GetTypeHash(Manifest.RunSeed), HashCombineFast(GetTypeHash(Cells[CellIndex]), GetTypeHash(static_cast<int32>(LotDir) + Room.Floor * 4)));
+					const uint32 Pick = Hash % 10;
+					// Alero de tejado sobre las paredes exteriores sin piso encima; frontón sobre la entrada, hacia la calle.
+					if (bBuildCeiling && CeilingPerCell[CellIndex] && Room.Floor >= NDHouseGen::GroundFloor)
+					{
+						const FIntPoint OutStep = NDHouseGen::DirectionToOffset(LotDir);
+						const FVector Normal(OutStep.X, OutStep.Y, 0.f);
+						const FVector Tangent(-Normal.Y, Normal.X, 0.f);
+						const FRotator RoofYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Tangent.Y, Tangent.X)), 0.f);
+						const FVector EdgeStart = Layout.Lot.GetCellCenter(Cells[CellIndex]) + Normal * (NDHouseGen::CellSize * 0.5f) - Tangent * (NDHouseGen::CellSize * 0.5f)
+							+ FVector(0.f, 0.f, Room.Floor * NDHouseGen::FloorHeight + NDHouseGen::FloorHeight);
+						const bool bFront = LotDir == Layout.Lot.FrontDirection && RoomIndex == Layout.EntryRoom;
+						for (float Along = 0.f; Along < NDHouseGen::CellSize - 1.f; Along += NDHouseGen::ArtTileSize)
+						{
+							AddLotArt(FString::Printf(TEXT("/Game/_NDE_/Props/Structure/%s"), bFront ? TEXT("SM_Roof_Gable_400/SM_Roof_Gable_400.SM_Roof_Gable_400") : TEXT("SM_Roof_Edge_400/SM_Roof_Edge_400.SM_Roof_Edge_400")),
+								FTransform(RoofYaw, EdgeStart + Tangent * Along));
+						}
+					}
+					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Room.Floor < NDHouseGen::GroundFloor ? ENDWallStyle::Basement : Pick < 4 ? ENDWallStyle::Window : Pick < 7 ? ENDWallStyle::FacadeWindow : ENDWallStyle::Facade);
+				}
+			}
+		}
 		RoomActor->RoomInstanceId = RoomIndex;
-		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets, &ExtraOpenings);
+		RoomActor->BuildGreybox(*Room.Def, Openings, bBuildCeiling, bShowMarkers, bLightRooms, &CeilingPerCell, &OpeningOffsets, &ExtraOpenings, &WallStyles);
 		// Sin acoplar al lote: la sala es estática (no se mueve) y el lote no; el lote la borra por su lista.
 		// Depuración: oculta los pisos de encima de MaxVisibleFloor para ver los de abajo desde arriba.
 		if (Room.Floor > MaxVisibleFloor)
@@ -499,7 +543,7 @@ void ANDHouseLot::BuildFromManifest()
 				Meshes->SetCanEverAffectNavigation(false);
 				Meshes->RegisterComponent();
 			}
-			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f)) * Base);
+			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f), FVector::ZeroVector, Art->MeshScale) * Base);
 		}
 		if (Decoration.bCollision)
 		{
@@ -511,18 +555,8 @@ void ANDHouseLot::BuildFromManifest()
 		}
 	}
 
-	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.
-	for (int32 X = 0; X < Layout.Lot.SizeCells.X; ++X)
-	{
-		for (int32 Y = 0; Y < Layout.Lot.SizeCells.Y; ++Y)
-		{
-			if (!UsedCells.Contains(FIntPoint(X, Y)))
-			{
-				const FVector Center = Layout.Lot.GetCellCenter(FIntPoint(X, Y)) - FVector(0.f, 0.f, NDHouseGen::WallThickness * 0.5f);
-				GroundMeshes->AddInstance(FTransform(FRotator::ZeroRotator, Center, FVector(NDHouseGen::CellSize, NDHouseGen::CellSize, NDHouseGen::WallThickness) / 100.f));
-			}
-		}
-	}
+	BuildExterior(UsedCells);
+	BuildHazardArt();
 	for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
 	{
 		if (Marker.Type == ENDRoomMarkerType::Extraction)
@@ -635,6 +669,24 @@ void ANDHouseLot::CheckNavigationPath()
 			UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, NodeOnNav.Location) : nullptr;
 			if (!Path || !Path->IsValid() || Path->IsPartial())
 			{
+				// Escaleras: dónde se corta el camino (centro de cada tramo y rellano).
+				const FNDHouseLayoutRoom& StuckRoom = Layout.Rooms[Node.Room];
+				const FTransform RoomToWorld = FTransform(FRotator(0.f, StuckRoom.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(Node.Room)) * LotToWorld;
+				for (int32 SegmentIndex = 0; SegmentIndex < StuckRoom.Def->StairSegments.Num() * 3; ++SegmentIndex)
+				{
+					const FNDStairSegment& Segment = StuckRoom.Def->StairSegments[SegmentIndex / 3];
+					const float Along = 0.1f + 0.4f * (SegmentIndex % 3);
+					const FVector Probe = RoomToWorld.TransformPosition(FMath::Lerp(Segment.Start, Segment.End, Along) + FVector(0.f, 0.f, Segment.Height + 50.f));
+					FNavLocation ProbeOnNav;
+					const bool bProbeOnNav = NavSys->ProjectPointToNavigation(Probe, ProbeOnNav, Extent);
+					UNavigationPath* ProbePath = bProbeOnNav ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, ProbeOnNav.Location) : nullptr;
+					FHitResult Above;
+					const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Above, Probe, Probe + FVector(0.f, 0.f, 250.f), ECC_Pawn);
+					UE_LOG(LogNDHouseGen, Warning, TEXT("    encima: %s"), bBlocked ? *FString::Printf(TEXT("%s / %s a %.0f cm"), *GetNameSafe(Above.GetActor()), *GetNameSafe(Above.GetComponent()), Above.Distance) : TEXT("libre"));
+					UE_LOG(LogNDHouseGen, Warning, TEXT("  tramo %d (%.0f%%) de %s: %s, %s (en %s)"), SegmentIndex / 3, Along * 100.f, *StuckRoom.Def->RoomModuleId.ToString(),
+						bProbeOnNav ? TEXT("en el NavMesh") : TEXT("FUERA del NavMesh"),
+						ProbePath && ProbePath->IsValid() && !ProbePath->IsPartial() ? TEXT("con camino") : TEXT("SIN camino"), *Probe.ToCompactString());
+				}
 				++PatrolNodesStuck;
 				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s (%s, %d muebles, vecinos: %s, en %s)"),
 					*LotInfo.LotId.ToString(), Node.StableId, Node.Room, *NDHouseGen::GetRoomTypeName(Layout.Rooms[Node.Room].Def->RoomType),
@@ -694,4 +746,254 @@ ANDHouseLot* ANDHouseLot::FindLot(const UWorld* World)
 		return *It;
 	}
 	return nullptr;
+}
+
+void ANDHouseLot::AddLotArt(const FString& MeshPath, const FTransform& Transform)
+{
+	UStaticMesh* Mesh = NDHouseArt::IsEnabled() ? NDHouseArt::LoadMesh(MeshPath) : nullptr;
+	if (!Mesh)
+	{
+		static TSet<FString> Reported;
+		if (NDHouseArt::IsEnabled() && !Reported.Contains(MeshPath))
+		{
+			Reported.Add(MeshPath);
+			UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: no se pudo cargar %s"), *LotInfo.LotId.ToString(), *MeshPath);
+		}
+		return;
+	}
+	TObjectPtr<UInstancedStaticMeshComponent>& Meshes = DecorationArtMeshes.FindOrAdd(Mesh);
+	if (!Meshes)
+	{
+		Meshes = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
+		Meshes->SetupAttachment(Root);
+		Meshes->SetStaticMesh(Mesh);
+		Meshes->SetMobility(EComponentMobility::Movable);
+		// Solo se ve: la colisión es la del greybox.
+		Meshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Meshes->SetCanEverAffectNavigation(false);
+		Meshes->RegisterComponent();
+	}
+	Meshes->AddInstance(Transform);
+}
+
+void ANDHouseLot::BuildExterior(const TSet<FIntPoint>& UsedCells)
+{
+	// Exterior: suelo greybox con colisión (oculto con arte) y, encima, el arte. Césped en el lote, camino de
+	// piedra de la puerta a la calle, cerca con portón, arbustos junto a la casa y, fuera del lote, césped
+	// alrededor y delante acera, bordillo, calzada y farolas.
+	GroundMeshes->SetVisibility(!NDHouseArt::IsEnabled());
+	const float Cell = NDHouseGen::CellSize;
+	const float Tile = NDHouseGen::ArtTileSize;
+	const int32 Tiles = FMath::Max(1, FMath::RoundToInt(Cell / Tile));
+	auto PropPath = [](const TCHAR* Folder, const TCHAR* Name)
+	{
+		return FString::Printf(TEXT("/Game/_NDE_/Props/%s/SM_%s/SM_%s.SM_%s"), Folder, Name, Name, Name);
+	};
+	// Celda de suelo: caja con colisión y baldosas de arte de 400 (pivote en una esquina, de 0 a 400 en X y de 0 a -400 en Y).
+	auto AddGroundCell = [&](const FIntPoint& LotCell, const TCHAR* Folder, const TCHAR* Name, const FVector& TileScale)
+	{
+		const FVector Center = Layout.Lot.GetCellCenter(LotCell);
+		GroundMeshes->AddInstance(FTransform(FRotator::ZeroRotator, Center - FVector(0.f, 0.f, NDHouseGen::WallThickness * 0.5f),
+			FVector(Cell, Cell, NDHouseGen::WallThickness) / 100.f));
+		for (int32 X = 0; X < Tiles; ++X)
+		{
+			for (int32 Y = 0; Y < Tiles; ++Y)
+			{
+				AddLotArt(PropPath(Folder, Name), FTransform(FRotator::ZeroRotator, Center + FVector(-Cell * 0.5f + X * Tile, Cell * 0.5f - Y * Tile, 0.f), TileScale));
+			}
+		}
+	};
+	auto CellHash = [this](const FIntPoint& LotCell, uint32 Salt)
+	{
+		return HashCombineFast(GetTypeHash(Manifest.RunSeed), HashCombineFast(GetTypeHash(LotCell), Salt));
+	};
+
+	// Camino: de la puerta de la casa hacia fuera, hasta salir del lote.
+	TSet<FIntPoint> PathCells;
+	FIntPoint GateCell(INDEX_NONE, INDEX_NONE);
+	ENDCellDirection PathDirection = Layout.Lot.FrontDirection;
+	if (Layout.Rooms.IsValidIndex(Layout.EntryRoom) && Layout.Rooms[Layout.EntryRoom].Sockets.IsValidIndex(Layout.EntryExitSocket))
+	{
+		const FNDHouseLayoutSocket& Exit = Layout.Rooms[Layout.EntryRoom].Sockets[Layout.EntryExitSocket];
+		PathDirection = Exit.LotDirection;
+		for (FIntPoint PathCell = Exit.GetOutsideCell(); Layout.Lot.IsInsideLot(PathCell); PathCell += NDHouseGen::DirectionToOffset(PathDirection))
+		{
+			PathCells.Add(PathCell);
+			GateCell = PathCell;
+		}
+	}
+
+	for (int32 X = 0; X < Layout.Lot.SizeCells.X; ++X)
+	{
+		for (int32 Y = 0; Y < Layout.Lot.SizeCells.Y; ++Y)
+		{
+			const FIntPoint LotCell(X, Y);
+			if (UsedCells.Contains(LotCell))
+			{
+				continue;
+			}
+			const bool bPath = PathCells.Contains(LotCell);
+			AddGroundCell(LotCell, TEXT("Exterior"), bPath ? TEXT("Path_Stone") : TEXT("Lot_Ground_400"), FVector::OneVector);
+			// Arbustos pegados a la casa en algunas celdas de césped (fuera del jardín delantero, donde va la camioneta).
+			const uint32 Hash = CellHash(LotCell, 1);
+			if (bPath || Layout.Lot.IsFrontYard(LotCell) || Hash % 100 >= 45)
+			{
+				continue;
+			}
+			for (int32 Dir = 0; Dir < 4; ++Dir)
+			{
+				const FIntPoint Toward = NDHouseGen::DirectionToOffset(static_cast<ENDCellDirection>(Dir));
+				if (UsedCells.Contains(LotCell + Toward))
+				{
+					const FVector Spot = Layout.Lot.GetCellCenter(LotCell) + FVector(Toward.X, Toward.Y, 0.f) * (Cell * 0.5f - 150.f)
+						+ FVector(-Toward.Y, Toward.X, 0.f) * ((static_cast<int32>(Hash / 100 % 5) - 2) * 80.f);
+					AddLotArt(PropPath(TEXT("Exterior"), Hash % 2 ? TEXT("Bush_A") : TEXT("Bush_B")), FTransform(FRotator(0.f, (Hash / 7 % 4) * 90.f, 0.f), Spot));
+					break;
+				}
+			}
+		}
+	}
+
+	// Cerca por el borde del lote (piezas de 400, de 0 a 400 en X), con portón donde sale el camino.
+	for (int32 Dir = 0; Dir < 4; ++Dir)
+	{
+		const ENDCellDirection Side = static_cast<ENDCellDirection>(Dir);
+		const FIntPoint Out = NDHouseGen::DirectionToOffset(Side);
+		const FVector Normal(Out.X, Out.Y, 0.f);
+		const FVector Tangent(-Out.Y, Out.X, 0.f);
+		const FRotator Yaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Tangent.Y, Tangent.X)), 0.f);
+		for (int32 X = 0; X < Layout.Lot.SizeCells.X; ++X)
+		{
+			for (int32 Y = 0; Y < Layout.Lot.SizeCells.Y; ++Y)
+			{
+				const FIntPoint LotCell(X, Y);
+				if (Layout.Lot.IsInsideLot(LotCell + Out) || UsedCells.Contains(LotCell))
+				{
+					continue;
+				}
+				const FVector EdgeStart = Layout.Lot.GetCellCenter(LotCell) + Normal * (Cell * 0.5f - 10.f) - Tangent * (Cell * 0.5f);
+				const bool bGate = LotCell == GateCell && Side == PathDirection;
+				for (int32 Piece = 0; Piece < Tiles; ++Piece)
+				{
+					const FVector PieceStart = EdgeStart + Tangent * (Piece * Tile);
+					if (bGate)
+					{
+						// Hueco de 500 en el centro: un tramo corto a cada lado y el portón abierto hacia fuera.
+						const bool bFirst = Piece == 0;
+						AddLotArt(PropPath(TEXT("Exterior"), TEXT("Fence_Picket_400")), FTransform(Yaw, bFirst ? PieceStart : PieceStart + Tangent * (Tile - 150.f), FVector(150.f / Tile, 1.f, 1.f)));
+						if (bFirst)
+						{
+							AddLotArt(PropPath(TEXT("Exterior"), TEXT("Fence_Gate")), FTransform(Yaw + FRotator(0.f, -100.f, 0.f), PieceStart + Tangent * 150.f));
+						}
+						continue;
+					}
+					AddLotArt(PropPath(TEXT("Exterior"), TEXT("Fence_Picket_400")), FTransform(Yaw, PieceStart));
+				}
+			}
+		}
+	}
+
+	// Fuera del lote, un anillo de celdas: delante acera, calzada (dos filas) y acera; en los demás lados, césped.
+	constexpr int32 Ring = 4;
+	const FIntPoint FrontStep = NDHouseGen::DirectionToOffset(Layout.Lot.FrontDirection);
+	for (int32 X = -Ring; X < Layout.Lot.SizeCells.X + Ring; ++X)
+	{
+		for (int32 Y = -Ring; Y < Layout.Lot.SizeCells.Y + Ring; ++Y)
+		{
+			const FIntPoint LotCell(X, Y);
+			if (Layout.Lot.IsInsideLot(LotCell))
+			{
+				continue;
+			}
+			// Filas hacia la calle desde el borde delantero del lote: 1 acera, 2 y 3 calzada, 4 acera de enfrente.
+			int32 Row = 0;
+			switch (Layout.Lot.FrontDirection)
+			{
+			case ENDCellDirection::North: Row = X - Layout.Lot.SizeCells.X + 1; break;
+			case ENDCellDirection::East: Row = Y - Layout.Lot.SizeCells.Y + 1; break;
+			case ENDCellDirection::South: Row = -X; break;
+			default: Row = -Y; break;
+			}
+			const FVector Center = Layout.Lot.GetCellCenter(LotCell);
+			if (Row == 2 || Row == 3)
+			{
+				AddGroundCell(LotCell, TEXT("Street"), TEXT("Road_400"), FVector::OneVector);
+				continue;
+			}
+			if (Row != 1 && Row != 4)
+			{
+				AddGroundCell(LotCell, TEXT("Exterior"), TEXT("Lot_Ground_400"), FVector::OneVector);
+				continue;
+			}
+			// Acera (400 x 150, estirada a la celda) y bordillo del lado de la calzada.
+			AddGroundCell(LotCell, TEXT("Street"), TEXT("Sidewalk_400"), FVector(1.f, Tile / 150.f, 1.f));
+			const FVector ToRoad = FVector(FrontStep.X, FrontStep.Y, 0.f) * (Row == 1 ? 1.f : -1.f);
+			const FVector Along(-ToRoad.Y, ToRoad.X, 0.f);
+			const FRotator CurbYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Along.Y, Along.X)), 0.f);
+			for (int32 Piece = 0; Piece < Tiles; ++Piece)
+			{
+				AddLotArt(PropPath(TEXT("Street"), TEXT("Curb_400")), FTransform(CurbYaw, Center + ToRoad * (Cell * 0.5f - 33.f) - Along * (Cell * 0.5f) + Along * (Piece * Tile)));
+			}
+			if (Row == 1 && (X + Y) % 3 == 0)
+			{
+				AddLotArt(PropPath(TEXT("Street"), TEXT("StreetLamp")), FTransform(CurbYaw, Center + ToRoad * (Cell * 0.5f - 150.f)));
+			}
+		}
+	}
+}
+
+void ANDHouseLot::BuildHazardArt()
+{
+	// Peligros con arte (solo se ven): tabla que cruje en el suelo, fila de botellas frágiles y juguete que chilla.
+	auto PropPath = [](const TCHAR* Folder, const TCHAR* Name)
+	{
+		return FString::Printf(TEXT("/Game/_NDE_/Props/%s/SM_%s/SM_%s.SM_%s"), Folder, Name, Name, Name);
+	};
+	const float Cell = NDHouseGen::CellSize;
+	const float Tile = NDHouseGen::ArtTileSize;
+	for (const FNDHouseHazard& Hazard : Layout.Hazards)
+	{
+		if (!Layout.Rooms.IsValidIndex(Hazard.Room) || Layout.Rooms[Hazard.Room].Floor > MaxVisibleFloor)
+		{
+			continue;
+		}
+		const FVector Location = Hazard.LotTransform.GetLocation();
+		switch (Hazard.Type)
+		{
+		case ENDHouseHazardType::CreakyFloor:
+		{
+			// La baldosa de 400 que contiene el peligro, un poco por encima del suelo de la sala.
+			const FIntPoint LotCell(FMath::FloorToInt(Location.X / Cell + Layout.Lot.SizeCells.X * 0.5f), FMath::FloorToInt(Location.Y / Cell + Layout.Lot.SizeCells.Y * 0.5f));
+			const FVector CellMin = Layout.Lot.GetCellCenter(LotCell) - FVector(Cell * 0.5f, Cell * 0.5f, 0.f);
+			const float TileX = CellMin.X + FMath::FloorToFloat((Location.X - CellMin.X) / Tile) * Tile;
+			const float TileY = CellMin.Y + FMath::FloorToFloat((Location.Y - CellMin.Y) / Tile) * Tile;
+			AddLotArt(PropPath(TEXT("Structure"), TEXT("Floor_Creaky_400")), FTransform(FVector(TileX, TileY + Tile, Location.Z + 0.5f)));
+			break;
+		}
+		case ENDHouseHazardType::FragileItem:
+			AddLotArt(PropPath(TEXT("Hazards"), TEXT("Bottles_Row")), Hazard.LotTransform);
+			break;
+		default:
+			AddLotArt(PropPath(TEXT("Hazards"), TEXT("Toy_Squeaky")), Hazard.LotTransform);
+			break;
+		}
+	}
+
+	// Herramientas de la banda junto a la zona de depósito de la camioneta.
+	static const TCHAR* Tools[] = { TEXT("Tool_FoldingCart"), TEXT("Tool_Flashlight"), TEXT("Tool_Lockpick_A"), TEXT("Tool_Lockpick_B"), TEXT("Tool_Lockpick_C"),
+		TEXT("Tool_Lockpick_D"), TEXT("Tool_SilentFoam"), TEXT("Tool_SnoreMeter"), TEXT("Tool_WindupMouse") };
+	for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
+	{
+		if (Marker.Type != ENDRoomMarkerType::Extraction)
+		{
+			continue;
+		}
+		for (int32 Index = 0; Index < UE_ARRAY_COUNT(Tools); ++Index)
+		{
+			const float Angle = FMath::DegreesToRadians(200.f + Index * 18.f);
+			const FVector Offset(FMath::Cos(Angle) * 180.f, FMath::Sin(Angle) * 180.f, 0.f);
+			AddLotArt(PropPath(TEXT("Tools"), Tools[Index]), FTransform(FRotator(0.f, Index * 40.f, 0.f), Marker.LotTransform.TransformPosition(Offset)));
+		}
+		break;
+	}
 }

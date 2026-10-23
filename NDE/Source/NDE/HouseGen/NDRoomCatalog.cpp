@@ -29,15 +29,15 @@ namespace NDRoomCatalog
 		Socket.Width = NDHouseGen::GetDefaultSocketWidth(Type);
 	}
 
-	/** Marca en la celda X,Y del módulo, desplazada Offset cm desde el centro de esa celda. */
+	/** Marca en la celda X,Y del módulo, desplazada Offset cm desde el centro de esa celda (medido en celdas de 400 cm: se escala con CellScale). */
 	void AddMarker(FNDRoomModuleDefinition& Def, EMark Type, int32 X, int32 Y, float OffsetX = 0.f, float OffsetY = 0.f, float Z = 0.f)
 	{
 		const float Cell = NDHouseGen::CellSize;
 		FNDRoomMarker& Marker = Def.Markers.AddDefaulted_GetRef();
 		Marker.Type = Type;
 		Marker.LocalPosition = FVector(
-			(X + 0.5f) * Cell - Def.FootprintCells.X * Cell * 0.5f + OffsetX,
-			(Y + 0.5f) * Cell - Def.FootprintCells.Y * Cell * 0.5f + OffsetY,
+			(X + 0.5f) * Cell - Def.FootprintCells.X * Cell * 0.5f + OffsetX * NDHouseGen::CellScale,
+			(Y + 0.5f) * Cell - Def.FootprintCells.Y * Cell * 0.5f + OffsetY * NDHouseGen::CellScale,
 			Z);
 	}
 
@@ -48,6 +48,11 @@ namespace NDRoomCatalog
 		// Escaleras: suben un piso (H) con un rellano a media altura (Half) en las de U y L.
 		constexpr float H = NDHouseGen::FloorHeight;
 		constexpr float Half = NDHouseGen::FloorHeight * 0.5f;
+		// Escaleras: C = celda, W = ancho libre de la celda, Lane = carril de la U y LaneY = su centro.
+		constexpr float C = NDHouseGen::CellSize;
+		constexpr float W = C - 2.f * NDHouseGen::WallThickness;
+		constexpr float Lane = (C - 3.f * NDHouseGen::WallThickness) * 0.5f;
+		constexpr float LaneY = (NDHouseGen::WallThickness + Lane) * 0.5f;
 
 		{
 			FNDRoomModuleDefinition Def = MakeModule(TEXT("D01_Entry_A"), ENDRoomType::R01_Entry, 1, 1);
@@ -279,26 +284,26 @@ namespace NDRoomCatalog
 			AddSocket(Bottom, TEXT("N1"), 1, 0, EDir::North);
 			Bottom.DoorSockets.Last().bLowClearance = true;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::West, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(400.f, 0.f, H), 360.f);
+			AddSegment(Bottom, FVector(-C, 0.f, 0.f), FVector(C, 0.f, H), W);
 			AddSocket(Stairs.Value, TEXT("N1"), 1, 0, EDir::North);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);
 			Modules.Add(Stairs.Value);
 		}
 		{
-			// En U 2x1: dos carriles de 170 cm separados por un murete. Se sube por el carril -Y hasta el rellano
+			// En U 2x1: dos carriles (media celda cada uno) separados por un murete. Se sube por el carril -Y hasta el rellano
 			// del fondo y se vuelve por el carril +Y: la llegada queda sobre la entrada, encima de la sala de la que sale.
 			TPair<FNDRoomModuleDefinition, FNDRoomModuleDefinition> Stairs = MakeStairs(TEXT("D01_StairsU_Bottom"), TEXT("D01_StairsU_Top"), 2, 1);
 			FNDRoomModuleDefinition& Bottom = Stairs.Key;
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
-			Bottom.DoorSockets.Last().Offset = 95.f;
+			Bottom.DoorSockets.Last().Offset = LaneY;
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, -95.f, 0.f), FVector(200.f, -95.f, Half), 170.f);
-			AddSegment(Bottom, FVector(200.f, 0.f, Half), FVector(400.f, 0.f, Half), 360.f);
-			AddSegment(Bottom, FVector(200.f, 95.f, Half), FVector(-400.f, 95.f, H), 170.f);
-			AddSegment(Bottom, FVector(-400.f, 0.f, 0.f), FVector(200.f, 0.f, 0.f), 20.f, H * 1.25f);
+			AddSegment(Bottom, FVector(-C, -LaneY, 0.f), FVector(C * 0.5f, -LaneY, Half), Lane);
+			AddSegment(Bottom, FVector(C * 0.5f, 0.f, Half), FVector(C, 0.f, Half), W);
+			AddSegment(Bottom, FVector(C * 0.5f, LaneY, Half), FVector(-C, LaneY, H), Lane);
+			AddSegment(Bottom, FVector(-C, 0.f, 0.f), FVector(C * 0.5f, 0.f, 0.f), NDHouseGen::WallThickness, H * 1.25f);
 			AddSocket(Stairs.Value, TEXT("S0"), 0, 0, EDir::South);
-			Stairs.Value.DoorSockets.Last().Offset = -95.f;
+			Stairs.Value.DoorSockets.Last().Offset = -LaneY;
 			AddSocket(Stairs.Value, TEXT("Down"), 1, 0, EDir::North, ESock::Stairs);
 			Modules.Add(Bottom);
 			Modules.Add(Stairs.Value);
@@ -311,9 +316,9 @@ namespace NDRoomCatalog
 			Stairs.Value.BlockedCells = { FIntPoint(0, 1) };
 			AddSocket(Bottom, TEXT("S0"), 0, 0, EDir::South);
 			AddSocket(Bottom, TEXT("Up"), 1, 0, EDir::North, ESock::Stairs);
-			AddSegment(Bottom, FVector(-400.f, -200.f, 0.f), FVector(0.f, -200.f, Half), 360.f);
-			AddSegment(Bottom, FVector(0.f, -200.f, Half), FVector(400.f, -200.f, Half), 360.f);
-			AddSegment(Bottom, FVector(200.f, 0.f, Half), FVector(200.f, 400.f, H), 360.f);
+			AddSegment(Bottom, FVector(-C, -C * 0.5f, 0.f), FVector(0.f, -C * 0.5f, Half), W);
+			AddSegment(Bottom, FVector(0.f, -C * 0.5f, Half), FVector(C, -C * 0.5f, Half), W);
+			AddSegment(Bottom, FVector(C * 0.5f, 0.f, Half), FVector(C * 0.5f, C, H), W);
 			AddSocket(Stairs.Value, TEXT("E11"), 1, 1, EDir::East);
 			AddSocket(Stairs.Value, TEXT("Down"), 0, 0, EDir::South, ESock::Stairs);
 			Modules.Add(Bottom);

@@ -194,6 +194,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+public:
+	/** Repite la comprobación de la patrulla sobre el NavMesh (nde.HouseGen.CheckNav). */
+	void RecheckNavigation() { NavCheckTries = 0; CheckNavigationPath(); }
+
 private:
 	UFUNCTION()
 	void OnRep_Manifest();
@@ -203,6 +207,12 @@ private:
 	void ClearHouse();
 	void UpdateEditorBounds();
 	void CheckNavigationPath();
+	/** Suelo exterior, camino, cerca, arbustos y calle; UsedCells son las celdas con sala en la planta baja. */
+	void BuildExterior(const TSet<FIntPoint>& UsedCells);
+	/** Arte de los peligros (tabla que cruje, botellas, juguete) y herramientas junto a la camioneta. */
+	void BuildHazardArt();
+	/** Instancia de una malla de arte del lote (solo se ve; sin colisión). */
+	void AddLotArt(const FString& MeshPath, const FTransform& Transform);
 
 	UPROPERTY(ReplicatedUsing = OnRep_Manifest)
 	FNDHouseGenerationManifest Manifest;

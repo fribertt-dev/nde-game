@@ -31,6 +31,13 @@ ANDLootActor::ANDLootActor()
 	Mesh->SetGenerateOverlapEvents(true);
 	// El botín se mueve y se lleva: no recorta el NavMesh (si no, uno en una puerta cortaría la patrulla).
 	Mesh->SetCanEverAffectNavigation(false);
+
+	ArtMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ArtMesh"));
+	ArtMesh->SetupAttachment(Mesh);
+	ArtMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ArtMesh->SetCanEverAffectNavigation(false);
+	// A su tamaño real aunque Mesh vaya escalada.
+	ArtMesh->SetUsingAbsoluteScale(true);
 	SetRootComponent(Mesh);
 }
 
@@ -105,6 +112,12 @@ void ANDLootActor::ApplyDefinitionVisuals()
 		}
 	}
 	Mesh->SetWorldScale3D(Definition->MeshScale);
+	// Arte: visible a su tamaño, con el pivote (abajo) en la base de la forma greybox (de 100 cm, centrada).
+	UStaticMesh* Art = Definition->ArtMesh.IsNull() ? nullptr : Definition->ArtMesh.LoadSynchronous();
+	ArtMesh->SetStaticMesh(Art);
+	ArtMesh->SetRelativeLocation(FVector(0.f, 0.f, -50.f));
+	Mesh->SetVisibility(Art == nullptr);
+	ArtMesh->SetVisibility(Art != nullptr);
 }
 
 void ANDLootActor::OnRep_Definition()
