@@ -17,6 +17,8 @@ Los binarios (`.uasset`, `.umap`, `.blend`, `.fbx`, texturas y audio) se guardan
 
 Todo el contenido propio va en `NDE/Content/_NDE_/`. Ver [docs/ESTRUCTURA_CONTENT.md](docs/ESTRUCTURA_CONTENT.md).
 
+Los assets 3D de `NDE/Content/_NDE_/Props/` no están en el repositorio, viven solo en local: [docs/ASSETS_LOCALES.md](docs/ASSETS_LOCALES.md).
+
 Bucle de expedición (corte gris, cómo probarlo): [docs/BUCLE_EXPEDICION.md](docs/BUCLE_EXPEDICION.md)
 
 Lista de comprobación de herramientas: [docs/CHECKLIST_HERRAMIENTAS.md](docs/CHECKLIST_HERRAMIENTAS.md)
