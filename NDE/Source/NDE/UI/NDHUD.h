@@ -18,6 +18,20 @@ protected:
 	// Pantalla que se abre al entrar en el mapa. Vacía = ninguna.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI", meta = (Categories = "UI.Screen"))
 	FGameplayTag InitialScreen;
+
+	// Si P, Esc o Start abren el menú de pausa (UI.Screen.Pause) en este mapa.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "UI")
+	bool bAllowPauseMenu = true;
+
+private:
+	void HandlePausePressed();
+};
+
+// HUD de La Madriguera: solo inicializa la UI para la pausa; el panel de la sala lo pone ANDPlayerController.
+UCLASS()
+class NDE_API ANDLobbyHUD : public ANDHUD
+{
+	GENERATED_BODY()
 };
 
 // HUD del menú principal: abre UI.Screen.MainMenu.

@@ -16,6 +16,7 @@
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
+#include "UI/NDHUD.h"
 
 ANDLobbyGameMode::ANDLobbyGameMode()
 {
@@ -23,6 +24,8 @@ ANDLobbyGameMode::ANDLobbyGameMode()
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
 	DefaultPawnClass = ANDCharacter::StaticClass();
+	// Inicializa la UI del jugador local (menú de pausa); el panel de la sala lo pone el PlayerController.
+	HUDClass = ANDLobbyHUD::StaticClass();
 	bUseSeamlessTravel = true;
 }
 
@@ -255,5 +258,5 @@ void ANDLobbyGameMode::TravelToExpedition()
 
 	UE_LOG(LogNDNet, Log, TEXT("Saliendo de expedicion con %d jugadores a %s, contrato %s"),
 		LobbyState->PlayerArray.Num(), *MapPackage, *ContractId.ToString());
-	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?game=Expedition?Contract=%s"), *MapPackage, *ContractId.ToString()));
+	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?game=%s?Contract=%s"), *MapPackage, *UNDNetworkSettings::Get()->ExpeditionGameAlias, *ContractId.ToString()));
 }

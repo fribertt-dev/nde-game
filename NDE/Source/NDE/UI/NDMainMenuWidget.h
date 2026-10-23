@@ -38,6 +38,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void JoinFirstCompatibleSession();
 
+	/** Atajo de prueba: abre la casa generada como host, sin pasar por La Madriguera. */
+	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
+	void QuickPlayHouse();
+
 	/** Cierra el juego. */
 	UFUNCTION(BlueprintCallable, Category = "NDE|Menu")
 	void QuitGame();
@@ -58,6 +62,7 @@ protected:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** Terminó la búsqueda de salas; aquí se rellena la lista. */
 	UFUNCTION(BlueprintImplementableEvent, Category = "NDE|Menu")
@@ -96,8 +101,25 @@ private:
 	UFUNCTION()
 	void HandleRejoinClicked() { RejoinExpedition(); }
 
+	UFUNCTION()
+	void HandleQuickPlayClicked() { QuickPlayHouse(); }
+
 	void BuildFallbackLayout();
 	UButton* AddFallbackButton(class UVerticalBox* Box, const FText& Label);
+	/** Resalta el botón bajo el ratón o, si no hay, el que tiene el foco (teclado y mando). */
+	void UpdateButtonHighlight();
+	void ShowTransition(const FText& Headline);
+	void HideTransition();
+
+	/** Botones de la disposición mínima, en orden, para el foco y el resaltado. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UButton>> FallbackButtons;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTextBlock>> FallbackButtonLabels;
+
+	TWeakObjectPtr<UButton> HighlightedButton;
+	bool bFocusPending = false;
 	void SetStatus(const FString& Message);
 	UNDSessionSubsystem* GetSessions() const;
 

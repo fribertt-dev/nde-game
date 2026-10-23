@@ -46,6 +46,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "NDE|UI")
 	void ClearLayer(ENDUILayer Layer);
 
+	// Abre la pausa o, si ya está abierta, la cierra. No detiene la partida.
+	UFUNCTION(BlueprintCallable, Category = "NDE|UI")
+	void TogglePause();
+
 	UFUNCTION(BlueprintCallable, Category = "NDE|UI")
 	void ShowToast(const FNDUIToast& Toast);
 
@@ -81,5 +85,10 @@ private:
 	TObjectPtr<UNDUIScreenRegistry> ScreenRegistry;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UNDUIScreenRegistry> NativeScreenRegistry;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UNDUIThemeData> Theme;
+
+	TWeakObjectPtr<UNDUIBaseScreen> PauseScreen;
 };

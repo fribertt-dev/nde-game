@@ -78,3 +78,19 @@ Mientras no existan los WBP, todo funciona con pantallas hechas en C++ en `UI/Sc
 ## Pendiente para la etapa 2
 
 Crear todos los WBP del flujo (`Content/_NDE_/UI/Screens/...`, GDD 32.4) con datos simulados y navegación con mando y teclado. Si el MCP de Unreal funciona en el PC, parte de estos pasos se pueden automatizar.
+
+## Demo jugable (etapa 1b)
+
+Flujo: `L_MenuPrincipal` → Crear sala → `L_Madriguera` → zona verde → `L_CasaPrueba` (ANDHouseGameMode, alias `?game=House`) → resultado → La Madriguera. "Prueba rápida: ir a la casa" en el menú abre la casa directamente como host.
+
+| Qué | Dónde |
+|---|---|
+| Pantalla de transición entre mapas: imagen, destino, consejo y fundido. Tapa hasta que el jugador tiene personaje. | `UI/Loading/NDLoadingScreenSubsystem`, `SNDLoadingScreen` |
+| Menú principal y panel de La Madriguera con estilo propio (si sus WBP no tienen diseño) | `UI/NDMainMenuWidget`, `UI/NDLobbyStatusWidget` |
+| Pausa con P, Esc o Start (no detiene la partida). En la casa, el host puede terminar la noche. | `UI/Screens/NDUIPauseScreen`, `ANDHUD` |
+| HUD con paneles, retícula, texto de interacción del personaje y teclas | `UI/Screens/NDUIExpeditionHUD` |
+| Colores y botones comunes de las pantallas en C++ | `UI/Screens/NDUINativeStyle` |
+
+- Imágenes: `NDE/Art/UI/*.png`. Para importarlas, ejecuta `NDE/Scripts/nde_importar_ui.py` en el editor; crea `/Game/_NDE_/UI/Textures/T_UI_Transicion_01..03`. Se cambian en Project Settings > NDE UI > Loading Screen.
+- `nde.UI.ShowLoading [s]` muestra la pantalla de transición sin viajar.
+- En PIE, Esc cierra la partida del editor: usa P para la pausa. El MoviePlayer (carga que bloquea) solo se ve fuera del editor.
