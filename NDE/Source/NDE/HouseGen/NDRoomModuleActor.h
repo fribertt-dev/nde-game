@@ -12,6 +12,15 @@ class UMaterialInterface;
 class UPointLightComponent;
 class UStaticMesh;
 
+/** Pared de un borde de sala: interior, o exterior con fachada (lisa, con ventana de fachada o con ventana real). */
+enum class ENDWallStyle : uint8
+{
+	Interior,
+	Facade,
+	FacadeWindow,
+	Window
+};
+
 /**
  * Sala greybox: suelo, paredes con huecos de puerta y techo opcional, hechos con el cubo
  * del motor. No se replica: cada máquina la construye desde el manifiesto.
@@ -33,11 +42,12 @@ public:
 	/**
 	 * Construye el módulo. OpeningWidths tiene un valor por hueco de la definición:
 	 * ancho del hueco abierto en cm, o 0 si se tapa con pared. CeilingPerCell (en el orden de
-	 * GetLocalCells) quita el techo donde hay otra sala encima; sin él, techo en todas las celdas.
+	 * GetLocalCells) quita el techo donde hay otra sala encima; sin él, techo en todas las celdas. WallStyles (por celda
+	 * en ese orden y lado del módulo: CellIndex * 4 + lado) marca las paredes exteriores con fachada o ventana (ENDWallStyle).
 	 */
 	void BuildGreybox(const FNDRoomModuleDefinition& Definition, const TArray<float>& OpeningWidths, bool bBuildCeiling, bool bShowMarkers,
 		bool bAddRoomLight = false, const TArray<bool>* CeilingPerCell = nullptr, const TArray<float>* OpeningOffsets = nullptr,
-		const TArray<FNDRoomDoorSocket>* ExtraOpenings = nullptr);
+		const TArray<FNDRoomDoorSocket>* ExtraOpenings = nullptr, const TArray<uint8>* WallStyles = nullptr);
 
 	/** Módulo del catálogo que muestra este actor al colocarlo a mano en el editor. */
 	UPROPERTY(EditAnywhere, Category = "NDE|HouseGen")
@@ -90,7 +100,8 @@ private:
 	void ClearGreybox();
 	void AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator);
 	void SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color);
-	void BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset = 0.f);
+	void BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset = 0.f,
+		ENDWallStyle Style = ENDWallStyle::Interior, float WindowCenter = 0.f);
 	/** Pieza de colisión greybox; si no hay arte que la cubra y el arte está activo, también se ve. */
 	void AddCollisionBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, bool bArtCovers, const FRotator& Rotation = FRotator::ZeroRotator);
 	/** Añade una instancia de una malla de arte; false si no hay arte o la malla no existe. */
