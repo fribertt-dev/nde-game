@@ -265,7 +265,7 @@ void FNDHouseLootPlanner::Plan(const FNDHouseLayout& Layout, int64 RunSeed, cons
 		TArray<FIntPoint> Cells;
 		Layout.GetRoomCells(Room, Cells);
 		const FVector Location = Layout.Lot.GetCellCenter(Cells[Rng.RandRange(0, Cells.Num() - 1)])
-			+ FVector(Rng.FRandRange(-90.f, 90.f), Rng.FRandRange(-90.f, 90.f), 0.f);
+			+ FVector(Rng.FRandRange(-90.f, 90.f), Rng.FRandRange(-90.f, 90.f), 0.f) * NDHouseGen::CellScale;
 		Add(Light[Rng.RandRange(0, Light.Num() - 1)], INDEX_NONE, FTransform(Location));
 	}
 }

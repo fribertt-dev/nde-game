@@ -8,8 +8,12 @@
 
 namespace NDHouseGen
 {
-	/** Lado de una celda de la rejilla de casas, en cm (GDD 15). */
-	constexpr float CellSize = 400.f;
+	/** Lado de una celda de la rejilla de casas, en cm (GDD 15): dos piezas de pared de arte de 400 cm por lado. */
+	constexpr float CellSize = 800.f;
+	/** Ancho de las piezas de arte (paredes, suelos y techos de 400 cm). */
+	constexpr float ArtTileSize = 400.f;
+	/** Las medidas del catálogo de salas se pensaron para celdas de 400 cm; se escalan con esto. */
+	constexpr float CellScale = CellSize / 400.f;
 	/**
 	 * Altura de cada piso, en cm: la planta 0 tiene el suelo en Z = 0, la 1 en Z = 600 y el sótano (-1)
 	 * en Z = -600. Las paredes llegan justo al forjado del piso de arriba (580 + 20 de forjado). Es la
@@ -28,7 +32,7 @@ namespace NDHouseGen
 	/** Versión del manifiesto; súbela si cambia su formato. */
 	constexpr int32 SchemaVersion = 1;
 	/** Versión del algoritmo; con la misma semilla y versión sale la misma casa. */
-	inline const TCHAR* GenerationVersion = TEXT("housegen-0.4");
+	inline const TCHAR* GenerationVersion = TEXT("housegen-0.5");
 }
 
 /** Tipo de hueco en el borde de un módulo de sala (GDD 15.2). */
@@ -250,7 +254,7 @@ struct FNDStairSegment
 
 	/** Ancho de la rampa o grosor del murete. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))
-	float Width = 360.f;
+	float Width = NDHouseGen::CellSize - 2.f * NDHouseGen::WallThickness;
 
 	/** 0 = losa (rampa o rellano); > 0 = murete de esta altura. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "NDE|HouseGen", meta = (ClampMin = "0"))

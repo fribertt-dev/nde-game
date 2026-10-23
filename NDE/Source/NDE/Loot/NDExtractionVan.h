@@ -40,6 +40,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
 	TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 
+	/** Malla de arte (SM_Van_Desvelados, agrandada a unos 5 m). Solo se ve: la colisión es la de Body y Cab. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
+	TObjectPtr<UStaticMeshComponent> ArtMesh;
+
 	/** Aro en el suelo que marca la zona de depósito. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Van")
 	TObjectPtr<UStaticMeshComponent> DepositRing;

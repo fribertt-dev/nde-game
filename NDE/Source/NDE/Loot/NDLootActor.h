@@ -26,6 +26,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Loot")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 
+	/** Malla de arte de la definición (sin colisión), apoyada en la base de Mesh. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Loot")
+	TObjectPtr<UStaticMeshComponent> ArtMesh;
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Loot")
 	UNDLootDefinition* GetDefinition() const { return Definition; }
 

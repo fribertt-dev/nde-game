@@ -326,7 +326,7 @@ void FNDHouseLayout::BuildGameplayPoints()
 		for (int32 Try = 0; Try < 6; ++Try)
 		{
 			const FIntPoint Cell = Cells[Rng.RandRange(0, Cells.Num() - 1)];
-			const FVector Location = Lot.GetCellCenter(Cell) + FVector(Rng.FRandRange(-100.f, 100.f), Rng.FRandRange(-100.f, 100.f), Room.Floor * NDHouseGen::FloorHeight);
+			const FVector Location = Lot.GetCellCenter(Cell) + FVector(Rng.FRandRange(-100.f, 100.f) * NDHouseGen::CellScale, Rng.FRandRange(-100.f, 100.f) * NDHouseGen::CellScale, Room.Floor * NDHouseGen::FloorHeight);
 			const bool bNearDoor = Doors.ContainsByPredicate([&Location](const FVector& Door) { return FVector::Dist2D(Door, Location) < HazardDoorClearance; });
 			if (!bNearDoor)
 			{
@@ -693,9 +693,9 @@ void FNDHouseLayout::BuildDecorations()
 		const FVector2D RoomCenter = (Min + Max) * 0.5f;
 		auto AddCenterCandidates = [&RoomCenter, FloorZ](TArray<FTransform>& Out)
 		{
-			for (const float X : { 0.f, -75.f, 75.f, -150.f, 150.f })
+			for (const float X : { 0.f, -75.f, 75.f, -150.f, 150.f, -225.f, 225.f, -300.f, 300.f })
 			{
-				for (const float Y : { 0.f, -75.f, 75.f, -150.f, 150.f })
+				for (const float Y : { 0.f, -75.f, 75.f, -150.f, 150.f, -225.f, 225.f, -300.f, 300.f })
 				{
 					for (const float Yaw : { 0.f, 90.f })
 					{
@@ -780,7 +780,7 @@ void FNDHouseLayout::BuildDecorations()
 		}
 
 		// Muebles de la sala, por orden de prioridad. Los que comparten malla comparten el máximo.
-		const int32 MaxPieces = FMath::Min(3 + 2 * (Cells.Num() - 1), 8);
+		const int32 MaxPieces = FMath::Min(5 + 3 * (Cells.Num() - 1), 12);
 		int32 Pieces = 0;
 		TMap<FString, int32> PlacedByMesh;
 		for (const FNDRoomFurniture& Entry : NDHouseFurniture::GetRoomFurniture(Room.Def->RoomType))
@@ -821,8 +821,9 @@ void FNDHouseLayout::BuildDecorations()
 					const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, Art.Size);
 					if (bFlat)
 					{
-						// En el suelo: dentro de la sala y sin pisar otra pieza del suelo.
-						return FitsInRoom(Box) && !Decorations.ContainsByPredicate([&Box, RoomIndex, FloorZ](const FNDHouseDecoration& Other)
+						// En el suelo: dentro de la sala y sin pisar otra pieza del suelo; las que abultan (mantas, cojines)
+						// tampoco se meten en un mueble.
+						return FitsInRoom(Box) && (Art.Size.Z <= 30.f || !OverlapsFurniture(Box)) && !Decorations.ContainsByPredicate([&Box, RoomIndex, FloorZ](const FNDHouseDecoration& Other)
 						{
 							return Other.Room == RoomIndex && !Other.bCollision && FMath::IsNearlyEqual(Other.LotTransform.GetLocation().Z, FloorZ, 1.f)
 								&& Box.Intersect(Other.GetFootprint());

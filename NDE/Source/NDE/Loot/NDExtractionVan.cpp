@@ -70,6 +70,20 @@ ANDExtractionVan::ANDExtractionVan()
 		Wheels.Add(Wheel);
 	}
 
+	// Arte: la malla mide 150 cm de largo (eje Y, morro en +Y); se agranda a 5 m sobre la caja y la cabina.
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> VanFinder(TEXT("/Game/_NDE_/Props/Vehicles/SM_Van_Desvelados/SM_Van_Desvelados.SM_Van_Desvelados"));
+	ArtMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ArtMesh"));
+	ArtMesh->SetupAttachment(Root);
+	ArtMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ArtMesh->SetCanEverAffectNavigation(false);
+	if (VanFinder.Succeeded())
+	{
+		constexpr float VanScale = 500.f / 150.f;
+		ArtMesh->SetStaticMesh(VanFinder.Object);
+		ArtMesh->SetRelativeLocation(FVector(0.f, 420.f, 0.f));
+		ArtMesh->SetRelativeScale3D(FVector(VanScale));
+	}
+
 	DepositRing = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DepositRing"));
 	DepositRing->SetupAttachment(Root);
 	DepositRing->SetStaticMesh(CylinderFinder.Object);
@@ -107,16 +121,19 @@ void ANDExtractionVan::OnConstruction(const FTransform& Transform)
 	}
 	Paint(DepositRing, FLinearColor(0.1f, 0.9f, 0.25f));
 
-	// Sin greybox queda solo la zona (p. ej. si el nivel pone su propia malla en Body).
+	// Sin greybox queda solo la zona (p. ej. si el nivel pone su propia malla en Body). Con la malla de arte,
+	// la caja y la cabina siguen dando colisión pero no se ven.
+	const bool bHasArt = ArtMesh && ArtMesh->GetStaticMesh();
 	for (UStaticMeshComponent* Mesh : { Body.Get(), Cab.Get() })
 	{
-		Mesh->SetVisibility(bShowGreybox);
+		Mesh->SetVisibility(bShowGreybox && !bHasArt);
 		Mesh->SetCollisionEnabled(bShowGreybox ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
 	}
 	for (UStaticMeshComponent* Wheel : Wheels)
 	{
-		Wheel->SetVisibility(bShowGreybox);
+		Wheel->SetVisibility(bShowGreybox && !bHasArt);
 	}
+	ArtMesh->SetVisibility(bShowGreybox);
 }
 
 void ANDExtractionVan::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

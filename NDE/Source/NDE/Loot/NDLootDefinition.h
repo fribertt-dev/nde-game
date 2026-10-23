@@ -69,6 +69,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
 	FVector MeshScale = FVector::OneVector;
 
+	/** Malla de arte (p. ej. SM_Loot_*), a su tamaño real. Solo se ve: la física y la colisión siguen siendo de Mesh, que queda oculta. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Visual")
+	TSoftObjectPtr<UStaticMesh> ArtMesh;
+
 	UFUNCTION(BlueprintPure, Category = "NDE|Loot")
 	int32 GetRequiredCarriers() const;
 
