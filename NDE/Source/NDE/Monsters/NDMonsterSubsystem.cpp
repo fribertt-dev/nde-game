@@ -233,6 +233,25 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 		Candidates.Add(BedNode);
 	}
 
+	// La jaula no tapa escondites: ni el mueble ni su punto de entrada.
+	TArray<FVector> HidingPoints;
+	for (const FNDHouseHidingSpot& Spot : Layout.HidingSpots)
+	{
+		HidingPoints.Add(LotToWorld.TransformPosition(Spot.LotTransform.GetLocation()));
+		HidingPoints.Add(LotToWorld.TransformPosition(Spot.EntryPoint));
+	}
+	auto IsAwayFromHiding = [&HidingPoints](const FVector& Spot)
+	{
+		for (const FVector& Point : HidingPoints)
+		{
+			if (FVector::Dist2D(Point, Spot) < 250.f && FMath::Abs(Point.Z - Spot.Z) < 300.f)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
 	// En cada sala candidata, el primer hueco libre en espiral alrededor de su centro.
 	for (int32 Node : Candidates)
 	{
@@ -244,7 +263,7 @@ FVector UNDMonsterSubsystem::FindCageLocation(ANDHouseLot* Lot) const
 			{
 				const float Angle = 2.f * PI * Step / Steps;
 				const FVector Candidate = Center + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * (Ring * 90.f);
-				if (IsSpotFree(Candidate))
+				if (IsAwayFromHiding(Candidate) && IsSpotFree(Candidate))
 				{
 					return Candidate;
 				}
