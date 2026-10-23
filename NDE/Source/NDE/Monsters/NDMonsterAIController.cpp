@@ -62,7 +62,7 @@ ANDMonsterAIController::ANDMonsterAIController(const FObjectInitializer& ObjectI
 
 	Perception = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("Perception"));
 	HearingConfig = CreateDefaultSubobject<UAISenseConfig_Hearing>(TEXT("HearingConfig"));
-	HearingConfig->HearingRange = 4000.f;
+	HearingConfig->HearingRange = 8000.f;
 	HearingConfig->DetectionByAffiliation.bDetectEnemies = true;
 	HearingConfig->DetectionByAffiliation.bDetectNeutrals = true;
 	HearingConfig->DetectionByAffiliation.bDetectFriendlies = true;
@@ -132,20 +132,20 @@ void ANDMonsterAIController::HandlePerceptionUpdated(AActor* Actor, FAIStimulus 
 	HearNoise(Stimulus.StimulusLocation, Stimulus.Strength * 100.f, Actor, Stimulus.Tag);
 }
 
-void ANDMonsterAIController::HearNoise(const FVector& Location, float BaseLoudness, AActor* Instigator, FName Tag)
+void ANDMonsterAIController::HearNoise(const FVector& Location, float BaseLoudness, AActor* NoiseInstigator, FName Tag)
 {
-	if (!Monster || Instigator == Monster.Get() || BaseLoudness <= 0.f)
+	if (!Monster || NoiseInstigator == Monster.Get() || BaseLoudness <= 0.f)
 	{
 		return;
 	}
 	const UNDMonsterDefinition& Def = GetDef();
 	const double Time = Now();
 	// Golpes del mismo cuerpo muy seguidos: cuenta solo el más fuerte (GDD 9.2).
-	if (Instigator)
+	if (NoiseInstigator)
 	{
 		for (FNDHeardNoise& Pending : PendingNoises)
 		{
-			if (Pending.Instigator.Get() == Instigator && Time - Pending.ServerTime < Def.NoiseMergeSeconds)
+			if (Pending.Instigator.Get() == NoiseInstigator && Time - Pending.ServerTime < Def.NoiseMergeSeconds)
 			{
 				if (BaseLoudness > Pending.BaseLoudness)
 				{
@@ -159,7 +159,7 @@ void ANDMonsterAIController::HearNoise(const FVector& Location, float BaseLoudne
 	}
 	FNDHeardNoise& Noise = PendingNoises.AddDefaulted_GetRef();
 	Noise.Location = Location;
-	Noise.Instigator = Instigator;
+	Noise.Instigator = NoiseInstigator;
 	Noise.BaseLoudness = BaseLoudness;
 	Noise.Tag = Tag;
 	Noise.ServerTime = Time;
@@ -235,14 +235,14 @@ void ANDMonsterAIController::UpdateTouch(float DeltaSeconds, float& InOutGain)
 	}
 	// Notar a alguien pegado a la cama aunque no haga ruido (GDD 9.1, ProximityTouch).
 	const FVector Body = Monster->GetActorLocation();
-	for (const APlayerState* PlayerState : GameState->PlayerArray)
+	for (const APlayerState* OtherPlayerState : GameState->PlayerArray)
 	{
-		const APawn* Pawn = PlayerState ? PlayerState->GetPawn() : nullptr;
-		if (Pawn && NDMonsterUtils::IsTargetablePlayer(Pawn) && !NDMonsterUtils::IsPawnHidden(Pawn)
-			&& FVector::Dist2D(Pawn->GetActorLocation(), Body) < Def.TouchRadius + Monster->GetCapsuleComponent()->GetScaledCapsuleRadius())
+		const APawn* OtherPawn = OtherPlayerState ? OtherPlayerState->GetPawn() : nullptr;
+		if (OtherPawn && NDMonsterUtils::IsTargetablePlayer(OtherPawn) && !NDMonsterUtils::IsPawnHidden(OtherPawn)
+			&& FVector::Dist2D(OtherPawn->GetActorLocation(), Body) < Def.TouchRadius + Monster->GetCapsuleComponent()->GetScaledCapsuleRadius())
 		{
 			InOutGain += Def.TouchSuspicionPerSecond * DeltaSeconds;
-			LastNoiseLocation = Pawn->GetActorLocation();
+			LastNoiseLocation = OtherPawn->GetActorLocation();
 			LastNoiseTime = Now();
 		}
 	}
@@ -337,30 +337,30 @@ void ANDMonsterAIController::UpdateSight(float DeltaSeconds)
 	TSet<TWeakObjectPtr<APawn>> Updated;
 	if (GameState && Range > 0.f)
 	{
-		for (const APlayerState* PlayerState : GameState->PlayerArray)
+		for (const APlayerState* OtherPlayerState : GameState->PlayerArray)
 		{
-			APawn* Pawn = PlayerState ? PlayerState->GetPawn() : nullptr;
-			if (!Pawn || !NDMonsterUtils::IsTargetablePlayer(Pawn))
+			APawn* OtherPawn = OtherPlayerState ? OtherPlayerState->GetPawn() : nullptr;
+			if (!OtherPawn || !NDMonsterUtils::IsTargetablePlayer(OtherPawn))
 			{
 				continue;
 			}
-			const float Visibility = NDMonsterUtils::GetPawnVisibility(Pawn, Def);
+			const float Visibility = NDMonsterUtils::GetPawnVisibility(OtherPawn, Def);
 			float Distance = 0.f;
-			if (Visibility <= 0.f || !CanSee(Pawn, Range, HalfAngle, Gaze, Distance))
+			if (Visibility <= 0.f || !CanSee(OtherPawn, Range, HalfAngle, Gaze, Distance))
 			{
 				continue;
 			}
-			float& Meter = Detection.FindOrAdd(TWeakObjectPtr<APawn>(Pawn));
+			float& Meter = Detection.FindOrAdd(TWeakObjectPtr<APawn>(OtherPawn));
 			Meter = FMath::Min(1.f, Meter + NDMonsterBrain::GetDetectionRate(Def, Visibility, Distance, Range) * DeltaSeconds);
-			Updated.Add(TWeakObjectPtr<APawn>(Pawn));
+			Updated.Add(TWeakObjectPtr<APawn>(OtherPawn));
 			if (Meter > BestMeter)
 			{
 				BestMeter = Meter;
-				BestPawn = Pawn;
+				BestPawn = OtherPawn;
 			}
-			if (Pawn == ChaseTarget.Get())
+			if (OtherPawn == ChaseTarget.Get())
 			{
-				LastSeenLocation = Pawn->GetActorLocation();
+				LastSeenLocation = OtherPawn->GetActorLocation();
 				LastSeenTime = Now();
 			}
 		}
@@ -844,10 +844,10 @@ void ANDMonsterAIController::UpdateReturnToSleep()
 			bool bPlayerNear = false;
 			if (const AGameStateBase* GameState = GetWorld()->GetGameState())
 			{
-				for (const APlayerState* PlayerState : GameState->PlayerArray)
+				for (const APlayerState* OtherPlayerState : GameState->PlayerArray)
 				{
-					const APawn* Pawn = PlayerState ? PlayerState->GetPawn() : nullptr;
-					bPlayerNear |= Pawn && FVector::Dist(Pawn->GetActorLocation(), Bed) < 800.f;
+					const APawn* OtherPawn = OtherPlayerState ? OtherPlayerState->GetPawn() : nullptr;
+					bPlayerNear |= OtherPawn && FVector::Dist(OtherPawn->GetActorLocation(), Bed) < 800.f;
 				}
 			}
 			if (!bPlayerNear)

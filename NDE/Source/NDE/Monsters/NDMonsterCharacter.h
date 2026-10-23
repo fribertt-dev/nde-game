@@ -130,7 +130,7 @@ protected:
 	void OnRep_Victims();
 
 	void BuildPlaceholderBody();
-	UStaticMeshComponent* AddShape(FName Name, UStaticMesh* Mesh, const FVector& Location, const FVector& Scale, const FRotator& Rotation = FRotator::ZeroRotator);
+	UStaticMeshComponent* AddShape(FName Name, UStaticMesh* ShapeMesh, const FVector& Location, const FVector& Scale, const FRotator& Rotation = FRotator::ZeroRotator);
 	void PaintShapes();
 
 	/** Postura, pecho, ojos, mano, cartel y sonido. Cosmético, en cada máquina. */

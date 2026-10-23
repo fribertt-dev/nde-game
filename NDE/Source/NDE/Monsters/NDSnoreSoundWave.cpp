@@ -18,10 +18,10 @@ int32 UNDSnoreSoundWave::OnGeneratePCMAudio(TArray<uint8>& OutAudio, int32 NumSa
 	int16* Out = reinterpret_cast<int16*>(OutAudio.GetData());
 
 	const float Target = TargetLevel.load();
-	const float Pitch = TargetPitch.load();
+	const float SnorePitch = TargetPitch.load();
 	// Vibración del paladar (~30 Hz) que corta el ruido grave en "golpes": eso suena a ronquido.
-	const float FlutterHz = 30.f * Pitch;
-	const float ToneHz = 85.f * Pitch;
+	const float FlutterHz = 30.f * SnorePitch;
+	const float ToneHz = 85.f * SnorePitch;
 	const float Smooth = 0.0012f;
 
 	for (int32 Index = 0; Index < NumSamples; ++Index)
