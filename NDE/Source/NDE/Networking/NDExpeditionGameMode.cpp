@@ -12,6 +12,7 @@
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "TimerManager.h"
+#include "UI/NDHUD.h"
 
 namespace NDExpeditionGameMode
 {
@@ -26,6 +27,8 @@ ANDExpeditionGameMode::ANDExpeditionGameMode()
 	PlayerStateClass = ANDPlayerState::StaticClass();
 	PlayerControllerClass = ANDPlayerController::StaticClass();
 	DefaultPawnClass = ANDCharacter::StaticClass();
+	// HUD de expedición: reloj, cuota, avisos, pausa y resultado.
+	HUDClass = ANDExpeditionHUD::StaticClass();
 	bUseSeamlessTravel = true;
 }
 

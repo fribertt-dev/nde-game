@@ -28,6 +28,9 @@ protected:
 	TObjectPtr<UTextBlock> TitleText;
 
 	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> SubtitleText;
+
+	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> ContractText;
 
 	UPROPERTY(Transient)
@@ -35,4 +38,7 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTextBlock> RewardText;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTextBlock> IncidentsText;
 };
