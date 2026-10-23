@@ -132,6 +132,16 @@ namespace NDHouseLot
 			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
 	}
 
+	FAutoConsoleCommandWithWorld CheckNavCommand(TEXT("nde.HouseGen.CheckNav"),
+		TEXT("Solo servidor: repite la comprobación de la patrulla de la criatura sobre el NavMesh."),
+		FConsoleCommandWithWorldDelegate::CreateLambda([](UWorld* World)
+		{
+			if (ANDHouseLot* Lot = ANDHouseLot::FindLot(World))
+			{
+				Lot->RecheckNavigation();
+			}
+		}));
+
 	FAutoConsoleCommandWithWorldAndArgs ViewRoomCommand(TEXT("nde.HouseGen.ViewRoom"),
 		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw]"),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ViewRoom));
@@ -653,6 +663,24 @@ void ANDHouseLot::CheckNavigationPath()
 			UNavigationPath* Path = bProjected ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, NodeOnNav.Location) : nullptr;
 			if (!Path || !Path->IsValid() || Path->IsPartial())
 			{
+				// Escaleras: dónde se corta el camino (centro de cada tramo y rellano).
+				const FNDHouseLayoutRoom& StuckRoom = Layout.Rooms[Node.Room];
+				const FTransform RoomToWorld = FTransform(FRotator(0.f, StuckRoom.YawSteps * 90.f, 0.f), Layout.GetRoomCenter(Node.Room)) * LotToWorld;
+				for (int32 SegmentIndex = 0; SegmentIndex < StuckRoom.Def->StairSegments.Num() * 3; ++SegmentIndex)
+				{
+					const FNDStairSegment& Segment = StuckRoom.Def->StairSegments[SegmentIndex / 3];
+					const float Along = 0.1f + 0.4f * (SegmentIndex % 3);
+					const FVector Probe = RoomToWorld.TransformPosition(FMath::Lerp(Segment.Start, Segment.End, Along) + FVector(0.f, 0.f, Segment.Height + 50.f));
+					FNavLocation ProbeOnNav;
+					const bool bProbeOnNav = NavSys->ProjectPointToNavigation(Probe, ProbeOnNav, Extent);
+					UNavigationPath* ProbePath = bProbeOnNav ? UNavigationSystemV1::FindPathToLocationSynchronously(this, BedroomOnNav.Location, ProbeOnNav.Location) : nullptr;
+					FHitResult Above;
+					const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Above, Probe, Probe + FVector(0.f, 0.f, 250.f), ECC_Pawn);
+					UE_LOG(LogNDHouseGen, Warning, TEXT("    encima: %s"), bBlocked ? *FString::Printf(TEXT("%s / %s a %.0f cm"), *GetNameSafe(Above.GetActor()), *GetNameSafe(Above.GetComponent()), Above.Distance) : TEXT("libre"));
+					UE_LOG(LogNDHouseGen, Warning, TEXT("  tramo %d (%.0f%%) de %s: %s, %s (en %s)"), SegmentIndex / 3, Along * 100.f, *StuckRoom.Def->RoomModuleId.ToString(),
+						bProbeOnNav ? TEXT("en el NavMesh") : TEXT("FUERA del NavMesh"),
+						ProbePath && ProbePath->IsValid() && !ProbePath->IsPartial() ? TEXT("con camino") : TEXT("SIN camino"), *Probe.ToCompactString());
+				}
 				++PatrolNodesStuck;
 				UE_LOG(LogNDHouseGen, Warning, TEXT("Lote %s: nodo de patrulla %d (sala %d %s, piso %d) sin camino desde el dormitorio%s (%s, %d muebles, vecinos: %s, en %s)"),
 					*LotInfo.LotId.ToString(), Node.StableId, Node.Room, *NDHouseGen::GetRoomTypeName(Layout.Rooms[Node.Room].Def->RoomType),

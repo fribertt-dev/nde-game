@@ -194,6 +194,10 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+public:
+	/** Repite la comprobación de la patrulla sobre el NavMesh (nde.HouseGen.CheckNav). */
+	void RecheckNavigation() { NavCheckTries = 0; CheckNavigationPath(); }
+
 private:
 	UFUNCTION()
 	void OnRep_Manifest();
