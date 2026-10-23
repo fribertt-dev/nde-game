@@ -298,6 +298,11 @@ void ANDCharacter::Tick(float DeltaSeconds)
 			}
 		}
 		UpdateHeadBob(DeltaSeconds);
+		if (AutoWalkRemaining > 0.f && Controller)
+		{
+			AutoWalkRemaining -= DeltaSeconds;
+			AddMovementInput(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f).Vector(), 1.f);
+		}
 	}
 	UpdateHeadPitch();
 
