@@ -44,7 +44,7 @@ public:
 	virtual void OnMoveCompleted(FAIRequestID RequestID, const FPathFollowingResult& Result) override;
 
 	/** Ruido que llega a la criatura (0-100). Lo usan la percepción y los comandos de depuración. */
-	void HearNoise(const FVector& Location, float BaseLoudness, AActor* Instigator, FName Tag);
+	void HearNoise(const FVector& Location, float BaseLoudness, AActor* NoiseInstigator, FName Tag);
 
 	// --- Depuración.
 	void DebugWake();

@@ -68,7 +68,7 @@ public:
 	float HearingHalfDistance = 600.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hearing", meta = (ClampMin = "100", ToolTip = "Más lejos de esto (cm) no oye nada."))
-	float HearingMaxDistance = 4000.f;
+	float HearingMaxDistance = 8000.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Hearing", meta = (ClampMin = "0", ToolTip = "Sensibilidad del oído en sueño profundo."))
 	float HearingDeepSleep = 0.5f;

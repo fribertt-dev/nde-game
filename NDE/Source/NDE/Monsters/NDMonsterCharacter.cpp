@@ -90,11 +90,11 @@ void ANDMonsterCharacter::BuildPlaceholderBody()
 	RightHandRest = NDMonsterCharacter::RightHandRest;
 }
 
-UStaticMeshComponent* ANDMonsterCharacter::AddShape(FName Name, UStaticMesh* Mesh, const FVector& Location, const FVector& Scale, const FRotator& Rotation)
+UStaticMeshComponent* ANDMonsterCharacter::AddShape(FName Name, UStaticMesh* ShapeMesh, const FVector& Location, const FVector& Scale, const FRotator& Rotation)
 {
 	UStaticMeshComponent* Shape = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 	Shape->SetupAttachment(VisualRoot);
-	Shape->SetStaticMesh(Mesh);
+	Shape->SetStaticMesh(ShapeMesh);
 	Shape->SetRelativeLocation(Location);
 	Shape->SetRelativeRotation(Rotation);
 	Shape->SetRelativeScale3D(Scale);
@@ -111,13 +111,13 @@ void ANDMonsterCharacter::PaintShapes()
 	{
 		return;
 	}
-	auto Paint = [this](UStaticMeshComponent* Mesh, const FLinearColor& Color)
+	auto Paint = [this](UStaticMeshComponent* ShapeMesh, const FLinearColor& Color)
 	{
-		if (Mesh)
+		if (ShapeMesh)
 		{
 			UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(ShapeMaterial, this);
 			Material->SetVectorParameterValue(TEXT("Color"), Color);
-			Mesh->SetMaterial(0, Material);
+			ShapeMesh->SetMaterial(0, Material);
 		}
 	};
 	// Pijama azul de rayas imaginarias, piel rosada, nariz roja de tanto roncar y gorro de dormir.
