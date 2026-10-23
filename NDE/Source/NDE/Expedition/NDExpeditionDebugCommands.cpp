@@ -211,10 +211,21 @@ namespace NDExpeditionDebug
 		const float Seconds = ArgFloat(Args, 0, 60.f);
 		RunLater(World, ArgFloat(Args, 1, 0.f), false, [Seconds](UWorld* W)
 		{
-			if (UNDNightClockComponent* Clock = ANDExpeditionDirector::GetNightClock(W))
+			UNDNightClockComponent* Clock = ANDExpeditionDirector::GetNightClock(W);
+			// En la inserción el reloj aún no corre: se arranca como si alguien cruzara la puerta.
+			const ANDExpeditionDirector* Director = ANDExpeditionDirector::Get(W);
+			if (Clock && !Clock->IsRunning() && Director && Director->Expedition)
+			{
+				Director->Expedition->NotifyPlayerEnteredHouse();
+			}
+			if (Clock && Clock->IsRunning())
 			{
 				Clock->DebugSkipSeconds(Seconds);
 				UE_LOG(LogNDExpeditionDebug, Log, TEXT("Reloj adelantado %.0f s"), Seconds);
+			}
+			else
+			{
+				UE_LOG(LogNDExpeditionDebug, Warning, TEXT("nde.Expedition.SkipTime: no hay reloj en marcha (hace falta el director de expedición y ser el servidor)"));
 			}
 			return false;
 		});
