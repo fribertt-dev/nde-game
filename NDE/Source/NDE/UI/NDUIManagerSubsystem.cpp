@@ -7,6 +7,7 @@
 #include "UI/NDUISettings.h"
 #include "UI/NDUITags.h"
 #include "UI/Screens/NDUIExpeditionHUD.h"
+#include "UI/Screens/NDUIPauseScreen.h"
 #include "UI/Screens/NDUIResultsScreen.h"
 #include "UI/Widgets/NDUIBaseModal.h"
 #include "UI/Widgets/NDUIBaseScreen.h"
@@ -28,17 +29,18 @@ void UNDUIManagerSubsystem::LoadSettingsAssets()
 {
 	const UNDUISettings* Settings = GetDefault<UNDUISettings>();
 
-	if (!ScreenRegistry)
+	if (!NativeScreenRegistry)
 	{
-		ScreenRegistry = Settings->ScreenRegistry.LoadSynchronous();
+		// Pantallas hechas en C++ (HUD de expedición, pausa y resultados). Las del DA_UIScreenRegistry tienen prioridad.
+		NativeScreenRegistry = NewObject<UNDUIScreenRegistry>(this, TEXT("NativeScreenRegistry"));
+		NativeScreenRegistry->Screens.Add(NDUITags::Screen_ExpeditionHUD, FNDUIScreenEntry{ UNDUIExpeditionHUD::StaticClass(), ENDUILayer::Game });
+		NativeScreenRegistry->Screens.Add(NDUITags::Screen_Pause, FNDUIScreenEntry{ UNDUIPauseScreen::StaticClass(), ENDUILayer::GameMenu });
+		NativeScreenRegistry->Screens.Add(NDUITags::Screen_Results, FNDUIScreenEntry{ UNDUIResultsScreen::StaticClass(), ENDUILayer::GameMenu });
 	}
 	if (!ScreenRegistry)
 	{
-		// Sin DA_UIScreenRegistry: las pantallas hechas en C++ (HUD de expedición y resultados).
-		ScreenRegistry = NewObject<UNDUIScreenRegistry>(this, TEXT("NativeScreenRegistry"));
-		ScreenRegistry->Screens.Add(NDUITags::Screen_ExpeditionHUD, FNDUIScreenEntry{ UNDUIExpeditionHUD::StaticClass(), ENDUILayer::Game });
-		ScreenRegistry->Screens.Add(NDUITags::Screen_Results, FNDUIScreenEntry{ UNDUIResultsScreen::StaticClass(), ENDUILayer::GameMenu });
-		UE_LOG(LogNDUI, Log, TEXT("ScreenRegistry is not set in Project Settings > Game > NDE UI: using the native screens"));
+		ScreenRegistry = Settings->ScreenRegistry.LoadSynchronous();
+		UE_CLOG(!ScreenRegistry, LogNDUI, Log, TEXT("ScreenRegistry is not set in Project Settings > Game > NDE UI: using the native screens"));
 	}
 	if (!Theme)
 	{
@@ -90,13 +92,17 @@ void UNDUIManagerSubsystem::NotifyPlayerControllerReady(APlayerController* Playe
 
 UNDUIBaseScreen* UNDUIManagerSubsystem::PushScreen(FGameplayTag ScreenTag)
 {
-	if (!RootLayout || !ScreenRegistry)
+	if (!RootLayout || !NativeScreenRegistry)
 	{
 		UE_LOG(LogNDUI, Error, TEXT("PushScreen(%s) called before the UI was initialized"), *ScreenTag.ToString());
 		return nullptr;
 	}
 
-	const FNDUIScreenEntry* Entry = ScreenRegistry->FindScreen(ScreenTag);
+	const FNDUIScreenEntry* Entry = ScreenRegistry ? ScreenRegistry->FindScreen(ScreenTag) : nullptr;
+	if (!Entry)
+	{
+		Entry = NativeScreenRegistry->FindScreen(ScreenTag);
+	}
 	if (!Entry)
 	{
 		UE_LOG(LogNDUI, Error, TEXT("Screen %s is not in the screen registry"), *ScreenTag.ToString());
@@ -140,6 +146,17 @@ void UNDUIManagerSubsystem::ClearLayer(ENDUILayer Layer)
 	{
 		RootLayout->ClearLayer(Layer);
 	}
+}
+
+void UNDUIManagerSubsystem::TogglePause()
+{
+	if (UNDUIBaseScreen* Open = PauseScreen.Get(); Open && Open->IsActivated())
+	{
+		Open->DeactivateWidget();
+		PauseScreen.Reset();
+		return;
+	}
+	PauseScreen = PushScreen(NDUITags::Screen_Pause);
 }
 
 void UNDUIManagerSubsystem::ShowToast(const FNDUIToast& Toast)

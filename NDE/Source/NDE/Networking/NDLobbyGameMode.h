@@ -31,6 +31,9 @@ public:
 
 	void HandleVoteRequest(ANDPlayerController* Requester, int32 ContractIndex);
 
+	/** Pruebas (nde.Lobby.Start): sale ya hacia la expedición con el contrato más votado, sin zona ni "listo". */
+	void DebugStartExpedition() { TravelToExpedition(); }
+
 protected:
 	bool IsInsideReadyZone(const ANDPlayerController* Requester) const;
 	void SpawnReadyZoneIfMissing();

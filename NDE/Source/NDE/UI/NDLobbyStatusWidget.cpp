@@ -3,6 +3,10 @@
 #include "UI/NDLobbyStatusWidget.h"
 
 #include "Blueprint/WidgetTree.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
+#include "Components/Border.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -13,6 +17,7 @@
 #include "Players/NDPlayerController.h"
 #include "Players/NDPlayerState.h"
 #include "Progression/NDProfileSubsystem.h"
+#include "UI/Screens/NDUINativeStyle.h"
 
 void UNDLobbyStatusWidget::NativeOnInitialized()
 {
@@ -98,11 +103,11 @@ void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
 {
 	if (ReadyText)
 	{
-		FString Lines = FString::Printf(TEXT("La Madriguera - listos %d/%d"), LastReady, LastTotal);
+		FString Lines = FString::Printf(TEXT("La banda: %d de %d listos"), LastReady, LastTotal);
 		for (const APlayerState* PS : LobbyState.PlayerArray)
 		{
 			const ANDPlayerState* NDPS = Cast<ANDPlayerState>(PS);
-			Lines += FString::Printf(TEXT("\n  %s  %s"), *PS->GetPlayerName(), (NDPS && NDPS->IsReady()) ? TEXT("LISTO") : TEXT("..."));
+			Lines += FString::Printf(TEXT("\n   %s  %s"), (NDPS && NDPS->IsReady()) ? TEXT("[listo]") : TEXT("[ ... ]"), *PS->GetPlayerName());
 		}
 		ReadyText->SetText(FText::FromString(Lines));
 	}
@@ -113,10 +118,10 @@ void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
 		switch (LastPhase)
 		{
 		case ENDLobbyPhase::ReadyCheck:
-			Message = FString::Printf(TEXT("Saliendo de expedicion en %d..."), FMath::CeilToInt(GetSecondsUntilTravel()));
+			Message = FString::Printf(TEXT("Salida hacia la casa en %d..."), FMath::CeilToInt(GetSecondsUntilTravel()));
 			break;
 		case ENDLobbyPhase::Traveling:
-			Message = TEXT("Viajando a la expedicion...");
+			Message = TEXT("Rumbo a la casa...");
 			break;
 		default:
 			Message = TEXT("Entrad todos en la zona verde de SALIDA");
@@ -128,11 +133,12 @@ void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
 	if (ContractText)
 	{
 		const TArray<FNDContractOption>& Options = LobbyState.GetContractOptions();
-		FString Lines = TEXT("Contrato (pulsa 1, 2 o 3 para votar):");
+		FString Lines = TEXT("Contrato de esta noche (1, 2 o 3 para votar):");
 		for (int32 Index = 0; Index < Options.Num(); ++Index)
 		{
-			Lines += FString::Printf(TEXT("\n  [%d] %s - %d votos%s"), Index + 1, *Options[Index].DisplayName.ToString(),
-				LobbyState.GetVoteCount(Index), GetLocalVote() == Index ? TEXT("  <- tu voto") : TEXT(""));
+			const int32 Votes = LobbyState.GetVoteCount(Index);
+			Lines += FString::Printf(TEXT("\n   %d.  %s   %d %s%s"), Index + 1, *Options[Index].DisplayName.ToString(),
+				Votes, Votes == 1 ? TEXT("voto") : TEXT("votos"), GetLocalVote() == Index ? TEXT("   <- tu voto") : TEXT(""));
 		}
 		ContractText->SetText(FText::FromString(Lines));
 	}
@@ -142,9 +148,9 @@ void UNDLobbyStatusWidget::UpdateTexts(const ANDLobbyGameState& LobbyState)
 		const UNDProfileSubsystem* Profile = GetGameInstance() ? GetGameInstance()->GetSubsystem<UNDProfileSubsystem>() : nullptr;
 		const ANDPlayerController* PC = Cast<ANDPlayerController>(GetOwningPlayer());
 		const bool bTalking = PC && PC->GetVoiceComponent() && PC->GetVoiceComponent()->IsTransmitting();
-		ProfileText->SetText(FText::FromString(FString::Printf(TEXT("Monedas %lld   Reputacion %d   Expediciones %d\nManten V para hablar%s"),
+		ProfileText->SetText(FText::FromString(FString::Printf(TEXT("Monedas %lld   Reputación %d   Expediciones %d%s"),
 			Profile ? Profile->GetCoins() : 0, Profile ? Profile->GetReputation() : 0, Profile ? Profile->GetExpeditionsCompleted() : 0,
-			bTalking ? TEXT("   (HABLANDO)") : TEXT(""))));
+			bTalking ? TEXT("\nHablando...") : TEXT(""))));
 	}
 }
 
@@ -156,21 +162,42 @@ const ANDLobbyGameState* UNDLobbyStatusWidget::GetLobbyState() const
 
 void UNDLobbyStatusWidget::BuildFallbackLayout()
 {
+	using namespace NDUINativeStyle;
+	UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("Root"));
+	WidgetTree->RootWidget = Root;
+
+	// Panel arriba a la izquierda: deja ver la Madriguera y la zona de salida.
+	UBorder* PanelBorder = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Panel"));
+	PanelBorder->SetBrush(FSlateRoundedBoxBrush(FLinearColor::White, 10.f));
+	PanelBorder->SetBrushColor(Panel);
+	PanelBorder->SetPadding(FMargin(28.f, 22.f));
+	UOverlaySlot* PanelSlot = Root->AddChildToOverlay(PanelBorder);
+	PanelSlot->SetHorizontalAlignment(HAlign_Left);
+	PanelSlot->SetVerticalAlignment(VAlign_Top);
+	PanelSlot->SetPadding(FMargin(32.f));
+
 	UVerticalBox* Box = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Estado"));
-	WidgetTree->RootWidget = Box;
+	PanelBorder->SetContent(Box);
+	auto AddRow = [Box](UWidget* Widget, float Top)
+	{
+		Box->AddChildToVerticalBox(Widget)->SetPadding(FMargin(0.f, Top, 0.f, 0.f));
+	};
 
-	ReadyText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ReadyText"));
-	Box->AddChildToVerticalBox(ReadyText)->SetPadding(FMargin(30.f, 30.f, 30.f, 10.f));
+	AddRow(MakeText(*WidgetTree, TEXT("Header"), NSLOCTEXT("NDE", "LobbyHeader", "La Madriguera"), 30, Amber, TEXT("Bold")), 0.f);
+	CountdownText = MakeText(*WidgetTree, TEXT("CountdownText"), FText::GetEmpty(), 22, Text, TEXT("Bold"));
+	AddRow(CountdownText, 6.f);
+	ReadyText = MakeText(*WidgetTree, TEXT("ReadyText"), FText::GetEmpty(), 16, Text);
+	AddRow(ReadyText, 16.f);
+	ContractText = MakeText(*WidgetTree, TEXT("ContractText"), FText::GetEmpty(), 16, Text);
+	AddRow(ContractText, 16.f);
+	ProfileText = MakeText(*WidgetTree, TEXT("ProfileText"), FText::GetEmpty(), 14, Muted);
+	AddRow(ProfileText, 16.f);
 
-	CountdownText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("CountdownText"));
-	FSlateFontInfo Font = CountdownText->GetFont();
-	Font.Size = 32;
-	CountdownText->SetFont(Font);
-	Box->AddChildToVerticalBox(CountdownText)->SetPadding(FMargin(30.f, 10.f));
-
-	ContractText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ContractText"));
-	Box->AddChildToVerticalBox(ContractText)->SetPadding(FMargin(30.f, 10.f));
-
-	ProfileText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("ProfileText"));
-	Box->AddChildToVerticalBox(ProfileText)->SetPadding(FMargin(30.f, 10.f));
+	// Teclas, abajo en el centro.
+	UTextBlock* Hint = MakeText(*WidgetTree, TEXT("Hint"),
+		NSLOCTEXT("NDE", "LobbyHint", "1 / 2 / 3  votar contrato     V  hablar     P  menú     Zona verde  listo"), 15, Muted);
+	UOverlaySlot* HintSlot = Root->AddChildToOverlay(Hint);
+	HintSlot->SetHorizontalAlignment(HAlign_Center);
+	HintSlot->SetVerticalAlignment(VAlign_Bottom);
+	HintSlot->SetPadding(FMargin(0.f, 0.f, 0.f, 28.f));
 }
