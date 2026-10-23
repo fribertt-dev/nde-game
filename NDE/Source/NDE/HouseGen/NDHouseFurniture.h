@@ -44,6 +44,8 @@ struct FNDFurnitureArt
 	 * casi todas llevan 180. 90 = de lado (la cama con el lado largo contra la pared, la silla con el frente en -X).
 	 */
 	float MeshYaw = 180.f;
+	/** Escala de la malla (alfombras más pequeñas y planas); Size ya la incluye. */
+	FVector MeshScale = FVector::OneVector;
 	TArray<FNDFurnitureCompanion> Companions;
 };
 

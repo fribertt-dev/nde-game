@@ -527,7 +527,7 @@ void ANDHouseLot::BuildFromManifest()
 				Meshes->SetCanEverAffectNavigation(false);
 				Meshes->RegisterComponent();
 			}
-			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f)) * Base);
+			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f), FVector::ZeroVector, Art->MeshScale) * Base);
 		}
 		if (Decoration.bCollision)
 		{

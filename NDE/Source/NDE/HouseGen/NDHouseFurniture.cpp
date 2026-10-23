@@ -21,6 +21,14 @@ namespace NDHouseFurniture
 		return Art;
 	}
 
+	/** Malla escalada (alfombras: más pequeñas y casi planas para no parecer un escalón). */
+	FNDFurnitureArt MakeScaled(FNDFurnitureArt Art, const FVector& Scale)
+	{
+		Art.MeshScale = Scale;
+		Art.Size *= Scale;
+		return Art;
+	}
+
 	/** Malla con el frente en otro eje (MeshYaw); Size va ya en el marco del mueble. */
 	FNDFurnitureArt MakeTurned(FNDFurnitureArt Art, float MeshYaw, FName Id = NAME_None)
 	{
@@ -47,8 +55,8 @@ namespace NDHouseFurniture
 				{ { TEXT("Stool"), FVector(-70.f, 141.f, 0.f), 0.f, false }, { TEXT("Stool"), FVector(70.f, -141.f, 0.f), 180.f, false } }),
 			MakeArt(TEXT("Living"), TEXT("Stool"), FVector(82.f, 71.f, 83.f), EKind::Crate),
 			MakeArt(TEXT("Dining"), TEXT("TVStand"), FVector(375.f, 123.f, 109.f), EKind::Appliance, { { TEXT("TV_Old"), FVector(0.f, 18.f, 109.f) } }),
-			MakeArt(TEXT("Entry_Common"), TEXT("Rug_A"), FVector(400.f, 318.f, 21.f), EKind::Rug),
-			MakeArt(TEXT("Entry_Common"), TEXT("Rug_B"), FVector(400.f, 322.f, 22.f), EKind::Rug),
+			MakeScaled(MakeArt(TEXT("Entry_Common"), TEXT("Rug_A"), FVector(400.f, 318.f, 21.f), EKind::Rug), FVector(0.75f, 0.75f, 0.2f)),
+			MakeScaled(MakeArt(TEXT("Entry_Common"), TEXT("Rug_B"), FVector(400.f, 322.f, 22.f), EKind::Rug), FVector(0.75f, 0.75f, 0.2f)),
 			// Cocina
 			MakeArt(TEXT("Kitchen"), TEXT("Fridge"), FVector(169.f, 195.f, 450.f), EKind::Appliance),
 			MakeArt(TEXT("Kitchen"), TEXT("Stove_Oven"), FVector(182.f, 160.f, 225.f), EKind::Appliance),
@@ -84,11 +92,11 @@ namespace NDHouseFurniture
 				{ { TEXT("BathMirror_Cabinet"), FVector(0.f, 16.f, 300.f) } }),
 			MakeArt(TEXT("Bathroom"), TEXT("BathMirror_Cabinet"), FVector(175.f, 86.f, 157.f), EKind::Rug),
 			MakeArt(TEXT("Bathroom"), TEXT("Bathtub"), FVector(425.f, 239.f, 230.f), EKind::Appliance),
-			MakeArt(TEXT("Bathroom"), TEXT("BathMat"), FVector(200.f, 156.f, 28.f), EKind::Rug),
+			MakeScaled(MakeArt(TEXT("Bathroom"), TEXT("BathMat"), FVector(200.f, 156.f, 28.f), EKind::Rug), FVector(0.8f, 0.8f, 0.2f)),
 			// Entrada, trastero y otras
 			MakeArt(TEXT("Entry_Common"), TEXT("CoatRack"), FVector(186.f, 183.f, 450.f), EKind::Appliance),
 			MakeArt(TEXT("Entry_Common"), TEXT("ShoeRack"), FVector(250.f, 135.f, 223.f), EKind::Shelf),
-			MakeArt(TEXT("Entry_Common"), TEXT("Doormat"), FVector(150.f, 97.f, 13.f), EKind::Rug),
+			MakeScaled(MakeArt(TEXT("Entry_Common"), TEXT("Doormat"), FVector(150.f, 97.f, 13.f), EKind::Rug), FVector(1.f, 1.f, 0.4f)),
 			MakeArt(TEXT("Entry_Common"), TEXT("CardboardBox"), FVector(146.f, 150.f, 113.f), EKind::Crate),
 			MakeArt(TEXT("Entry_Common"), TEXT("BookStack"), FVector(90.f, 74.f, 74.f), EKind::Rug),
 			MakeArt(TEXT("Entry_Common"), TEXT("Boot_Giant"), FVector(45.f, 75.f, 69.f), EKind::Rug),
