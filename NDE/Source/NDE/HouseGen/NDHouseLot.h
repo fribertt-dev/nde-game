@@ -207,6 +207,10 @@ private:
 	void ClearHouse();
 	void UpdateEditorBounds();
 	void CheckNavigationPath();
+	/** Suelo exterior, camino, cerca, arbustos y calle; UsedCells son las celdas con sala en la planta baja. */
+	void BuildExterior(const TSet<FIntPoint>& UsedCells);
+	/** Instancia de una malla de arte del lote (solo se ve; sin colisión). */
+	void AddLotArt(const FString& MeshPath, const FTransform& Transform);
 
 	UPROPERTY(ReplicatedUsing = OnRep_Manifest)
 	FNDHouseGenerationManifest Manifest;
