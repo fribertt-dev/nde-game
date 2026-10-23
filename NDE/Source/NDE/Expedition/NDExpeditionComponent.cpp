@@ -172,6 +172,12 @@ void UNDExpeditionComponent::SetContract(UNDContractDefinition* InContract)
 	if (GetOwner()->HasAuthority() && !bStarted)
 	{
 		Contract = InContract;
+		// Si la expedición ya intentó arrancar sin contrato, arranca ahora.
+		if (bStartPending && Contract)
+		{
+			bStartPending = false;
+			StartExpedition();
+		}
 	}
 }
 
@@ -191,7 +197,8 @@ void UNDExpeditionComponent::StartExpedition()
 	}
 	if (!Contract)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("NDExpedition: no hay contrato asignado; la expedici\u00F3n no arranca."));
+		UE_LOG(LogTemp, Warning, TEXT("NDExpedition: no hay contrato asignado; la expedici\u00F3n arranca cuando llegue."));
+		bStartPending = true;
 		return;
 	}
 

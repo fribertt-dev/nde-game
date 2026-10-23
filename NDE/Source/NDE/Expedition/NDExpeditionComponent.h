@@ -219,6 +219,8 @@ protected:
 
 	UPROPERTY(Replicated)
 	bool bStarted = false;
+	/** StartExpedition llegó antes que el contrato: arranca al recibirlo (SetContract). */
+	bool bStartPending = false;
 
 	UPROPERTY(Replicated)
 	FGuid RunGuid;

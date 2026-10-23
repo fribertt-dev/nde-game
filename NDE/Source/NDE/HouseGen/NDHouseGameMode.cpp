@@ -60,8 +60,8 @@ void ANDHouseGameMode::PreLogin(const FString& Options, const FString& Address, 
 
 void ANDHouseGameMode::StartPlay()
 {
-	Super::StartPlay();
-
+	// Lote y contrato antes de Super::StartPlay: tras un viaje seamless desde La Madriguera los jugadores ya
+	// están cargados y la expedición arranca ahí mismo; sin contrato asignado no arrancaría.
 	HouseLot = ANDHouseLot::FindLot(GetWorld());
 	if (!HouseLot)
 	{
@@ -70,9 +70,11 @@ void ANDHouseGameMode::StartPlay()
 	}
 	if (!HouseLot)
 	{
+		Super::StartPlay();
 		return;
 	}
 	SetupExpedition();
+	Super::StartPlay();
 
 	const FString SeedOption = UGameplayStatics::ParseOption(OptionsString, TEXT("Seed"));
 	if (!SeedOption.IsEmpty())
@@ -105,8 +107,10 @@ void ANDHouseGameMode::RestartPlayer(AController* NewPlayer)
 
 UNDContractDefinition* ANDHouseGameMode::ResolveContract() const
 {
+	// La opción del viaje (?Contract=C03) vale aunque el estado de la expedición aún no la haya copiado.
 	const ANDExpeditionGameState* ExpState = GetGameState<ANDExpeditionGameState>();
-	const FName ContractId = ExpState ? ExpState->GetContractId() : NAME_None;
+	const FString Option = UGameplayStatics::ParseOption(OptionsString, TEXT("Contract"));
+	const FName ContractId = !Option.IsEmpty() ? FName(*Option) : ExpState ? ExpState->GetContractId() : NAME_None;
 	if (!ContractId.IsNone())
 	{
 		const FString Id = ContractId.ToString();
@@ -133,7 +137,7 @@ void ANDHouseGameMode::SetupExpedition()
 	}
 	// Un contrato puesto a mano en el director del mapa manda sobre el de por defecto.
 	const ANDExpeditionGameState* ExpState = GetGameState<ANDExpeditionGameState>();
-	if (!Director->Expedition->Contract || (ExpState && !ExpState->GetContractId().IsNone()))
+	if (!Director->Expedition->Contract || (ExpState && !ExpState->GetContractId().IsNone()) || UGameplayStatics::HasOption(OptionsString, TEXT("Contract")))
 	{
 		Director->Expedition->SetContract(ResolveContract());
 	}
