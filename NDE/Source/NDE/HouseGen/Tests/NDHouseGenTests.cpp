@@ -1,5 +1,6 @@
 // No Despiertes Eso
 
+#include "HouseGen/NDHouseFurniture.h"
 #include "HouseGen/NDHouseGenerator.h"
 #include "HouseGen/NDHouseLoot.h"
 #include "Contracts/NDContractDefinition.h"
@@ -754,6 +755,7 @@ bool FNDHouseGenVariantsTest::RunTest(const FString& Parameters)
 	int32 Rooms = 0;
 	int32 Decorated = 0;
 	int32 DecorationCount = 0;
+	TMap<FName, int32> EmptyByModule;
 	for (int64 Seed = 1; Seed <= 400; ++Seed)
 	{
 		FNDHouseGenParams Params = NDHouseGenTests::MakeMixedParams(Seed);
@@ -773,28 +775,45 @@ bool FNDHouseGenVariantsTest::RunTest(const FString& Parameters)
 		}
 
 		// Muebles: nunca junto a una puerta, en la ruta puerta-centro ni encima del botín.
+		// Se mira la huella del mueble: ni la puerta, ni su ruta al centro, ni el centro, ni el botín caen dentro.
 		for (const FNDHouseDecoration& Decoration : Layout.Decorations)
 		{
-			const FVector Location = Decoration.LotTransform.GetLocation();
-			const float Radius = FMath::Max(Decoration.HalfExtent.X, Decoration.HalfExtent.Y);
+			if (!Decoration.bCollision)
+			{
+				continue;
+			}
+			const FBox2D Footprint = Decoration.GetFootprint();
+			const float Z = Decoration.LotTransform.GetLocation().Z;
 			const FNDHouseLayoutRoom& Room = Layout.Rooms[Decoration.Room];
+			const FVector2D Hub(Layout.PatrolNodes[Decoration.Room].Location);
+			bool bBlocks = Footprint.IsInside(Hub);
 			for (int32 SocketIndex = 0; SocketIndex < Room.Sockets.Num(); ++SocketIndex)
 			{
 				if (Room.Sockets[SocketIndex].IsOpen())
 				{
-					const FVector Door = Layout.GetSocketLocation(Decoration.Room, SocketIndex);
-					const FVector Hub = Layout.PatrolNodes[Decoration.Room].Location;
-					if (FVector::Dist2D(Door, Location) < Radius + FNDHouseLayout::DecorationRouteClearance
-						|| FMath::PointDistToSegment(FVector(Location.X, Location.Y, 0.f), FVector(Door.X, Door.Y, 0.f), FVector(Hub.X, Hub.Y, 0.f)) < Radius)
+					const FVector2D Door(Layout.GetSocketLocation(Decoration.Room, SocketIndex));
+					for (int32 Step = 0; Step <= 20 && !bBlocks; ++Step)
 					{
-						AddError(FString::Printf(TEXT("Semilla %lld: mueble %d tapa una puerta o la ruta de la sala %d"), Seed, Decoration.StableId, Decoration.Room));
+						bBlocks = Footprint.IsInside(FMath::Lerp(Door, Hub, Step / 20.f));
 					}
 				}
 			}
+			// El frente (-Y del mueble; MeshYaw ya gira la malla para eso) mira a la sala, nunca a una pared.
+			const FVector Front = Decoration.LotTransform.GetRotation().RotateVector(FVector(0.f, -1.f, 0.f));
+			const FVector FrontPoint = Decoration.LotTransform.GetLocation() + Front * (Decoration.HalfExtent.Y + 30.f);
+			if (Layout.FindRoomAt(FrontPoint) != Decoration.Room)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: mueble %d (%s) con el frente contra una pared"), Seed, Decoration.StableId,
+					NDHouseFurniture::GetArt().IsValidIndex(Decoration.Art) ? *NDHouseFurniture::GetArt()[Decoration.Art].Id.ToString() : TEXT("greybox")));
+			}
+			if (bBlocks)
+			{
+				AddError(FString::Printf(TEXT("Semilla %lld: mueble %d tapa una puerta o la ruta de la sala %d"), Seed, Decoration.StableId, Decoration.Room));
+			}
 			for (const FNDHouseLayoutMarker& Marker : Layout.Markers)
 			{
-				if (Marker.Type == ENDRoomMarkerType::LootSocket && FMath::Abs(Marker.LotTransform.GetLocation().Z - Location.Z) < 200.f
-					&& FVector::Dist2D(Marker.LotTransform.GetLocation(), Location) < Radius)
+				if (Marker.Type == ENDRoomMarkerType::LootSocket && FMath::Abs(Marker.LotTransform.GetLocation().Z - Z) < 200.f
+					&& Footprint.IsInside(FVector2D(Marker.LotTransform.GetLocation())))
 				{
 					AddError(FString::Printf(TEXT("Semilla %lld: mueble %d encima de un hueco de botin"), Seed, Decoration.StableId));
 				}
@@ -808,10 +827,15 @@ bool FNDHouseGenVariantsTest::RunTest(const FString& Parameters)
 				continue;
 			}
 			++Rooms;
-			const int32 InRoom = Layout.Decorations.FilterByPredicate([RoomIndex](const FNDHouseDecoration& D) { return D.Room == RoomIndex; }).Num();
+			const int32 InRoom = Layout.Decorations.FilterByPredicate([RoomIndex](const FNDHouseDecoration& D) { return D.Room == RoomIndex && D.bCollision; }).Num();
 			Decorated += InRoom > 0 ? 1 : 0;
+			if (InRoom == 0)
+			{
+				++EmptyByModule.FindOrAdd(Room.Def->RoomModuleId);
+			}
 			DecorationCount += InRoom;
-			if (InRoom > 3)
+			// Hasta 8 muebles grandes (más sus sillas) en las salas de 4 celdas.
+			if (InRoom > 14)
 			{
 				AddError(FString::Printf(TEXT("Semilla %lld: %d muebles en la sala %d"), Seed, InRoom, RoomIndex));
 			}
@@ -820,6 +844,7 @@ bool FNDHouseGenVariantsTest::RunTest(const FString& Parameters)
 	const int32 CatalogModules = FNDRoomCatalog::GetModules().Num();
 	AddInfo(FString::Printf(TEXT("Modulos usados: %d de %d. Salas con muebles: %d de %d (%.1f muebles de media)"),
 		UsedModules.Num(), CatalogModules, Decorated, Rooms, DecorationCount / static_cast<float>(FMath::Max(1, Rooms))));
+	AddInfo(FString::Printf(TEXT("Salas sin muebles: %s"), *FString::JoinBy(EmptyByModule, TEXT(", "), [](const TPair<FName, int32>& Pair) { return FString::Printf(TEXT("%s %d"), *Pair.Key.ToString(), Pair.Value); })));
 	TestTrue(TEXT("La mayoría de salas tiene muebles"), Decorated >= Rooms * 0.8f);
 	return true;
 }

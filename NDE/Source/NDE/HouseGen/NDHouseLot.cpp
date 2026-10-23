@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"
 #include "HAL/IConsoleManager.h"
 #include "HouseGen/NDHouseGenDebug.h"
+#include "HouseGen/NDHouseFurniture.h"
 #include "HouseGen/NDHouseGenerator.h"
 #include "HouseGen/NDRoomModuleActor.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -178,6 +179,13 @@ ANDHouseLot::ANDHouseLot()
 	DecorationMeshes->SetMobility(EComponentMobility::Movable);
 	DecorationMeshes->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
 
+	DecorationFallbackMeshes = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("DecorationFallback"));
+	DecorationFallbackMeshes->SetupAttachment(Root);
+	DecorationFallbackMeshes->SetStaticMesh(CubeFinder.Object);
+	DecorationFallbackMeshes->SetMobility(EComponentMobility::Movable);
+	DecorationFallbackMeshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+	DecorationFallbackMeshes->SetCanEverAffectNavigation(false);
+
 	UpdateEditorBounds();
 }
 
@@ -215,6 +223,7 @@ void ANDHouseLot::BeginPlay()
 	NDHouseLot::SetColor(GroundMeshes, BaseMaterial, this, FLinearColor(0.18f, 0.35f, 0.12f));
 	NDHouseLot::SetColor(ExtractionMeshes, BaseMaterial, this, FLinearColor(0.1f, 0.9f, 0.2f));
 	NDHouseLot::SetColor(DecorationMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
+	NDHouseLot::SetColor(DecorationFallbackMeshes, BaseMaterial, this, FLinearColor(0.45f, 0.3f, 0.18f));
 	if (HasAuthority())
 	{
 		if (bGenerateOnBeginPlay)
@@ -321,6 +330,14 @@ void ANDHouseLot::ClearHouse()
 	GroundMeshes->ClearInstances();
 	ExtractionMeshes->ClearInstances();
 	DecorationMeshes->ClearInstances();
+	DecorationFallbackMeshes->ClearInstances();
+	for (const TPair<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>>& Art : DecorationArtMeshes)
+	{
+		if (Art.Value)
+		{
+			Art.Value->ClearInstances();
+		}
+	}
 	bHouseBuilt = false;
 	bNavPathVerified = false;
 }
@@ -418,12 +435,44 @@ void ANDHouseLot::BuildFromManifest()
 		}
 	}
 
-	// Muebles greybox: el cubo del motor mide 100 cm y se apoya en el suelo. nde.HouseGen.Furniture 0 los quita (depuración).
+	// Muebles: caja greybox con colisión (el cubo del motor mide 100 cm y se apoya en el suelo) y, encima, su
+	// malla de arte; con arte la caja no se ve. nde.HouseGen.Furniture 0 los quita (depuración).
+	const bool bArt = NDHouseArt::IsEnabled();
+	DecorationMeshes->SetVisibility(!bArt);
 	for (const FNDHouseDecoration& Decoration : NDHouseLot::CVarFurniture.GetValueOnGameThread() != 0 ? Layout.Decorations : TArray<FNDHouseDecoration>())
 	{
+		if (Layout.Rooms[Decoration.Room].Floor > MaxVisibleFloor)
+		{
+			continue;
+		}
 		const FTransform& Base = Decoration.LotTransform;
-		DecorationMeshes->AddInstance(FTransform(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z),
-			Decoration.HalfExtent * 2.f / 100.f));
+		const FTransform Box(Base.GetRotation(), Base.GetLocation() + FVector(0.f, 0.f, Decoration.HalfExtent.Z), Decoration.HalfExtent * 2.f / 100.f);
+		const TArray<FNDFurnitureArt>& ArtList = NDHouseFurniture::GetArt();
+		const FNDFurnitureArt* Art = ArtList.IsValidIndex(Decoration.Art) ? &ArtList[Decoration.Art] : nullptr;
+		UStaticMesh* Mesh = bArt && Art ? NDHouseArt::LoadMesh(Art->MeshPath) : nullptr;
+		if (Mesh)
+		{
+			TObjectPtr<UInstancedStaticMeshComponent>& Meshes = DecorationArtMeshes.FindOrAdd(Mesh);
+			if (!Meshes)
+			{
+				Meshes = NewObject<UInstancedStaticMeshComponent>(this, NAME_None, RF_Transient);
+				Meshes->SetupAttachment(Root);
+				Meshes->SetStaticMesh(Mesh);
+				Meshes->SetMobility(EComponentMobility::Movable);
+				Meshes->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+				Meshes->SetCanEverAffectNavigation(false);
+				Meshes->RegisterComponent();
+			}
+			Meshes->AddInstance(FTransform(FRotator(0.f, Art->MeshYaw, 0.f)) * Base);
+		}
+		if (Decoration.bCollision)
+		{
+			DecorationMeshes->AddInstance(Box);
+			if (bArt && !Mesh)
+			{
+				DecorationFallbackMeshes->AddInstance(Box);
+			}
+		}
 	}
 
 	// Césped en el resto del lote (patios y jardín delantero), a ras de los suelos.

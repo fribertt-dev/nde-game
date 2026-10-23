@@ -10,6 +10,7 @@
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UPointLightComponent;
+class UStaticMesh;
 
 /**
  * Sala greybox: suelo, paredes con huecos de puerta y techo opcional, hechos con el cubo
@@ -63,6 +64,14 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
 	TObjectPtr<UInstancedStaticMeshComponent> CeilingMeshes;
 
+	/** Greybox visible sin colisión: piezas sin malla de arte (huecos desplazados, rampas en U...). */
+	UPROPERTY(VisibleAnywhere, Category = "NDE|HouseGen")
+	TObjectPtr<UInstancedStaticMeshComponent> FallbackMeshes;
+
+	/** Mallas de arte sin colisión, una por malla; se crean al construir. */
+	UPROPERTY(Transient)
+	TMap<TObjectPtr<UStaticMesh>, TObjectPtr<UInstancedStaticMeshComponent>> ArtMeshes;
+
 	/** Marcas de suelo por tipo de punto (botín, escondite...); sin colisión. Se crean al construir. */
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UInstancedStaticMeshComponent>> MarkerMeshes;
@@ -74,10 +83,17 @@ protected:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
 
+	/** Esta construcción usa mallas de arte (nde.HouseGen.Art). */
+	bool bUseArt = false;
+
 private:
 	void ClearGreybox();
 	void AddBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, const FRotator& Rotation = FRotator::ZeroRotator);
 	void SetColor(UInstancedStaticMeshComponent* Target, const FLinearColor& Color);
 	void BuildEdge(const FVector& EdgeCenter, ENDCellDirection Direction, float OpeningWidth, float OpeningOffset = 0.f);
+	/** Pieza de colisión greybox; si no hay arte que la cubra y el arte está activo, también se ve. */
+	void AddCollisionBox(UInstancedStaticMeshComponent* Target, const FVector& Center, const FVector& Size, bool bArtCovers, const FRotator& Rotation = FRotator::ZeroRotator);
+	/** Añade una instancia de una malla de arte; false si no hay arte o la malla no existe. */
+	bool AddArt(const FString& MeshPath, const FTransform& Transform);
 	UInstancedStaticMeshComponent* GetMarkerMeshes(ENDRoomMarkerType Type);
 };

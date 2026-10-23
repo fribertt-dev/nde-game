@@ -6,7 +6,7 @@ Código en `NDE/Source/NDE/HouseGen/`. Mapa de prueba: `Content/_NDE_/Levels/L_C
 1. **Lote** (`ANDHouseLot`): parcela de la calle. Su transform es el centro, `LotInfo.SizeCells` el tamaño máximo en celdas de 400 cm y `FrontDirection` el lado que da a la calle. Ninguna sala sale del lote ni del jardín delantero.
 2. **Servidor**: genera un `FNDHouseGenerationManifest` con `FNDHouseGenerator` (determinista: misma semilla + `housegen-0.1` + mismo lote = misma casa). Si un intento no valida, prueba con una semilla derivada; si ninguno vale, usa una casa de respaldo fija.
 3. **Red**: el manifiesto se replica en el lote. Los clientes no generan: construyen desde el manifiesto (`FNDHouseLayout::FromManifest`).
-4. **Construcción**: cada sala es un `ANDRoomModuleActor` greybox (cubo del motor). Los huecos sin usar se tapan con pared. Más adelante cada módulo cargará su Level Instance de arte (`ArtLevel`).
+4. **Construcción**: cada sala es un `ANDRoomModuleActor`: cajas greybox (cubo del motor) para la colisión y, encima, las mallas de arte (ver "Mallas de arte"). Los huecos sin usar se tapan con pared.
 5. **GameMode** (`ANDHouseGameMode`): igual que la expedición, pero los jugadores aparecen en la Entrada cuando la casa está construida.
 
 ## Reglas de H01 (provisionales)
@@ -37,10 +37,19 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 
 ## Variantes de piezas y muebles
 - Cada familia de salas de H01 tiene 2 o 3 variantes (las B de `housegen-0.3` cambian tamaño, puertas y huecos): cocina 2x1 o 2x2, comedor 2x1 o 1x1, baño 1x1 o 2x1, almacén, objetivo (la B tiene cuatro huecos, más accesos), despacho, lavadero, biblioteca, cuarto de juegos, despensa y dormitorio infantil. Las escaleras tienen sus tres tipos (recta, U y L). La prueba `NDE.HouseGen.VariantsAndDecorations` comprueba que cada familia tiene 2-5 variantes y que se usan los 39 módulos.
-- Muebles (`Decorations`): 2-3 por sala elegidos con la semilla (no en entrada, pasillos ni escaleras): mesa, sillón, armario, estantería, cama pequeña o caja, según la sala. Van pegados a esquinas o paredes, con colisión simple, y nunca cerca de una puerta (incluido el hueco desplazado de las escaleras en U), en la línea puerta-centro de la sala ni encima del botín, los escondites o el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 99 % de las salas tiene muebles (2,2 de media) y ningún nodo de patrulla queda atascado.
+- Muebles (`Decorations`, `HouseGen/NDHouseFurniture.cpp`): muebles de arte reales según el tipo de sala, en orden de prioridad (baño: váter, lavabo con espejo, bañera si cabe; cocina: nevera, horno, fregadero, encimeras, mesa; dormitorios: armario, mesillas con lámpara, cómoda o cama; sala: sofá, chimenea, mueble de TV, sillones; comedor: mesa con sillas, aparador, vitrina; entrada: zapatero, perchero y felpudo...). Cada mueble usa su tamaño real: va con el respaldo contra una pared (esquinas incluidas), en el centro (mesas, salas de 2 celdas o más) o plano en el suelo (alfombras, sin colisión). Su huella no tapa puertas, la línea puerta-centro de la sala, el centro, el botín, los escondites, los peligros ni el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 96 % de las salas tiene muebles (2,2 de media; las salas de 1 celda son pequeñas para los muebles del gigante).
+- La cama de la criatura (cama doble) va sobre su ancla en el dormitorio principal, sin colisión hasta que la criatura tenga su arte; en el dormitorio alargado 2x1 no cabe.
 - `nde.HouseGen.Furniture 0` construye la casa sin muebles (depuración; los puntos de juego no cambian).
 - La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
 - El botín no recorta el NavMesh (se mueve y se lleva).
+
+## Mallas de arte (housegen-0.4)
+- Salas y muebles se ven con las mallas de `Content/_NDE_/Props`. Las cajas greybox siguen debajo, invisibles, y dan la colisión y la navegación (las mallas importadas no traen colisión simple).
+- Paredes: `SM_Wall_400` y, en los huecos centrados, la pared con el hueco más parecido. La colisión sigue el hueco real de la malla: Door_S y paso secreto → `SM_Wall_Door_L_400` (134 cm), Door_M y puerta de la calle → `SM_Wall_Door_M_400` (168 cm), Door_L → `SM_Wall_Door_S_400` (244 cm), Arch_L → `SM_Wall_Arch_L_400` (256 cm). Ojo: el nombre de esas mallas no coincide con el ancho de su hueco.
+- Suelo según la sala: baldosa en cocina, baño, despensa y lavadero; hormigón en almacén y sótano; moqueta en dormitorios, biblioteca y cuarto de juegos; madera en el resto. Techo `SM_Ceiling_400`. La escalera recta usa `SM_Stairs_Giant`.
+- Sin malla se ve el greybox: huecos desplazados de las escaleras en U, rampas de las escaleras en U y L, rejillas y cualquier mueble cuya malla falte.
+- `nde.HouseGen.Art 0` vuelve al greybox (depuración). Las mallas se cargan por ruta, por eso `/Game/_NDE_/Props` está en `DirectoriesToAlwaysCook`.
+- Faltan mallas: lavadora y secadora, banco de trabajo, baúl de juguetes, escritorio y silla de despacho, fachadas exteriores (por fuera se ve la pared interior) y puertas que se abren.
 
 ## Calidad (10.000 semillas por tamaño y contrato)
 Prueba `NDE.Quality.HouseGen` (fuera de las rápidas; tarda menos de un minuto): genera 10.000 casas por tamaño (Small, Medium, Large) con cada contrato real C01-C07, un tercio con piso superior y sótano forzados, reparte el botín y comprueba objetivo accesible, cuota con margen, ruta del bulto, escondites y patrulla. Deja en `Saved/HouseGenQuality/` el informe (`report.md`), las semillas con problemas (`failed_seeds.txt`) y un SVG por layout fallido o de respaldo (piso por columna; objetivo en amarillo, dormitorio en rojo, escaleras en gris, entrada en verde, puertas como puntos). Para probar con menos: `nde.Quality.Seeds 1000`.
@@ -90,10 +99,10 @@ Valores del GDD (12 y 16.2): C01-C06 son tier I (pago 120-170 por jugador, reput
 - Prueba en partida: `L_CasaPrueba?listen?Contract=C06`.
 
 ## Pisos y sótano
-- Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 400 cm (paredes de 380 + forjado de 20).
+- Pisos: -1 sótano, 0 planta baja, 1 piso superior; en el manifiesto van en `Grid.Z`. Cada piso mide 600 cm (paredes de 580 + forjado de 20), la altura de las paredes de arte; las puertas miden 480 cm.
 - Opciones del lote: `UpperFloor` y `Basement` (Auto según el tamaño, Never, Always). Con Auto: Small 10 % / 15 %, Medium 50 % / 30 %, Large 75 % / 40 %.
 - La Entrada y la extracción siempre en planta baja. El piso superior y el sótano solo ocupan celdas con planta baja encima o debajo, y no tienen salida a la calle.
-- Cada escalera son dos salas iguales (arranque abajo, llegada arriba) que suben 400 cm con tramos de 26,6° como mucho. El generador prueba la que quepa:
+- Cada escalera son dos salas iguales (arranque abajo, llegada arriba) que suben 600 cm con tramos de 36,9° como mucho. El generador prueba la que quepa:
   - **Recta** 2x1 (`D01_Stairs_*`): una rampa de 360 cm de ancho; se sale arriba por el otro extremo. Abajo hay un paso bajo el final de la rampa (`bLowClearance`): pasan los Desvelados, no la criatura.
   - **En U** 2x1 (`D01_StairsU_*`): dos carriles de 170 cm con murete y rellano al fondo; la llegada queda encima de la entrada, sobre la sala de la que sale. Las puertas de los carriles van desplazadas (`Offset`) y la sala vecina abre el hueco en el mismo sitio.
   - **En L** 2x2 sin una celda (`D01_StairsL_*`): tramo, rellano y tramo girado 90°.
