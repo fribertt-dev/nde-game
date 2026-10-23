@@ -16,6 +16,7 @@
 #include "Expedition/NDExpeditionPlayerComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/GameStateBase.h"
+#include "GameFramework/PlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "HAL/IConsoleManager.h"
@@ -26,7 +27,12 @@
 #include "Loot/NDLootActor.h"
 #include "Net/UnrealNetwork.h"
 #include "Networking/NDLobbyGameState.h"
+#include "Players/NDDesveladoBodyComponent.h"
+#include "Players/NDHidingComponent.h"
+#include "Players/NDInteractionComponent.h"
+#include "Players/NDNoiseEmitterComponent.h"
 #include "Players/NDScaleSettings.h"
+#include "EngineUtils.h"
 #include "UI/NDUIManagerSubsystem.h"
 #include "Engine/LocalPlayer.h"
 #include "Tools/NDLoadoutComponent.h"
@@ -54,6 +60,30 @@ namespace NDCharacter
 		TEXT("nde.Expedition.DebugText"),
 		-1,
 		TEXT("Texto de depuración de la expedición arriba a la izquierda: 1 = siempre, 0 = nunca, -1 = automático (solo si no hay HUD de expedición)."));
+
+	TAutoConsoleVariable<int32> CVarSpecies(
+		TEXT("nde.Character.Species"),
+		0,
+		TEXT("Especie del Desvelado al aparecer: 0 = una distinta por jugador, 1 = mapache, 2 = lémur, 3 = murciélago, 4 = zorro, 5 = hurón, 6 = búho."));
+
+	/** nde.Character.SetSpecies N: cambia la especie del jugador local ya en partida (solo en el servidor o en solitario). */
+	FAutoConsoleCommandWithWorldAndArgs CmdSetSpecies(
+		TEXT("nde.Character.SetSpecies"),
+		TEXT("Cambia la especie de tu Desvelado ahora: 1 = mapache, 2 = lémur, 3 = murciélago, 4 = zorro, 5 = hurón, 6 = búho. Sin número, pasa a la siguiente. Solo en el servidor o en solitario."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			for (TActorIterator<ANDCharacter> It(World); It; ++It)
+			{
+				if (!It->IsLocallyControlled() || !It->HasAuthority())
+				{
+					continue;
+				}
+				const int32 Count = static_cast<int32>(ENDDesveladoSpecies::Owl);
+				int32 Value = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : static_cast<int32>(It->GetSpecies()) % Count + 1;
+				Value = FMath::Clamp(Value, 1, Count);
+				It->SetSpecies(static_cast<ENDDesveladoSpecies>(Value));
+			}
+		}));
 
 	TAutoConsoleVariable<int32> CVarHeadBob(
 		TEXT("nde.Camera.HeadBob"),
@@ -115,6 +145,13 @@ ANDCharacter::ANDCharacter()
 	Carry = CreateDefaultSubobject<UNDCarryComponent>(TEXT("Carry"));
 	Loadout = CreateDefaultSubobject<UNDLoadoutComponent>(TEXT("Loadout"));
 	ExpeditionPlayer = CreateDefaultSubobject<UNDExpeditionPlayerComponent>(TEXT("ExpeditionPlayer"));
+	Interaction = CreateDefaultSubobject<UNDInteractionComponent>(TEXT("Interaction"));
+	Hiding = CreateDefaultSubobject<UNDHidingComponent>(TEXT("Hiding"));
+	NoiseEmitter = CreateDefaultSubobject<UNDNoiseEmitterComponent>(TEXT("NoiseEmitter"));
+
+	// Cuelga del Mesh (aunque esté vacío) para tener su suavizado de red y su ajuste al agacharse.
+	Body = CreateDefaultSubobject<UNDDesveladoBodyComponent>(TEXT("Body"));
+	Body->SetupAttachment(GetMesh());
 
 	TestToolA = NDCharacter::ToolAsset(TEXT("T03"));
 	TestToolB = NDCharacter::ToolAsset(TEXT("T07"));
@@ -170,6 +207,8 @@ void ANDCharacter::BeginPlay()
 
 	Loadout->OnFlashlightChanged.AddDynamic(this, &ANDCharacter::HandleFlashlightChanged);
 	UpdateMovementSpeed();
+	// Un cuerpo desde el principio; la especie buena llega al poseerlo (servidor) o por réplica.
+	ApplySpecies();
 	// El servidor arranca con el modo por defecto; el dueño le dice luego el suyo (ServerSetFirstPerson).
 	if (HasAuthority() && !IsLocallyControlled())
 	{
@@ -217,8 +256,9 @@ void ANDCharacter::ApplyCameraMode(bool bFirstPerson)
 		Camera->SetRelativeLocationAndRotation(FVector::ZeroVector, FRotator::ZeroRotator);
 		Camera->bUsePawnControlRotation = false;
 	}
-	// El cuerpo no cambia; solo la nariz, que quedaría delante de los ojos, se oculta para el dueño.
+	// El cuerpo no cambia; solo la cabeza (y la nariz), que quedaría delante de los ojos, se oculta para el dueño.
 	PlaceholderNose->SetOwnerNoSee(bFirstPerson);
+	Body->SetFirstPersonOwner(bFirstPerson);
 	ApplyRotationMode(bFirstPerson);
 	HeadBobOffset = 0.f;
 
@@ -326,6 +366,50 @@ void ANDCharacter::PossessedBy(AController* NewController)
 		: nullptr;
 	Loadout->PingTool = TestPingTool.LoadSynchronous();
 	Loadout->SetLoadout(TestToolA.LoadSynchronous(), TestToolB.LoadSynchronous(), Consumable, 0);
+
+	SetSpecies(PickSpecies(NewController));
+}
+
+ENDDesveladoSpecies ANDCharacter::PickSpecies(const AController* NewController) const
+{
+	const int32 Count = static_cast<int32>(ENDDesveladoSpecies::Owl);
+	const int32 FromConsole = NDCharacter::CVarSpecies.GetValueOnGameThread();
+	if (FromConsole >= 1 && FromConsole <= Count)
+	{
+		return static_cast<ENDDesveladoSpecies>(FromConsole);
+	}
+	if (bForceSpecies && ForcedSpecies != ENDDesveladoSpecies::None)
+	{
+		return ForcedSpecies;
+	}
+	// Una por puesto en la partida: con 6 jugadores salen las 6 (GDD 3.2: especie única por partida).
+	const APlayerState* PS = NewController ? NewController->PlayerState : nullptr;
+	const AGameStateBase* GameState = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const int32 Slot = PS && GameState ? FMath::Max(0, GameState->PlayerArray.IndexOfByKey(PS)) : 0;
+	return static_cast<ENDDesveladoSpecies>(Slot % Count + 1);
+}
+
+void ANDCharacter::SetSpecies(ENDDesveladoSpecies NewSpecies)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	Species = NewSpecies;
+	ApplySpecies();
+}
+
+void ANDCharacter::OnRep_Species()
+{
+	ApplySpecies();
+}
+
+void ANDCharacter::ApplySpecies()
+{
+	Body->BuildSpecies(Species);
+	const bool bBodyBuilt = Body->IsBuilt();
+	PlaceholderBody->SetVisibility(!bBodyBuilt);
+	PlaceholderNose->SetVisibility(!bBodyBuilt);
 }
 
 void ANDCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -333,6 +417,7 @@ void ANDCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME_CONDITION(ANDCharacter, bIsSprinting, COND_SkipOwner);
+	DOREPLIFETIME(ANDCharacter, Species);
 }
 
 void ANDCharacter::HandleFlashlightChanged(bool bOn)
@@ -487,7 +572,10 @@ void ANDCharacter::OnSprintEnded()
 
 void ANDCharacter::OnCrouchStarted()
 {
-	Crouch();
+	if (!Hiding->IsHidden())
+	{
+		Crouch();
+	}
 }
 
 void ANDCharacter::OnCrouchEnded()
@@ -497,15 +585,8 @@ void ANDCharacter::OnCrouchEnded()
 
 void ANDCharacter::OnInteract()
 {
-	if (ExpeditionPlayer->IsInsideVan())
-	{
-		ExpeditionPlayer->RequestVanInteraction();
-		return;
-	}
-	if (ANDLootActor* Target = Carry->FindBestLootTarget())
-	{
-		Carry->RequestGrab(Target);
-	}
+	// Camioneta, botín, escondites y actores NDInteractable; decide UNDInteractionComponent.
+	Interaction->Interact();
 }
 
 void ANDCharacter::OnDrop()
