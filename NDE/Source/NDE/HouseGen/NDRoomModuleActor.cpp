@@ -75,6 +75,22 @@ namespace NDRoomModuleActor
 		return {};
 	}
 
+	/** Salas con rejillas y ductos de ventilación (GDD: atajos de ventilación). */
+	bool HasVents(ENDRoomType RoomType)
+	{
+		switch (RoomType)
+		{
+		case ENDRoomType::R02_Corridor:
+		case ENDRoomType::R04_Kitchen:
+		case ENDRoomType::R07_Bathroom:
+		case ENDRoomType::R13_Laundry:
+		case ENDRoomType::R16_Basement:
+			return true;
+		default:
+			return false;
+		}
+	}
+
 	/** Suelo de arte según la sala. */
 	const TCHAR* GetFloorArt(ENDRoomType RoomType)
 	{
@@ -267,28 +283,48 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 	auto AddStrip = [&](float Start, float End)
 	{
 		bool bAll = true;
+		const FVector Inside = WallCenter - Normal * 16.f;
+		const FVector Outside = EdgeCenter + Normal * (WallThickness + 5.f);
 		for (float S = Start; S < End - 1.f; S += ArtTileSize)
 		{
 			const float Length = FMath::Min(ArtTileSize, End - S);
+			const bool bFull = Length >= ArtTileSize - 1.f;
 			// Ventana: en una pieza entera de una pared exterior.
-			const bool bWindow = Style == ENDWallStyle::Window && Length >= ArtTileSize - 1.f && FMath::IsNearlyEqual(S + Length * 0.5f, WindowCenter, ArtTileSize * 0.5f);
+			const bool bWindow = Style == ENDWallStyle::Window && bFull && FMath::IsNearlyEqual(S + Length * 0.5f, WindowCenter, ArtTileSize * 0.5f);
 			bAll &= AddPiece(bWindow ? NDHouseArt::GetStructurePath(TEXT("Wall_Window_400")) : SolidArt, S, Length);
+			// Zócalo por dentro.
+			AddArt(NDHouseArt::GetStructurePath(TEXT("Baseboard_400")), FTransform(Yaw, Inside + Tangent * S, FVector(Length / ArtTileSize, 1.f, 1.f)));
 			if (bWindow)
 			{
-				// Marco de 200 cm centrado en el hueco de la pieza (de 87 a 315 en X y de 243 a 476 en Z).
+				// Marco de 200 cm centrado en el hueco de la pieza (de 87 a 315 en X y de 243 a 476 en Z) y cortinas a los lados.
 				AddArt(NDHouseArt::GetStructurePath(TEXT("Window_Frame")), FTransform(Yaw, WallCenter + Tangent * (S + 100.f) + FVector(0.f, 0.f, 235.f)));
+				for (const float CurtainX : { 0.f, 315.f })
+				{
+					AddArt(NDHouseArt::GetStructurePath(TEXT("Curtain_A")), FTransform(Yaw, Inside - Normal * 6.f + Tangent * (S + CurtainX) + FVector(0.f, 0.f, 90.f), FVector(85.f / 250.f, 1.f, 1.f)));
+				}
 			}
-		}
-		// Fachada por fuera: piezas macizas con la cara de fuera (-Y de la malla) hacia la calle.
-		if (Style != ENDWallStyle::Interior)
-		{
-			const FVector Outside = EdgeCenter + Normal * (WallThickness + 5.f);
-			for (float S = Start; S < End - 1.f; S += ArtTileSize)
+			// Sótano: ventanuco bajo el techo en las paredes que dan a la tierra.
+			if (Style == ENDWallStyle::Basement && bFull)
 			{
-				const float Length = FMath::Min(ArtTileSize, End - S);
-				const bool bFacadeWindow = Style == ENDWallStyle::FacadeWindow && Length >= ArtTileSize - 1.f;
-				AddArt(NDHouseArt::GetStructurePath(bFacadeWindow ? TEXT("Facade_Window_400") : TEXT("Facade_Wall_400")),
-					FTransform(Yaw, Outside + Tangent * S, FVector(Length / ArtTileSize, 1.f, 1.f)));
+				AddArt(NDHouseArt::GetStructurePath(TEXT("BasementWindow")), FTransform(Yaw, WallCenter + Tangent * (S + 125.f) + FVector(0.f, 0.f, WallHeight - 110.f)));
+			}
+			// Rejilla de ventilación baja, una por sala, en baños, cocinas, lavaderos, pasillos y sótanos.
+			if (bFull && !bWindow && !bGratePlaced && NDRoomModuleActor::HasVents(CurrentRoomType))
+			{
+				bGratePlaced = true;
+				AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Grate")), FTransform(Yaw, Inside - Normal * 2.f + Tangent * (S + 170.f) + FVector(0.f, 0.f, 40.f)));
+			}
+			// Fachada por fuera: piezas macizas con la cara de fuera (-Y de la malla) hacia la calle; la ventana real
+			// queda sin fachada para verse desde fuera. En la entrada, una de ellas es la puerta de fachada.
+			if (Style == ENDWallStyle::Facade || Style == ENDWallStyle::FacadeWindow || (Style == ENDWallStyle::Window && !bWindow))
+			{
+				const TCHAR* Facade = Style == ENDWallStyle::FacadeWindow && bFull ? TEXT("Facade_Window_400") : TEXT("Facade_Wall_400");
+				if (bFull && !bFrontDoorPlaced && CurrentRoomType == ENDRoomType::R01_Entry)
+				{
+					bFrontDoorPlaced = true;
+					Facade = TEXT("Facade_FrontDoor");
+				}
+				AddArt(NDHouseArt::GetStructurePath(Facade), FTransform(Yaw, Outside + Tangent * S, FVector(Length / ArtTileSize, 1.f, 1.f)));
 			}
 		}
 		return bAll;
@@ -303,6 +339,13 @@ void ANDRoomModuleActor::BuildEdge(const FVector& EdgeCenter, ENDCellDirection D
 		// Pieza con puerta centrada en el hueco y paredes a los lados.
 		const float PieceStart = FMath::Clamp(OpeningOffset - ArtTileSize * 0.5f, -CellSize * 0.5f, CellSize * 0.5f - ArtTileSize);
 		bArt = AddPiece(NDHouseArt::GetStructurePath(WallArt.Mesh), PieceStart, ArtTileSize);
+		// Puerta a la calle: hoja abierta hacia fuera, junto al hueco (de 0 a 160 en X, 40 de grueso).
+		if (Style != ENDWallStyle::Interior && Style != ENDWallStyle::Basement)
+		{
+			const FRotator LeafYaw(0.f, FMath::RadiansToDegrees(FMath::Atan2(Normal.Y, Normal.X)), 0.f);
+			AddArt(NDHouseArt::GetStructurePath(TEXT("Door_M")), FTransform(LeafYaw,
+				EdgeCenter + Normal * (WallThickness + 25.f) + Tangent * (PieceStart + ArtTileSize * 0.5f - WallArt.HoleWidth * 0.5f - 25.f)));
+		}
 		bArt &= AddStrip(-CellSize * 0.5f, PieceStart) && AddStrip(PieceStart + ArtTileSize, CellSize * 0.5f);
 		if (bArt)
 		{
@@ -349,6 +392,9 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 	SetColor(FallbackMeshes, NDRoomModuleActor::WallColor);
 	// Con arte, el greybox sigue dando colisión y navegación, pero no se ve.
 	bUseArt = NDHouseArt::IsEnabled();
+	CurrentRoomType = Definition.RoomType;
+	bGratePlaced = false;
+	bFrontDoorPlaced = false;
 	FloorMeshes->SetVisibility(!bUseArt);
 	WallMeshes->SetVisibility(!bUseArt);
 	CeilingMeshes->SetVisibility(!bUseArt);
@@ -388,6 +434,50 @@ void ANDRoomModuleActor::BuildGreybox(const FNDRoomModuleDefinition& Definition,
 		{
 			const bool bArt = AddTiles(CeilingArt, CellCenter, WallHeight);
 			AddCollisionBox(CeilingMeshes, CellCenter + FVector(0.f, 0.f, WallHeight + WallThickness * 0.5f), FVector(CellSize, CellSize, WallThickness), bArt);
+		}
+		// Adornos de la celda (solo arte, sin colisión): lámpara de techo, vigas y ductos bajo el techo,
+		// columnas de piedra en las esquinas del sótano y del trastero y pilares donde se juntan cuatro celdas.
+		if (bUseArt && Definition.StairPart == ENDStairPart::None)
+		{
+			const ENDRoomType Type = Definition.RoomType;
+			if (bBuildCeiling && bCeilingHere)
+			{
+				AddArt(NDHouseArt::GetStructurePath(TEXT("CeilingLamp")), FTransform(CellCenter + FVector(0.f, 0.f, WallHeight - 100.f)));
+				const bool bBeams = Type == ENDRoomType::R03_LivingRoom || Type == ENDRoomType::R05_DiningRoom || Type == ENDRoomType::R14_Library || Type == ENDRoomType::R04_Kitchen;
+				for (int32 Piece = 0; Piece < Tiles; ++Piece)
+				{
+					const float X = -CellSize * 0.5f + Piece * ArtTileSize;
+					if (bBeams)
+					{
+						AddArt(NDHouseArt::GetStructurePath(TEXT("Beam_Ceiling")), FTransform(CellCenter + FVector(X, CellSize * 0.25f, WallHeight - 58.f)));
+						AddArt(NDHouseArt::GetStructurePath(TEXT("Beam_Ceiling")), FTransform(CellCenter + FVector(X, -CellSize * 0.25f, WallHeight - 58.f)));
+					}
+					if (NDRoomModuleActor::HasVents(Type))
+					{
+						AddArt(NDHouseArt::GetStructurePath(TEXT("Vent_Duct_Straight")), FTransform(CellCenter + FVector(X, CellSize * 0.35f, WallHeight - 75.f)));
+					}
+				}
+			}
+			for (const FIntPoint Corner : { FIntPoint(1, 1), FIntPoint(1, -1), FIntPoint(-1, 1), FIntPoint(-1, -1) })
+			{
+				const bool bSideX = Definition.ContainsCell(Cell + FIntPoint(Corner.X, 0));
+				const bool bSideY = Definition.ContainsCell(Cell + FIntPoint(0, Corner.Y));
+				if ((Type == ENDRoomType::R16_Basement || Type == ENDRoomType::R08_Storage) && !bSideX && !bSideY)
+				{
+					static const TCHAR* Stones[] = { TEXT("Column_Stone_A"), TEXT("Column_Stone_B"), TEXT("Column_Stone_C") };
+					const float Inset = CellSize * 0.5f - 25.f - 72.f;
+					AddArt(NDHouseArt::GetStructurePath(Stones[(CellIndex + Corner.X + 2 * Corner.Y + 3) % 3]), FTransform(CellCenter + FVector(Corner.X * Inset, Corner.Y * Inset, 0.f)));
+				}
+				if (Corner == FIntPoint(1, 1) && bSideX && bSideY && Definition.ContainsCell(Cell + Corner))
+				{
+					AddArt(NDHouseArt::GetStructurePath(TEXT("Column")), FTransform(CellCenter + FVector(CellSize * 0.5f, CellSize * 0.5f, 0.f)));
+				}
+			}
+			// Trampilla con escalera del desván en el pasillo del piso de arriba.
+			if (Type == ENDRoomType::R02_Corridor && CellIndex == 0 && GetActorLocation().Z > FloorHeight * 0.5f && bBuildCeiling && bCeilingHere)
+			{
+				AddArt(NDHouseArt::GetStructurePath(TEXT("AtticHatch_Ladder")), FTransform(CellCenter + FVector(-75.f, 150.f, 0.f)));
+			}
 		}
 
 		for (int32 DirIndex = 0; DirIndex < 4; ++DirIndex)

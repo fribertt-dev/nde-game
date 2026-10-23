@@ -462,10 +462,10 @@ void ANDHouseLot::BuildFromManifest()
 			CeilingPerCell.Add(!Occupancy.Contains(FIntVector(Cell.X, Cell.Y, Room.Floor + 1)));
 		}
 		// Paredes exteriores (sin sala al otro lado en el mismo piso): fachada lisa, fachada con ventana o ventana
-		// real, elegidas con la semilla. El sótano no tiene fachada.
+		// real, elegidas con la semilla. En el sótano, ventanucos.
 		TArray<uint8> WallStyles;
 		WallStyles.SetNumZeroed(Cells.Num() * 4);
-		for (int32 CellIndex = 0; CellIndex < Cells.Num() && Room.Floor >= NDHouseGen::GroundFloor; ++CellIndex)
+		for (int32 CellIndex = 0; CellIndex < Cells.Num(); ++CellIndex)
 		{
 			for (int32 LocalDir = 0; LocalDir < 4; ++LocalDir)
 			{
@@ -475,7 +475,7 @@ void ANDHouseLot::BuildFromManifest()
 				{
 					const uint32 Hash = HashCombineFast(GetTypeHash(Manifest.RunSeed), HashCombineFast(GetTypeHash(Cells[CellIndex]), GetTypeHash(static_cast<int32>(LotDir) + Room.Floor * 4)));
 					const uint32 Pick = Hash % 10;
-					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Pick < 4 ? ENDWallStyle::Window : Pick < 7 ? ENDWallStyle::FacadeWindow : ENDWallStyle::Facade);
+					WallStyles[CellIndex * 4 + LocalDir] = static_cast<uint8>(Room.Floor < NDHouseGen::GroundFloor ? ENDWallStyle::Basement : Pick < 4 ? ENDWallStyle::Window : Pick < 7 ? ENDWallStyle::FacadeWindow : ENDWallStyle::Facade);
 				}
 			}
 		}

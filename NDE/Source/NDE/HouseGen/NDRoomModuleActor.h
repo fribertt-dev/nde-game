@@ -18,7 +18,9 @@ enum class ENDWallStyle : uint8
 	Interior,
 	Facade,
 	FacadeWindow,
-	Window
+	Window,
+	/** Sótano: pared contra la tierra, con ventanuco bajo el techo. */
+	Basement
 };
 
 /**
@@ -95,6 +97,10 @@ protected:
 
 	/** Esta construcción usa mallas de arte (nde.HouseGen.Art). */
 	bool bUseArt = false;
+	/** Sala que se está construyendo y adornos que van una sola vez por sala. */
+	ENDRoomType CurrentRoomType = ENDRoomType::R03_LivingRoom;
+	bool bGratePlaced = false;
+	bool bFrontDoorPlaced = false;
 
 private:
 	void ClearGreybox();

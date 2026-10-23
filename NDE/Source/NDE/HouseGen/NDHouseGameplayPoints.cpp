@@ -821,8 +821,9 @@ void FNDHouseLayout::BuildDecorations()
 					const FBox2D Box = MakeFootprint(Candidate.GetLocation(), Candidate.Rotator().Yaw, Art.Size);
 					if (bFlat)
 					{
-						// En el suelo: dentro de la sala y sin pisar otra pieza del suelo.
-						return FitsInRoom(Box) && !Decorations.ContainsByPredicate([&Box, RoomIndex, FloorZ](const FNDHouseDecoration& Other)
+						// En el suelo: dentro de la sala y sin pisar otra pieza del suelo; las que abultan (mantas, cojines)
+						// tampoco se meten en un mueble.
+						return FitsInRoom(Box) && (Art.Size.Z <= 30.f || !OverlapsFurniture(Box)) && !Decorations.ContainsByPredicate([&Box, RoomIndex, FloorZ](const FNDHouseDecoration& Other)
 						{
 							return Other.Room == RoomIndex && !Other.bCollision && FMath::IsNearlyEqual(Other.LotTransform.GetLocation().Z, FloorZ, 1.f)
 								&& Box.Intersect(Other.GetFootprint());
