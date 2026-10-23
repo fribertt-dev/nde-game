@@ -25,3 +25,5 @@ Plugins/**/Intermediate/
 .DS_Store
 Thumbs.db
 desktop.ini
+# Assets 3D importados: viven solo en el PC de Felipe (ver docs/ASSETS_LOCALES.md)
+NDE/Content/_NDE_/Props/
