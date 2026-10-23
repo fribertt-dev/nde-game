@@ -221,6 +221,11 @@ void ANDCharacter::BeginPlay()
 
 bool ANDCharacter::WantsFirstPerson() const
 {
+	// Escondido se mira siempre desde los ojos: en tercera la cámara chocaría con el mueble.
+	if (Hiding && Hiding->IsHidden())
+	{
+		return true;
+	}
 	const int32 Forced = NDCharacter::CVarFirstPerson.GetValueOnGameThread();
 	if (Forced >= 0)
 	{
