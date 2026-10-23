@@ -12,6 +12,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "TimerManager.h"
@@ -97,14 +98,14 @@ namespace NDUIExpeditionHUDStyle
 	}
 
 	/**
-	 * Llama por reflexión a una UFUNCTION sin parámetros y lee su valor de vuelta.
-	 * Así el HUD lee los componentes del personaje sin depender de sus cabeceras.
+	 * Llama por reflexión a una UFUNCTION sin parámetros y pasa su valor de vuelta a Read.
+	 * Así el HUD lee el personaje y la criatura sin depender de sus cabeceras.
 	 */
-	template <typename PropertyType, typename ValueType>
-	bool CallGetter(UObject* Object, FName FunctionName, ValueType& OutValue)
+	template <typename ReaderType>
+	bool CallNoParamFunction(UObject* Object, FName FunctionName, ReaderType&& Read)
 	{
 		UFunction* Function = Object ? Object->FindFunction(FunctionName) : nullptr;
-		const PropertyType* ReturnProperty = Function ? CastField<PropertyType>(Function->GetReturnProperty()) : nullptr;
+		const FProperty* ReturnProperty = Function ? Function->GetReturnProperty() : nullptr;
 		if (!ReturnProperty || Function->NumParms != 1)
 		{
 			return false;
@@ -116,14 +117,88 @@ namespace NDUIExpeditionHUDStyle
 			It->InitializeValue_InContainer(Params);
 		}
 		Object->ProcessEvent(Function, Params);
-		OutValue = ReturnProperty->GetPropertyValue_InContainer(Params);
+		const bool bRead = Read(*ReturnProperty, Params);
 		for (TFieldIterator<FProperty> It(Function); It && It->HasAnyPropertyFlags(CPF_Parm); ++It)
 		{
 			It->DestroyValue_InContainer(Params);
 		}
-		return true;
+		return bRead;
+	}
+
+	template <typename PropertyType, typename ValueType>
+	bool CallGetter(UObject* Object, FName FunctionName, ValueType& OutValue)
+	{
+		return CallNoParamFunction(Object, FunctionName, [&OutValue](const FProperty& Property, const uint8* Params)
+		{
+			const PropertyType* Typed = CastField<PropertyType>(&Property);
+			if (Typed)
+			{
+				OutValue = Typed->GetPropertyValue_InContainer(Params);
+			}
+			return Typed != nullptr;
+		});
+	}
+
+	/** Igual que CallGetter para una función que devuelve un UENUM: el nombre del valor ("DeepSleep"). */
+	bool CallEnumGetter(UObject* Object, FName FunctionName, FString& OutName)
+	{
+		return CallNoParamFunction(Object, FunctionName, [&OutName](const FProperty& Property, const uint8* Params)
+		{
+			const FEnumProperty* EnumProperty = CastField<FEnumProperty>(&Property);
+			if (!EnumProperty || !EnumProperty->GetEnum())
+			{
+				return false;
+			}
+			const int64 Value = EnumProperty->GetUnderlyingProperty()->GetSignedIntPropertyValue(EnumProperty->ContainerPtrToValuePtr<void>(Params));
+			OutName = EnumProperty->GetEnum()->GetNameStringByValue(Value);
+			return true;
+		});
+	}
+
+	/** La criatura más cercana (clase NDMonsterCharacter del frente de IA), sin depender de su cabecera. */
+	AActor* FindNearestMonster(const UWorld* World, const FVector& Location)
+	{
+		AActor* Nearest = nullptr;
+		double BestDistance = TNumericLimits<double>::Max();
+		for (TActorIterator<APawn> It(World); It; ++It)
+		{
+			for (const UClass* Class = It->GetClass(); Class; Class = Class->GetSuperClass())
+			{
+				if (Class->GetFName() == TEXT("NDMonsterCharacter"))
+				{
+					const double Distance = FVector::DistSquared(It->GetActorLocation(), Location);
+					if (Distance < BestDistance)
+					{
+						BestDistance = Distance;
+						Nearest = *It;
+					}
+					break;
+				}
+			}
+		}
+		return Nearest;
+	}
+
+	/** Texto y color del estado de la criatura (ENDMonsterState). */
+	FText GetMonsterStateText(const FString& State, FLinearColor& OutColor)
+	{
+		OutColor = Danger;
+		if (State == TEXT("DeepSleep")) { OutColor = Good; return LOCTEXT("MonsterDeepSleep", "Sueño profundo"); }
+		if (State == TEXT("LightSleep")) { OutColor = Good; return LOCTEXT("MonsterLightSleep", "Sueño ligero"); }
+		if (State == TEXT("Stirring")) { OutColor = Warning; return LOCTEXT("MonsterStirring", "Se revuelve"); }
+		if (State == TEXT("HalfAwake")) { OutColor = Warning; return LOCTEXT("MonsterHalfAwake", "Medio despierto"); }
+		if (State == TEXT("WakingUp")) { return LOCTEXT("MonsterWakingUp", "¡Se levanta!"); }
+		if (State == TEXT("Investigate")) { return LOCTEXT("MonsterInvestigate", "Va a mirar"); }
+		if (State == TEXT("Search")) { return LOCTEXT("MonsterSearch", "Os está buscando"); }
+		if (State == TEXT("Chase")) { return LOCTEXT("MonsterChase", "¡Persecución!"); }
+		if (State == TEXT("ReturnToSleep")) { OutColor = Warning; return LOCTEXT("MonsterReturnToSleep", "Vuelve a la cama"); }
+		if (State == TEXT("NightWalk")) { OutColor = Warning; return LOCTEXT("MonsterNightWalk", "Paseo nocturno"); }
+		if (State == TEXT("DawnHunt")) { return LOCTEXT("MonsterDawnHunt", "¡Despierto del todo!"); }
+		OutColor = NDUINativeStyle::Muted;
+		return FText::FromString(State);
 	}
 }
+
 
 UNDUIExpeditionHUD::UNDUIExpeditionHUD(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -191,6 +266,32 @@ bool UNDUIExpeditionHUD::Initialize()
 	HiddenText->SetText(LOCTEXT("Hidden", "Escondido"));
 	HiddenText->SetVisibility(ESlateVisibility::Collapsed);
 	AddLooseText(*Canvas, HiddenText, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 1.f), FVector2D(0.f, -22.f));
+
+	// Roncómetro: arriba a la derecha, solo si la casa tiene criatura.
+	UBorder* MonsterBorder = nullptr;
+	UVerticalBox* MonsterBox = AddPanel(Tree, *Canvas, TEXT("MonsterBox"), FAnchors(1.f, 0.f), FVector2D(1.f, 0.f), FVector2D(-28.f, 24.f), &MonsterBorder);
+	MonsterPanel = MonsterBorder;
+	UTextBlock* MonsterHeader = MakeText(Tree, TEXT("MonsterHeader"), 13, Muted, TEXT("Bold"));
+	MonsterHeader->SetText(LOCTEXT("MonsterHeader", "EL DUEÑO"));
+	MonsterStateText = MakeText(Tree, TEXT("MonsterStateText"), 18, Good, TEXT("Bold"));
+	SuspicionBar = Tree.ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("SuspicionBar"));
+	SuspicionBar->SetFillColorAndOpacity(Warning);
+	USizeBox* SuspicionSize = Tree.ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("SuspicionSize"));
+	SuspicionSize->SetWidthOverride(200.f);
+	SuspicionSize->SetHeightOverride(6.f);
+	SuspicionSize->SetContent(SuspicionBar);
+	SnoreText = MakeText(Tree, TEXT("SnoreText"), 14, Muted);
+	AddRow(*MonsterBox, MonsterHeader, HAlign_Right);
+	AddRow(*MonsterBox, MonsterStateText, HAlign_Right);
+	AddRow(*MonsterBox, SuspicionSize, HAlign_Right);
+	AddRow(*MonsterBox, SnoreText, HAlign_Right);
+	MonsterPanel->SetVisibility(ESlateVisibility::Collapsed);
+
+	// "Te ve": encima de la retícula.
+	SeenText = MakeText(Tree, TEXT("SeenText"), 22, Danger, TEXT("Bold"));
+	SeenText->SetText(LOCTEXT("Seen", "¡Te está viendo!"));
+	SeenText->SetVisibility(ESlateVisibility::Collapsed);
+	AddLooseText(*Canvas, SeenText, FAnchors(0.5f, 0.5f), FVector2D(0.5f, 1.f), FVector2D(0.f, -56.f));
 
 	// Avisos: por encima del centro, en su panel.
 	UBorder* ToastBorder = nullptr;
@@ -385,6 +486,61 @@ void UNDUIExpeditionHUD::UpdateInteraction()
 	}
 	PromptText->SetVisibility(Prompt.IsEmpty() ? ESlateVisibility::Collapsed : ESlateVisibility::HitTestInvisible);
 	HiddenText->SetVisibility(bHidden ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	UpdateMonster(Pawn);
+}
+
+void UNDUIExpeditionHUD::UpdateMonster(const APawn* Pawn)
+{
+	if (!MonsterPanel || !GetWorld())
+	{
+		return;
+	}
+	using namespace NDUIExpeditionHUDStyle;
+	// Frente de IA (Monsters/NDMonsterCharacter): estado, sospecha, ronquidos y aviso de "te veo", replicados.
+	AActor* Monster = Pawn ? FindNearestMonster(GetWorld(), Pawn->GetActorLocation()) : nullptr;
+	FString State;
+	if (!Monster || !CallEnumGetter(Monster, TEXT("GetMonsterState"), State))
+	{
+		MonsterPanel->SetVisibility(ESlateVisibility::Collapsed);
+		SeenText->SetVisibility(ESlateVisibility::Collapsed);
+		return;
+	}
+	MonsterPanel->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	FLinearColor StateColor;
+	MonsterStateText->SetText(GetMonsterStateText(State, StateColor));
+	MonsterStateText->SetColorAndOpacity(FSlateColor(StateColor));
+
+	float Suspicion = 0.f;
+	CallGetter<FFloatProperty>(Monster, TEXT("GetSuspicion"), Suspicion);
+	SuspicionBar->SetPercent(FMath::Clamp(Suspicion / 100.f, 0.f, 1.f));
+	SuspicionBar->SetFillColorAndOpacity(Suspicion >= 60.f ? Danger : (Suspicion >= 25.f ? Warning : Good));
+
+	// El ronquido tapa el ruido: es el momento de moverse (GDD 9).
+	bool bSnoreMask = false;
+	float SecondsToSnore = -1.f;
+	CallGetter<FBoolProperty>(Monster, TEXT("IsSnoreMaskActive"), bSnoreMask);
+	CallGetter<FFloatProperty>(Monster, TEXT("GetSecondsToNextSnore"), SecondsToSnore);
+	if (bSnoreMask)
+	{
+		SnoreText->SetText(LOCTEXT("SnoreNow", "Ronca: ¡moveos ahora!"));
+		SnoreText->SetColorAndOpacity(FSlateColor(Good));
+	}
+	else if (SecondsToSnore >= 0.f && SecondsToSnore < 60.f)
+	{
+		SnoreText->SetText(FText::Format(LOCTEXT("SnoreIn", "Próximo ronquido en {0} s"), FText::AsNumber(FMath::CeilToInt(SecondsToSnore))));
+		SnoreText->SetColorAndOpacity(FSlateColor(Muted));
+	}
+	else
+	{
+		SnoreText->SetText(LOCTEXT("SnoreNone", "No ronca"));
+		SnoreText->SetColorAndOpacity(FSlateColor(Warning));
+	}
+
+	float SightAlert = 0.f;
+	CallGetter<FFloatProperty>(Monster, TEXT("GetSightAlert"), SightAlert);
+	SeenText->SetVisibility(SightAlert >= 0.5f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	SeenText->SetRenderOpacity(FMath::Clamp(SightAlert, 0.f, 1.f));
 }
 
 #undef LOCTEXT_NAMESPACE
