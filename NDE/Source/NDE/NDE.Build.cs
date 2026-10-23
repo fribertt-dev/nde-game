@@ -13,6 +13,6 @@ public class NDE : ModuleRules
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "UMG", "GameplayTags", "CommonUI", "CommonInput" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "CoreOnline", "DeveloperSettings", "NavigationSystem", "NetCore", "OnlineSubsystem", "OnlineSubsystemUtils", "Slate", "SlateCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AIModule", "GameplayTasks", "CoreOnline", "DeveloperSettings", "NavigationSystem", "NetCore", "OnlineSubsystem", "OnlineSubsystemUtils", "Slate", "SlateCore" });
 	}
 }
