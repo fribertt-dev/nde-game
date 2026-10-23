@@ -20,6 +20,7 @@
 #include "Monsters/NDMonsterUtils.h"
 #include "Monsters/NDSnoreSoundWave.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace NDMonsterCharacter
@@ -172,6 +173,28 @@ void ANDMonsterCharacter::BeginPlay()
 		SnoreAudio->Play();
 	}
 	UpdateStateText();
+
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		// Al llegar a la casa, el jugador sabe que hay alguien durmiendo y hacia dónde.
+		FTimerHandle WarnTimer;
+		GetWorldTimerManager().SetTimer(WarnTimer, this, &ANDMonsterCharacter::ShowArrivalWarning, 4.f, false);
+	}
+}
+
+void ANDMonsterCharacter::ShowArrivalWarning()
+{
+	APlayerController* PC = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const APawn* LocalPawn = PC ? PC->GetPawn() : nullptr;
+	if (!PC || !PC->IsLocalController() || !LocalPawn)
+	{
+		return;
+	}
+	const float Height = BedTransform.GetLocation().Z - (LocalPawn->GetActorLocation().Z - LocalPawn->GetSimpleCollisionHalfHeight());
+	const FText Where = Height > 300.f ? NSLOCTEXT("NDMonster", "BedUp", "en el piso de arriba")
+		: Height < -300.f ? NSLOCTEXT("NDMonster", "BedDown", "en el piso de abajo")
+		: NSLOCTEXT("NDMonster", "BedSame", "en este piso");
+	NDMonsterUtils::ShowLocalToast(PC, FText::Format(NSLOCTEXT("NDMonster", "Arrival", "El Dueño duerme {0}. Escucha sus ronquidos y no hagas ruido."), Where), 6.f);
 }
 
 void ANDMonsterCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)

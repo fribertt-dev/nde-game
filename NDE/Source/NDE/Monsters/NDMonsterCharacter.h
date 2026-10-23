@@ -138,6 +138,8 @@ protected:
 	void UpdateStateText();
 	/** Bloquea o devuelve el movimiento del jugador local si esta criatura le ha aturdido. */
 	void UpdateLocalVictim();
+	/** Aviso al llegar: dónde duerme el Dueño. */
+	void ShowArrivalWarning();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "NDE|Monster")
 	TObjectPtr<USceneComponent> VisualRoot;
