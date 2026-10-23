@@ -25,7 +25,8 @@ UNDUIPauseScreen::UNDUIPauseScreen(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	InputMode = ENDUIInputMode::Menu;
-	bIsBackHandler = true;
+	// Sin acción Back de Common UI configurada; la pausa cierra con sus propias teclas (NativeOnKeyDown).
+	bIsBackHandler = false;
 	SetIsFocusable(true);
 }
 
@@ -71,11 +72,12 @@ bool UNDUIPauseScreen::Initialize()
 	Width->SetContent(Box);
 
 	Box->AddChildToVerticalBox(MakeText(Tree, TEXT("Title"), LOCTEXT("Title", "Pausa"), 36, Amber, TEXT("Bold")));
-	Box->AddChildToVerticalBox(MakeText(Tree, TEXT("Subtitle"), LOCTEXT("Subtitle", "La partida sigue para el resto de la banda."), 15, Muted, TEXT("Italic")))
-		->SetPadding(FMargin(0.f, 2.f, 0.f, 22.f));
+	UTextBlock* Subtitle = MakeText(Tree, TEXT("Subtitle"), LOCTEXT("Subtitle", "La partida sigue para el resto de la banda. \"Terminar la noche\" os lleva a todos a La Madriguera."), 15, Muted, TEXT("Italic"));
+	Subtitle->SetAutoWrapText(true);
+	Box->AddChildToVerticalBox(Subtitle)->SetPadding(FMargin(0.f, 2.f, 0.f, 22.f));
 
 	AddButton(*Box, LOCTEXT("Resume", "Seguir jugando"))->OnClicked.AddDynamic(this, &ThisClass::HandleResumeClicked);
-	ReturnToHideoutButton = AddButton(*Box, LOCTEXT("Hideout", "Terminar la noche y volver a La Madriguera"));
+	ReturnToHideoutButton = AddButton(*Box, LOCTEXT("Hideout", "Terminar la noche"));
 	ReturnToHideoutButton->OnClicked.AddDynamic(this, &ThisClass::HandleReturnToHideoutClicked);
 	AddButton(*Box, LOCTEXT("MainMenu", "Salir al menú principal"))->OnClicked.AddDynamic(this, &ThisClass::HandleMainMenuClicked);
 	AddButton(*Box, LOCTEXT("Quit", "Cerrar el juego"))->OnClicked.AddDynamic(this, &ThisClass::HandleQuitClicked);
