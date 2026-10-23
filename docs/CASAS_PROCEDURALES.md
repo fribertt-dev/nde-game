@@ -37,7 +37,7 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 
 ## Variantes de piezas y muebles
 - Cada familia de salas de H01 tiene 2 o 3 variantes (las B de `housegen-0.3` cambian tamaño, puertas y huecos): cocina 2x1 o 2x2, comedor 2x1 o 1x1, baño 1x1 o 2x1, almacén, objetivo (la B tiene cuatro huecos, más accesos), despacho, lavadero, biblioteca, cuarto de juegos, despensa y dormitorio infantil. Las escaleras tienen sus tres tipos (recta, U y L). La prueba `NDE.HouseGen.VariantsAndDecorations` comprueba que cada familia tiene 2-5 variantes y que se usan los 39 módulos.
-- Muebles (`Decorations`, `HouseGen/NDHouseFurniture.cpp`): muebles de arte reales según el tipo de sala, en orden de prioridad (baño: váter, lavabo con espejo, bañera si cabe; cocina: nevera, horno, fregadero, encimeras, mesa; dormitorios: armario, mesillas con lámpara, cómoda o cama; sala: sofá, chimenea, mueble de TV, sillones; comedor: mesa con sillas, aparador, vitrina; entrada: zapatero, perchero y felpudo...). Cada mueble usa su tamaño real: va con el respaldo contra una pared (esquinas incluidas), en el centro (mesas, salas de 2 celdas o más) o plano en el suelo (alfombras, sin colisión). Su huella no tapa puertas, la línea puerta-centro de la sala, el centro, el botín, los escondites, los peligros ni el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 96 % de las salas tiene muebles (2,2 de media; las salas de 1 celda son pequeñas para los muebles del gigante).
+- Muebles (`Decorations`, `HouseGen/NDHouseFurniture.cpp`): muebles de arte reales según el tipo de sala, en orden de prioridad (baño: váter, lavabo con espejo, bañera si cabe; cocina: nevera, horno, fregadero, encimeras, mesa; dormitorios: armario, mesillas con lámpara, cómoda o cama; sala: sofá, chimenea, mueble de TV, sillones; comedor: mesa con sillas, aparador, vitrina; entrada: zapatero, perchero y felpudo...). Cada mueble usa su tamaño real: va con el respaldo contra una pared (esquinas incluidas), en el centro (mesas, salas de 2 celdas o más) o plano en el suelo (alfombras, sin colisión). Su huella no tapa puertas, la línea puerta-centro de la sala, el centro, el botín, los escondites, los peligros ni el borde de la cama de la criatura. Mesas y camas son escondites de dos; armarios y sillones, de uno. Con 400 casas: el 95 % de las salas tiene muebles (2,0 de media; las salas de 1 celda son pequeñas para los muebles del gigante).
 - La cama de la criatura (cama doble) va sobre su ancla en el dormitorio principal, sin colisión hasta que la criatura tenga su arte; en el dormitorio alargado 2x1 no cabe.
 - `nde.HouseGen.Furniture 0` construye la casa sin muebles (depuración; los puntos de juego no cambian).
 - La patrulla de la criatura no pasa por puertas pequeñas (Door_S, baños): esas salas quedan fuera del recorrido, pero cuentan para el sonido.
@@ -54,7 +54,7 @@ Salen del layout y de la semilla en `HouseGen/NDHouseGameplayPoints.cpp`, así q
 ## Calidad (10.000 semillas por tamaño y contrato)
 Prueba `NDE.Quality.HouseGen` (fuera de las rápidas; tarda menos de un minuto): genera 10.000 casas por tamaño (Small, Medium, Large) con cada contrato real C01-C07, un tercio con piso superior y sótano forzados, reparte el botín y comprueba objetivo accesible, cuota con margen, ruta del bulto, escondites y patrulla. Deja en `Saved/HouseGenQuality/` el informe (`report.md`), las semillas con problemas (`failed_seeds.txt`) y un SVG por layout fallido o de respaldo (piso por columna; objetivo en amarillo, dormitorio en rojo, escaleras en gris, entrada en verde, puertas como puntos). Para probar con menos: `nde.Quality.Seeds 1000`.
 
-Resultado con `housegen-0.3` (210.000 casas):
+Resultado con `housegen-0.4` (210.000 casas, con muebles de arte):
 
 | Métrica | Resultado | Objetivo |
 | --- | --- | --- |
@@ -63,7 +63,7 @@ Resultado con `housegen-0.3` (210.000 casas):
 | Cuota insuficiente | 0 | 0 |
 | Bulto sin ruta | 0 | 0 |
 | Escondites o patrulla inválidos | 0 | 0 |
-| Tiempo medio de generación | 0,10 ms por casa (0,07 Small, 0,16 Large) | |
+| Tiempo medio de generación | 1,02 ms por casa (0,10 con `housegen-0.3`; lo que más cuesta es comprobar el paso de cada mueble) | |
 
 Con piso superior: 38 % de las Small, 67 % de las Medium y 83 % de las Large; con sótano: 38 %, 34 % y 54 %. Para que C06 (dos accesos al tarro) nunca deje sin casa, si no se puede abrir un bucle hacia el objetivo se cuelga de él una sala pequeña por otra puerta.
 
@@ -116,6 +116,8 @@ Valores del GDD (12 y 16.2): C01-C06 son tier I (pago 120-170 por jugador, reput
 
 ## Depuración
 - `nde.HouseGen.Regenerate <semilla>` en la consola del host.
+- `nde.HouseGen.ViewRoom <sala o tipo> [yaw]` (host): cámara en lo alto de una sala para ver sus muebles; p. ej. `nde.HouseGen.ViewRoom Kitchen 90`.
+- Patrulla sobre el NavMesh con muebles de arte: 0 nodos atascados en 21 casas. Cada mueble deja al menos 45 cm a los lados de la ruta puerta-centro y no corta el paso de 40 cm de radio desde el centro a ninguna puerta.
 - `?Seed=1234` en la URL del mapa, o `bUseFixedSeed` en el lote.
 - `bDrawDebugGraph` en el lote, o `ANDHouseGenDebugActor` con su botón **Generate**.
 - Log: categoría `LogNDHouseGen`.

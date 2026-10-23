@@ -100,6 +100,42 @@ namespace NDHouseLot
 			*Lot->LotInfo.LotId.ToString(), Layout.HidingSpots.Num(), Layout.Hazards.Num(), Layout.Decorations.Num(), Layout.PatrolNodes.Num(), Layout.PatrolRoute.Num(), Layout.AudioLinks.Num());
 	}
 
+	/** nde.HouseGen.ViewRoom <sala> [yaw]: pone al jugador en lo alto de una sala, mirando hacia abajo (capturas de los muebles). */
+	void ViewRoom(const TArray<FString>& Args, UWorld* World)
+	{
+		const ANDHouseLot* Lot = ANDHouseLot::FindLot(World);
+		APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+		APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		int32 RoomIndex = Args.Num() > 0 ? FCString::Atoi(*Args[0]) : 0;
+		// También por tipo de sala, p. ej. "Living" o "Kitchen".
+		if (Lot && Args.Num() > 0 && !Args[0].IsNumeric())
+		{
+			RoomIndex = Lot->GetLayout().Rooms.IndexOfByPredicate([&Args](const FNDHouseLayoutRoom& Room)
+			{
+				return NDHouseGen::GetRoomTypeName(Room.Def->RoomType).Contains(Args[0]);
+			});
+		}
+		if (!Lot || !Lot->IsHouseBuilt() || !Pawn || !Pawn->HasAuthority() || !Lot->GetLayout().Rooms.IsValidIndex(RoomIndex))
+		{
+			UE_LOG(LogNDHouseGen, Warning, TEXT("nde.HouseGen.ViewRoom: uso nde.HouseGen.ViewRoom <sala> [yaw] (en el servidor, con la casa construida)"));
+			return;
+		}
+		const FNDHouseLayout& Layout = Lot->GetLayout();
+		const float Yaw = Args.Num() > 1 ? FCString::Atof(*Args[1]) : 0.f;
+		const FRotator View(-55.f, Yaw, 0.f);
+		const FVector Center = Lot->GetLotToWorld().TransformPosition(Layout.GetRoomCenter(RoomIndex));
+		// Detrás del centro y cerca del techo, para ver la sala entera.
+		const FVector Location = Center - FRotator(0.f, Yaw, 0.f).Vector() * 250.f + FVector(0.f, 0.f, NDHouseGen::WallHeight - 120.f);
+		Pawn->TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
+		PC->SetControlRotation(View);
+		UE_LOG(LogNDHouseGen, Log, TEXT("nde.HouseGen.ViewRoom: sala %d %s (%s), piso %d"), RoomIndex, *NDHouseGen::GetRoomTypeName(Layout.Rooms[RoomIndex].Def->RoomType),
+			*Layout.Rooms[RoomIndex].Def->RoomModuleId.ToString(), Layout.Rooms[RoomIndex].Floor);
+	}
+
+	FAutoConsoleCommandWithWorldAndArgs ViewRoomCommand(TEXT("nde.HouseGen.ViewRoom"),
+		TEXT("Solo servidor: pone al jugador en lo alto de una sala mirando hacia abajo, para ver sus muebles. Uso: nde.HouseGen.ViewRoom <sala o tipo, p. ej. 3 o Kitchen> [yaw]"),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateStatic(&ViewRoom));
+
 	void DebugPoints(const TArray<FString>& Args, UWorld* World)
 	{
 		const float Duration = Args.Num() > 0 ? FCString::Atof(*Args[0]) : 30.f;
